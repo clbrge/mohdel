@@ -8,7 +8,18 @@
   },
   "description": "A high-level abstraction library for interacting with Large Language Models (LLMs) in JavaScript.",
   "type": "module",
+  "repository": "clbrge/mohdel",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./providers": "./src/providers.js",
+    "./curated": "./src/curated.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "lint": "echo 1",
     "test": "vitest run",

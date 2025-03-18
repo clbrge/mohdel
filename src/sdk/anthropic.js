@@ -1,27 +1,24 @@
-import '@anthropic-ai/sdk/shims/web'
 import Anthropic from '@anthropic-ai/sdk'
 
-const Provider = (defaultConfiguration) => {
-  const anthropic = new Anthropic(defaultConfiguration)
+const anthropicSDK = (config) => {
+  const anthropic = new Anthropic(config)
 
-  const $ = {}
-
-  $.call = (model, configuration = {}, type = 'chat') => args => {
-    const api = Object.keys(configuration).length ? new Anthropic(configuration) : anthropic
-    return api.messages.create({
-      ...args,
-      model
-    })
+  return {
+    completion: (modelName) => async (prompt) => {
+      try {
+        const response = await anthropic.messages.create({
+          model: modelName,
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: prompt }],
+        })
+        
+        return response.content[0].text
+      } catch (err) {
+        console.error('Error calling Anthropic API:', err.message)
+        throw err
+      }
+    }
   }
-
-  $.listModels = async () => {
-    const { data } = await anthropic.models.list({
-      limit: 20
-    })
-    return data.map(model => ({ label: model.display_name, ...model }))
-  }
-
-  return Object.freeze($)
 }
 
-export default Provider
+export default anthropicSDK

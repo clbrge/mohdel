@@ -11,7 +11,7 @@ dotenv.config()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const MODEL = `model claude-3-7-sonnet-latest`
+const MODEL = `claude-3-7-sonnet-latest`
 const LLM_KEY = 'ANTHROPIC_API_KEY'
 const DEMO_PROMPT = `
 I need help creating a minimal code assistant in one monolithic Nodejs script that can analyze source files and answer questions about them. The assistant should:
@@ -81,7 +81,7 @@ describe('modhel demo', () => {
     // await fs.rm(outputDir, { recursive: true, force: true })
   })
 
-  test('should get a completion response that includes a JavaScript script', async () => {
+  test('it\'s allowed should get a completion response that includes a JavaScript script', async () => {
     // You might want to mock this in a real test environment
     const llm = modhel(MODEL)
     completionResult = await llm.completion(DEMO_PROMPT)

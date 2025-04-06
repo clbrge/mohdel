@@ -144,10 +144,9 @@ const getDefaultModelId = () => {
 }
 
 const mohdel = (modelId) => {
-  // If no model ID is provided, use the default model from configuration
   const resolvedModelId = modelId || getDefaultModelId()
   const { providerName, modelName } = getProviderAndModel(resolvedModelId)
-  
+
   // Create a proxy that will lazily load the SDK when methods are called
   return new Proxy({}, {
     get: (target, prop) => {

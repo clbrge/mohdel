@@ -6,9 +6,9 @@ dotenv.config()
 
 const main = async () => {
 
-  const claude = mohdel('claude-3-7-sonnet-20250219')
+  const llm = mohdel()
 
-  const completion = await claude.completion(`Hello, how are you`)
+  const completion = await llm.completion(`Hello, how are you`)
 
   console.log(completion, 'done')
 }

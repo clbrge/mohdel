@@ -38,7 +38,7 @@ const runTests = async (numRuns = 2) => {
       const vitest = await startVitest('test', [], {
         run: true,
         reporters: ['verbose'],
-        testNamePattern: 'modhel demo',
+        testNamePattern: 'mohdel demo',
         environment: 'node',
         environmentOptions: {
           TEST_OUTPUT_DIR: testOutputDir,

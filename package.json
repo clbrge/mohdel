@@ -23,6 +23,7 @@
   "scripts": {
     "lint": "echo 1",
     "test": "vitest run",
+    "cli": "node ./src/cli.js",
     "demo": "node ./src/demo.js",
     "select": "node ./src/select.js",
     "test:multi": "node ./src/test-runner.js 10"

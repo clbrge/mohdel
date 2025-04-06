@@ -1,12 +1,12 @@
 
-import modhel from './index.js'
+import mohdel from './index.js'
 import * as dotenv from 'dotenv'
 
 dotenv.config()
 
 const main = async () => {
 
-  const claude = modhel('claude-3-7-sonnet-20250219')
+  const claude = mohdel('claude-3-7-sonnet-20250219')
 
   const completion = await claude.completion(`Hello, how are you`)
 

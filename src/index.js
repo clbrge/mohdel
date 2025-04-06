@@ -8,7 +8,7 @@ import { existsSync } from 'fs'
 // Load default parameters from user's home directory if available
 const loadDefaultParams = () => {
   try {
-    const defaultConfigPath = join(homedir(), '.modhel', 'default.json')
+    const defaultConfigPath = join(homedir(), '.mohdel', 'default.json')
     if (existsSync(defaultConfigPath)) {
       const configContent = readFileSync(defaultConfigPath, 'utf8')
       return JSON.parse(configContent)
@@ -136,7 +136,7 @@ const getProviderAndModel = (modelId) => {
   return { providerName, modelName }
 }
 
-const modhel = (modelId) => {
+const mohdel = (modelId) => {
   const { providerName, modelName } = getProviderAndModel(modelId)
   
   // Create a proxy that will lazily load the SDK when methods are called
@@ -170,4 +170,4 @@ const modhel = (modelId) => {
   })
 }
 
-export default modhel
+export default mohdel

@@ -1,5 +1,25 @@
 import providers from './providers.js'
 import curated from './curated.js'
+import { readFileSync } from 'fs'
+import { homedir } from 'os'
+import { join } from 'path'
+import { existsSync } from 'fs'
+
+// Load default parameters from user's home directory if available
+const loadDefaultParams = () => {
+  try {
+    const defaultConfigPath = join(homedir(), '.modhel', 'default.json')
+    if (existsSync(defaultConfigPath)) {
+      const configContent = readFileSync(defaultConfigPath, 'utf8')
+      return JSON.parse(configContent)
+    }
+  } catch (err) {
+    console.warn(`Failed to load default parameters: ${err.message}`)
+  }
+  return {}
+}
+
+const defaultParams = loadDefaultParams()
 
 const importSDK = async (providerName) => {
   try {
@@ -123,7 +143,7 @@ const modhel = (modelId) => {
   return new Proxy({}, {
     get: (target, prop) => {
       if (prop === 'completion') {
-        return async (prompt) => {
+        return async (prompt, userParams = {}) => {
           const config = providers[providerName]
           const apiKey = process.env[config.apiKeyEnv]
           
@@ -134,8 +154,15 @@ const modhel = (modelId) => {
           const SDK = await importSDK(providerName)
           const api = SDK(config.createConfiguration(apiKey))
           
+          // Merge default parameters with user-provided parameters
+          const mergedParams = {
+            ...defaultParams[providerName],
+            ...defaultParams[`${providerName}/${modelName}`],
+            ...userParams
+          }
+          
           // Call the completion method as defined in the SDK interface
-          return await api.completion(modelName)(prompt)
+          return await api.completion(modelName)(prompt, mergedParams)
         }
       }
       return target[prop]

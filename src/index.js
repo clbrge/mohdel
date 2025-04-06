@@ -136,8 +136,17 @@ const getProviderAndModel = (modelId) => {
   return { providerName, modelName }
 }
 
+const getDefaultModelId = () => {
+  if (defaultParams.defaultModel) {
+    return defaultParams.defaultModel
+  }
+  throw new Error('No default model configured. Run \'npx mohdel\' to set up a default model.')
+}
+
 const mohdel = (modelId) => {
-  const { providerName, modelName } = getProviderAndModel(modelId)
+  // If no model ID is provided, use the default model from configuration
+  const resolvedModelId = modelId || getDefaultModelId()
+  const { providerName, modelName } = getProviderAndModel(resolvedModelId)
   
   // Create a proxy that will lazily load the SDK when methods are called
   return new Proxy({}, {

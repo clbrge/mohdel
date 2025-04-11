@@ -25,6 +25,8 @@ const getModelDetails = async (providerName, modelId, api) => {
     
     // Process model details based on provider
     if (providerName === 'gemini') {
+      // Return all properties from the model details
+      // Including core fields with fallbacks to ensure we always have basic info
       return {
         id: modelDetails.name?.replace('models/', '') || modelId,
         displayName: modelDetails.displayName,
@@ -32,9 +34,15 @@ const getModelDetails = async (providerName, modelId, api) => {
         inputTokenLimit: modelDetails.inputTokenLimit,
         outputTokenLimit: modelDetails.outputTokenLimit,
         supportedGenerationMethods: modelDetails.supportedGenerationMethods,
+        supportedActions: modelDetails.supportedActions,
         temperature: modelDetails.temperature,
         topP: modelDetails.topP,
-        topK: modelDetails.topK
+        topK: modelDetails.topK,
+        // Preserve all other properties from the response
+        ...Object.entries(modelDetails)
+          .filter(([key]) => !['name', 'displayName', 'description', 'inputTokenLimit', 'outputTokenLimit', 
+                             'supportedGenerationMethods', 'supportedActions', 'temperature', 'topP', 'topK'].includes(key))
+          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
       }
     } else if (providerName === 'anthropic') {
       // Process Anthropic model details
@@ -43,7 +51,11 @@ const getModelDetails = async (providerName, modelId, api) => {
         displayName: modelDetails.name || modelId,
         description: modelDetails.description || '',
         inputTokenLimit: modelDetails.context_window_size || 0,
-        outputTokenLimit: modelDetails.max_tokens || 0
+        outputTokenLimit: modelDetails.max_tokens || 0,
+        // Include all other properties
+        ...Object.entries(modelDetails)
+          .filter(([key]) => !['name', 'description', 'context_window_size', 'max_tokens'].includes(key))
+          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
       }
     } else if (providerName === 'openai') {
       // Process OpenAI model details
@@ -52,15 +64,21 @@ const getModelDetails = async (providerName, modelId, api) => {
         displayName: modelDetails.name || modelId,
         description: modelDetails.description || '',
         inputTokenLimit: modelDetails.context_window || 0,
-        outputTokenLimit: modelDetails.max_tokens || 0
+        outputTokenLimit: modelDetails.max_tokens || 0,
+        // Include all other properties
+        ...Object.entries(modelDetails)
+          .filter(([key]) => !['name', 'description', 'context_window', 'max_tokens'].includes(key))
+          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
       }
     } else {
-      // Generic model details for other providers
+      // Generic model details for other providers - preserve all data
       return {
         id: modelId,
         displayName: modelDetails.name || modelId,
         description: modelDetails.description || 'No description available',
-        provider: providerName
+        provider: providerName,
+        // Include all properties from the API response
+        ...modelDetails
       }
     }
   } catch (err) {

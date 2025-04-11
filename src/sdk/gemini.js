@@ -22,7 +22,6 @@ const Provider = (defaultConfiguration) => {
     getModelInfo: async (model) => {
       try {
         const modelInfo = await ai.models.get({ model })
-        console.log( modelInfo )
         return modelInfo
       } catch (err) {
         console.error('Error calling GoogleGenAI:', err.message)

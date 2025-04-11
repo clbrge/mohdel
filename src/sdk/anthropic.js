@@ -34,6 +34,7 @@ const anthropicSDK = (config) => {
         // Use the get method directly instead of filtering from list
         // This aligns with Anthropic's "Get a Model" endpoint
         const model = await anthropic.models.retrieve(modelName)
+        console.log( model )
         return model
       } catch (err) {
         console.error('Error retrieving Anthropic model info:', err.message)

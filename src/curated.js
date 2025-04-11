@@ -49,6 +49,9 @@ const curated = {
   },
   "gemini/gemini-2.0-flash-live-001": {
     "label": "Gemini 2.0 Flash 001"
+  },
+  "anthropic/claude-3-5-haiku-20241022": {
+    "label": "claude-3-5-haiku-20241022"
   }
 }
 

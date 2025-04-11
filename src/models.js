@@ -1,4 +1,34 @@
 const models = {
+  "anthropic/claude-3-7-sonnet-latest": {
+    "id": "claude-3-7-sonnet-20250219",
+    "displayName": "claude-3-7-sonnet-latest",
+    "description": "",
+    "inputTokenLimit": 0,
+    "outputTokenLimit": 0,
+    "type": "model",
+    "display_name": "Claude 3.7 Sonnet",
+    "created_at": "2025-02-24T00:00:00Z"
+  },
+  "anthropic/claude-3-7-sonnet-20250219": {
+    "id": "claude-3-7-sonnet-20250219",
+    "displayName": "claude-3-7-sonnet-20250219",
+    "description": "",
+    "inputTokenLimit": 0,
+    "outputTokenLimit": 0,
+    "type": "model",
+    "display_name": "Claude 3.7 Sonnet",
+    "created_at": "2025-02-24T00:00:00Z"
+  },
+  "anthropic/claude-3-5-haiku-20241022": {
+    "id": "claude-3-5-haiku-20241022",
+    "displayName": "claude-3-5-haiku-20241022",
+    "description": "",
+    "inputTokenLimit": 0,
+    "outputTokenLimit": 0,
+    "type": "model",
+    "display_name": "Claude 3.5 Haiku",
+    "created_at": "2024-10-22T00:00:00Z"
+  },
   "gemini/gemini-1.5-pro-latest": {
     "id": "gemini-1.5-pro-latest",
     "displayName": "Gemini 1.5 Pro Latest",
@@ -10,9 +40,7 @@ const models = {
       "countTokens"
     ],
     "version": "001",
-    "tunedModelInfo": {},
-    "inputPrice": 2,
-    "outputPrice": 10
+    "tunedModelInfo": {}
   },
   "gemini/gemini-2.0-flash-exp": {
     "id": "gemini-2.0-flash-exp",
@@ -26,9 +54,7 @@ const models = {
       "bidiGenerateContent"
     ],
     "version": "2.0",
-    "tunedModelInfo": {},
-    "inputPrice": 2.1,
-    "outputPrice": 1
+    "tunedModelInfo": {}
   },
   "gemini/gemini-2.0-flash": {
     "id": "gemini-2.0-flash",

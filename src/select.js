@@ -19,6 +19,7 @@ dotenv.config()
 
 const initializeAPIs = async () => {
   const api = {}
+  const providersWithKeys = []
 
   for (const [name, config] of Object.entries(providers)) {
     try {
@@ -39,12 +40,13 @@ const initializeAPIs = async () => {
 
       // Initialize the provider with the configuration
       api[name] = API(sdkConfig)
+      providersWithKeys.push(name)
     } catch (err) {
       console.error(`Error initializing provider ${name} api:`, err.message)
     }
   }
 
-  return api
+  return { api, providersWithKeys }
 }
 
 const writeToFile = async (filePath, content) => {
@@ -115,7 +117,12 @@ const main = async () => {
 
   clack.intro('Model Selection Tool')
 
-  const api = await initializeAPIs()
+  const { api, providersWithKeys } = await initializeAPIs()
+  
+  if (providersWithKeys.length === 0) {
+    clack.log.error('No providers with valid API keys found. Please set up API keys in your environment variables.')
+    process.exit(1)
+  }
 
   const args = minimist(process.argv.slice(2), {
     boolean: ['help', 'dry-run'],
@@ -136,16 +143,27 @@ const main = async () => {
 
   if (specificProvider) {
     if (!api[specificProvider]) {
-      console.error(`Provider "${specificProvider}" not found or not initialized. Available providers: ${Object.keys(api).join(', ')}`)
+      console.error(`Provider "${specificProvider}" not found or not initialized. Available providers: ${providersWithKeys.join(', ')}`)
       return
     }
 
     await processModels(specificProvider, api[specificProvider])
   } else {
-    // Loop through all providers
-    for (const [name, provider] of Object.entries(api)) {
-      await processModels(name, provider)
+    // Ask user which provider to process
+    const selectedProvider = await clack.select({
+      message: 'Select a provider to process:',
+      options: providersWithKeys.map(name => ({
+        value: name,
+        label: name
+      }))
+    })
+
+    if (clack.isCancel(selectedProvider)) {
+      clack.cancel('Operation cancelled')
+      return
     }
+
+    await processModels(selectedProvider, api[selectedProvider])
   }
 
   clack.outro('Processing complete')

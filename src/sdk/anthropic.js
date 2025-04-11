@@ -17,6 +17,26 @@ const anthropicSDK = (config) => {
         console.error('Error calling Anthropic API:', err.message)
         throw err
       }
+    },
+    
+    listModels: async (options = {}) => {
+      try {
+        const response = await anthropic.models.list(options)
+        return response
+      } catch (err) {
+        console.error('Error listing Anthropic models:', err.message)
+        return { data: [] }
+      }
+    },
+    
+    getModelInfo: async (modelName) => {
+      try {
+        const models = await anthropic.models.list()
+        return models.data.find(model => model.id === modelName)
+      } catch (err) {
+        console.error('Error retrieving Anthropic model info:', err.message)
+        return null
+      }
     }
   }
 }

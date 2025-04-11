@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Configuration for the test runs
 const runTests = async (numRuns = 2) => {
   console.log(`Starting ${numRuns} test runs of demo.test.js`)
-  
+
   const results = {
     runs: numRuns,
     passed: 0,
@@ -20,17 +20,17 @@ const runTests = async (numRuns = 2) => {
 
   for (let i = 0; i < numRuns; i++) {
     console.log(`\n--- Run ${i + 1}/${numRuns} ---`)
-    
+
     const runStart = Date.now()
-    
+
     try {
       // Create a unique test output directory for each run
       const testOutputDir = path.join(__dirname, '..', 'test-output', `run-${i + 1}`)
       await fs.mkdir(testOutputDir, { recursive: true })
-      
+
       // Get project root for proper module resolution
       const projectRoot = path.resolve(__dirname, '..')
-      
+
       // Pass the node_modules path to the test environment
       const nodeModulesPath = path.join(projectRoot, 'node_modules')
 
@@ -58,27 +58,27 @@ const runTests = async (numRuns = 2) => {
           NODE_PATH: nodeModulesPath
         }
       })
-      
+
       // Wait for tests to complete
       await new Promise(resolve => {
         const onFinished = () => {
           resolve()
           cleanup()
         }
-        
+
         const cleanup = () => {
           if (vitest.server && vitest.server.off) {
             vitest.server.off('onFinished', onFinished)
           }
         }
-        
+
         if (vitest.server && vitest.server.on) {
           vitest.server.on('onFinished', onFinished)
         } else {
           setTimeout(resolve, 30000) // 30 second timeout
         }
       })
-      
+
       // Get test results if available
       const testSummary = {
         errors: [],
@@ -86,7 +86,7 @@ const runTests = async (numRuns = 2) => {
         passedTests: 0,
         totalTests: 0
       }
-      
+
       // Extract test results from Vitest state
       if (vitest.state && vitest.state.getFiles) {
         const files = vitest.state.getFiles()
@@ -97,9 +97,9 @@ const runTests = async (numRuns = 2) => {
               testSummary.failedTests++
               testSummary.errors.push({
                 name: test.name,
-                error: test.result.error ? 
-                  (test.result.error.message || 'Unknown error') : 
-                  'Unknown error'
+                error: test.result.error
+                  ? (test.result.error.message || 'Unknown error')
+                  : 'Unknown error'
               })
             } else if (test.result && test.result.state === 'pass') {
               testSummary.passedTests++
@@ -107,11 +107,11 @@ const runTests = async (numRuns = 2) => {
           }
         }
       }
-      
+
       // Check if we have failed tests in this run
       const runDuration = Date.now() - runStart
       const runPassed = testSummary.failedTests === 0 && testSummary.totalTests > 0
-      
+
       // Store results for this run
       results.testResults.push({
         run: i + 1,
@@ -122,7 +122,7 @@ const runTests = async (numRuns = 2) => {
         failedTests: testSummary.failedTests,
         errors: testSummary.errors.length > 0 ? testSummary.errors : null
       })
-      
+
       if (runPassed) {
         results.passed++
         console.log(`Run ${i + 1} PASSED: ${testSummary.passedTests}/${testSummary.totalTests} tests passed`)
@@ -136,9 +136,9 @@ const runTests = async (numRuns = 2) => {
           })
         }
       }
-      
+
       results.totalDuration += runDuration
-      
+
       // Properly close Vitest
       await vitest.close()
     } catch (err) {
@@ -152,12 +152,12 @@ const runTests = async (numRuns = 2) => {
       })
     }
   }
-  
+
   results.endTime = Date.now()
   results.totalDurationSeconds = (results.endTime - results.startTime) / 1000
   results.avgRunDuration = results.totalDuration / numRuns
   results.passRate = (results.passed / numRuns) * 100
-  
+
   // Print summary
   console.log('\n=== TEST RUNS SUMMARY ===')
   console.log(`Total runs: ${results.runs}`)
@@ -165,12 +165,12 @@ const runTests = async (numRuns = 2) => {
   console.log(`Failed: ${results.failed}`)
   console.log(`Total duration: ${results.totalDurationSeconds.toFixed(2)}s`)
   console.log(`Average run duration: ${(results.avgRunDuration / 1000).toFixed(2)}s`)
-  
+
   // Save results to file
   const resultsPath = path.join(__dirname, '..', 'test-results.json')
   await fs.writeFile(resultsPath, JSON.stringify(results, null, 2))
   console.log(`\nDetailed results saved to: ${resultsPath}`)
-  
+
   return results
 }
 

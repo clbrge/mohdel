@@ -62,24 +62,24 @@ const processModels = async (providerName, providerInstance) => {
     console.log(`Processing models for ${providerName}...`)
 
     const response = await providerInstance.listModels()
-    
+
     // Handle different response formats from different providers
     const models = response.data || response.models || (Array.isArray(response) ? response : [])
-    
+
     for (const model of models) {
       const modelId = model.id
       const modelKey = `${providerName}/${modelId}`
-      
+
       // Skip if already in curated or excluded
       if (curated[modelKey] || excluded[modelKey]) {
         continue
       }
-      
+
       // Only display details and prompt for models not already in curated or excluded
       // Display full model object for context
       console.log('\nModel details:')
       console.log(JSON.stringify(model, null, 2))
-      
+
       // Ask user if they want to include this model
       const answer = await clack.select({
         message: `Model ${modelKey} found. What would you like to do?`,
@@ -89,12 +89,12 @@ const processModels = async (providerName, providerInstance) => {
           { value: 'skip', label: 'Skip for now' }
         ]
       })
-      
+
       if (clack.isCancel(answer)) {
         clack.cancel('Operation cancelled')
         return
       }
-      
+
       if (answer === 'include') {
         curated[modelKey] = { label: model.label || modelId }
         await writeToFile('./src/curated.js', curated)

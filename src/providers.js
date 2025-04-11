@@ -14,7 +14,7 @@ const providers = {
     apiKeyEnv: 'GEMINI_API_SK',
     createConfiguration: apiKey => ({ apiKey })
   },
-  groq:{
+  groq: {
     sdk: 'groq',
     apiKeyEnv: 'GROQ_API_SK',
     createConfiguration: apiKey => ({ apiKey })

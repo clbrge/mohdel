@@ -4,7 +4,6 @@ import { GoogleGenAI } from '@google/genai'
 // https://googleapis.github.io/js-genai/main/index.html
 
 const Provider = (defaultConfiguration) => {
-
   const ai = new GoogleGenAI(defaultConfiguration)
 
   return {
@@ -30,7 +29,7 @@ const Provider = (defaultConfiguration) => {
           throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`)
         }
         const { models } = await response.json()
-        return models.map(details => ({ id: details.name.replace('models/',''), label: details.displayName, ...details}) )
+        return models.map(details => ({ id: details.name.replace('models/', ''), label: details.displayName, ...details }))
       } catch (err) {
         console.error('Error listing Gemini models:', err.message)
         return { models: [] }

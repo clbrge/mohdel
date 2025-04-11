@@ -9,9 +9,9 @@ const anthropicSDK = (config) => {
         const response = await anthropic.messages.create({
           model: modelName,
           max_tokens: 4096,
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: 'user', content: prompt }]
         })
-        
+
         return response.content[0].text
       } catch (err) {
         console.error('Error calling Anthropic API:', err.message)

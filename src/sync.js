@@ -88,7 +88,7 @@ const syncModels = async () => {
     
     const api = await initializeAPI(providerName)
     
-    progress.message(`Fetching details for ${targetModel}`)
+    progress.message(`Fetching details for ${modelId}`)
     const details = await getModelDetails(providerName, modelId, api)
     
     if (details) {

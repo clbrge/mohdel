@@ -54,6 +54,48 @@ const writeToFile = async (filePath, content) => {
   await fs.writeFile(filePath, formattedContent, 'utf8')
 }
 
+// Find potential models to replace based on the new model name
+const findReplacementCandidates = (providerName, modelId) => {
+  const baseNameMatch = modelId.match(/^(\w+[0-9\-\.]+)/)
+  if (!baseNameMatch) return []
+
+  const baseName = baseNameMatch[1]
+  const baseRegExp = new RegExp(`^${baseName}`)
+  
+  const candidates = []
+  
+  for (const [curatedKey, curatedInfo] of Object.entries(curated)) {
+    const [curProviderName, curModelId] = curatedKey.split('/')
+    if (curProviderName === providerName && curModelId !== modelId) {
+      if (baseRegExp.test(curModelId)) {
+        candidates.push({
+          key: curatedKey,
+          label: curatedInfo.label,
+          modelId: curModelId
+        })
+      }
+    }
+  }
+  
+  return candidates
+}
+
+// Replace a model: move it to excluded and add the new one to curated
+const replaceModel = async (modelToReplace, newModelKey, newModelLabel) => {
+  // Move the model to be replaced to excluded
+  excluded[modelToReplace.key] = { label: modelToReplace.label }
+  delete curated[modelToReplace.key]
+  
+  // Add new model to curated
+  curated[newModelKey] = { label: newModelLabel }
+  
+  // Update both files
+  await writeToFile('./src/curated.js', curated)
+  await writeToFile('./src/excluded.js', excluded)
+  
+  return true
+}
+
 const processModels = async (providerName, providerInstance) => {
   if (!providerInstance.listModels) {
     console.log(`Provider ${providerName} does not support listModels`)
@@ -81,15 +123,30 @@ const processModels = async (providerName, providerInstance) => {
       // Display full model object for context
       console.log('\nModel details:')
       console.log(JSON.stringify(model, null, 2))
+      
+      // Find potential models that this new model could replace
+      const replacementCandidates = findReplacementCandidates(providerName, modelId)
+      
+      // Build options for the select prompt
+      const options = [
+        { value: 'include', label: 'Include in curated models' },
+        { value: 'exclude', label: 'Add to excluded models' },
+        { value: 'skip', label: 'Skip for now' }
+      ]
+      
+      // Add replacement options for each candidate
+      for (let i = 0; i < replacementCandidates.length; i++) {
+        const candidate = replacementCandidates[i]
+        options.push({
+          value: `replace_${i}`,
+          label: `Replace existing model: ${candidate.key} (${candidate.label})`
+        })
+      }
 
       // Ask user if they want to include this model
       const answer = await clack.select({
         message: `Model ${modelKey} found. What would you like to do?`,
-        options: [
-          { value: 'include', label: 'Include in curated models' },
-          { value: 'exclude', label: 'Add to excluded models' },
-          { value: 'skip', label: 'Skip for now' }
-        ]
+        options
       })
 
       if (clack.isCancel(answer)) {
@@ -105,6 +162,16 @@ const processModels = async (providerName, providerInstance) => {
         excluded[modelKey] = { label: model.label || modelId }
         await writeToFile('./src/excluded.js', excluded)
         clack.log.success(`Added ${modelKey} to excluded models`)
+      } else if (answer.startsWith('replace_')) {
+        const index = parseInt(answer.split('_')[1], 10)
+        const modelToReplace = replacementCandidates[index]
+        
+        await replaceModel(modelToReplace, modelKey, model.label || modelId)
+        
+        clack.log.success(
+          `Replaced ${modelToReplace.key} with ${modelKey}. ` +
+          `The old model has been moved to excluded models.`
+        )
       }
     }
   } catch (err) {

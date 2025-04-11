@@ -19,6 +19,16 @@ const Provider = (defaultConfiguration) => {
         throw err
       }
     },
+    getModelInfo: async (model) => {
+      try {
+        const modelInfo = await ai.models.get({ model })
+        console.log( modelInfo )
+        return modelInfo
+      } catch (err) {
+        console.error('Error calling GoogleGenAI:', err.message)
+        throw err
+      }
+    },
     listModels: async () => {
       try {
         const apiKey = defaultConfiguration.apiKey

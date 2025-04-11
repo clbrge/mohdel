@@ -11,22 +11,22 @@ dotenv.config()
 // Get model details from the provider API
 const getModelDetails = async (providerName, modelId, api) => {
   try {
+    if (!api.getModelInfo) {
+      console.warn(`Provider ${providerName} does not support getModelInfo method`)
+      return null
+    }
+
+    const modelDetails = await api.getModelInfo(modelId)
+    
+    if (!modelDetails) {
+      console.warn(`Model ${modelId} not found in provider response`)
+      return null
+    }
+    
+    // Process model details based on provider
     if (providerName === 'gemini') {
-      // For Gemini, we use the listModels method to get all models
-      const models = await api.listModels()
-      
-      // Find the specific model we're looking for
-      const modelDetails = models.models?.find(model => 
-        model.id === modelId || model.name === `models/${modelId}`
-      )
-      
-      if (!modelDetails) {
-        console.warn(`Model ${modelId} not found in provider response`)
-        return null
-      }
-      
       return {
-        id: modelDetails.name.replace('models/', ''),
+        id: modelDetails.name?.replace('models/', '') || modelId,
         displayName: modelDetails.displayName,
         description: modelDetails.description,
         inputTokenLimit: modelDetails.inputTokenLimit,
@@ -36,11 +36,33 @@ const getModelDetails = async (providerName, modelId, api) => {
         topP: modelDetails.topP,
         topK: modelDetails.topK
       }
+    } else if (providerName === 'anthropic') {
+      // Process Anthropic model details
+      return {
+        id: modelId,
+        displayName: modelDetails.name || modelId,
+        description: modelDetails.description || '',
+        inputTokenLimit: modelDetails.context_window_size || 0,
+        outputTokenLimit: modelDetails.max_tokens || 0
+      }
+    } else if (providerName === 'openai') {
+      // Process OpenAI model details
+      return {
+        id: modelId,
+        displayName: modelDetails.name || modelId,
+        description: modelDetails.description || '',
+        inputTokenLimit: modelDetails.context_window || 0,
+        outputTokenLimit: modelDetails.max_tokens || 0
+      }
+    } else {
+      // Generic model details for other providers
+      return {
+        id: modelId,
+        displayName: modelDetails.name || modelId,
+        description: modelDetails.description || 'No description available',
+        provider: providerName
+      }
     }
-    
-    // For other providers, implement their specific API requirements
-    console.warn(`Provider ${providerName} not yet implemented for model details`)
-    return null
   } catch (err) {
     console.error(`Error getting model details for ${modelId}:`, err.message)
     return null
@@ -77,29 +99,50 @@ const syncModels = async () => {
   
   const modelInfo = {}
   
-  // For now, focus on the specified Gemini model
-  const targetModel = 'gemini/gemini-2.5-pro-preview-03-25'
+  // Process all models in curated list
+  const progress = spinner()
+  progress.start('Initializing APIs for all providers')
   
   try {
-    const [providerName, modelId] = targetModel.split('/')
+    // Group models by provider for efficient API initialization
+    const modelsByProvider = {}
     
-    const progress = spinner()
-    progress.start(`Initializing ${providerName} API`)
-    
-    const api = await initializeAPI(providerName)
-    
-    progress.message(`Fetching details for ${modelId}`)
-    const details = await getModelDetails(providerName, modelId, api)
-    
-    if (details) {
-      modelInfo[targetModel] = details
-      progress.message('Saving model information')
-      await saveModelInfo(modelInfo)
-      progress.stop('Model details synced successfully')
-    } else {
-      progress.stop(`Could not retrieve details for ${targetModel}`)
+    for (const modelKey in curated) {
+      const [providerName] = modelKey.split('/')
+      if (!modelsByProvider[providerName]) {
+        modelsByProvider[providerName] = []
+      }
+      modelsByProvider[providerName].push(modelKey)
     }
+    
+    // Process each provider's models
+    for (const [providerName, models] of Object.entries(modelsByProvider)) {
+      try {
+        progress.message(`Initializing ${providerName} API`)
+        const api = await initializeAPI(providerName)
+        
+        for (const modelKey of models) {
+          const [, ...modelParts] = modelKey.split('/')
+          const modelId = modelParts.join('/')
+          
+          progress.message(`Fetching details for ${modelKey}`)
+          const details = await getModelDetails(providerName, modelId, api)
+          
+          if (details) {
+            modelInfo[modelKey] = details
+          }
+        }
+      } catch (err) {
+        console.error(`Error processing provider ${providerName}:`, err.message)
+        // Continue with next provider
+      }
+    }
+    
+    progress.message('Saving model information')
+    await saveModelInfo(modelInfo)
+    progress.stop('Model details synced successfully')
   } catch (err) {
+    progress.stop(`Error syncing models: ${err.message}`)
     console.error('Error syncing models:', err.message)
     process.exit(1)
   }

@@ -10,7 +10,9 @@ const models = {
       "countTokens"
     ],
     "version": "001",
-    "tunedModelInfo": {}
+    "tunedModelInfo": {},
+    "inputPrice": 2,
+    "outputPrice": 10
   },
   "gemini/gemini-2.0-flash-exp": {
     "id": "gemini-2.0-flash-exp",
@@ -24,7 +26,9 @@ const models = {
       "bidiGenerateContent"
     ],
     "version": "2.0",
-    "tunedModelInfo": {}
+    "tunedModelInfo": {},
+    "inputPrice": 2.1,
+    "outputPrice": 1
   },
   "gemini/gemini-2.0-flash": {
     "id": "gemini-2.0-flash",

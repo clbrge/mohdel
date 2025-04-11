@@ -26,6 +26,7 @@
     "cli": "node ./src/cli.js",
     "demo": "node ./src/demo.js",
     "sync": "node ./src/sync.js",
+    "complete": "node ./src/complete.js",
     "select": "node ./src/select.js",
     "test:multi": "node ./src/test-runner.js 10"
   },

@@ -50,7 +50,7 @@ const DEFAULT_CURATED = {
   }
 }
 
-const DEFAULT_EXCLUDED = []
+const DEFAULT_EXCLUDED = {}
 
 // Load environment variables from .env files
 const loadDefaultEnv = () => {

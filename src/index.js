@@ -3,47 +3,8 @@ import curated from './curated.js'
 import { readFileSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
-import envPaths from 'env-paths'
 
-// Load default parameters from user's home directory if available
-const loadDefaultParams = () => {
-  try {
-    const defaultConfigPath = join(homedir(), '.mohdel', 'default.json')
-    if (existsSync(defaultConfigPath)) {
-      const configContent = readFileSync(defaultConfigPath, 'utf8')
-      return JSON.parse(configContent)
-    }
-  } catch (err) {
-    console.warn(`Failed to load default parameters: ${err.message}`)
-  }
-  return {}
-}
-
-const defaultParams = loadDefaultParams()
-
-// Get API key from environment variable or env-paths
-const getAPIKey = (envVarName) => {
-  // First try to get from process.env
-  if (process.env[envVarName]) {
-    return process.env[envVarName]
-  }
-
-  // If not available, try to load from env-paths
-  try {
-    const paths = envPaths('mohdel', { suffix: '' })
-    const configPath = join(paths.config, 'keys.json')
-    
-    if (existsSync(configPath)) {
-      const configContent = readFileSync(configPath, 'utf8')
-      const keys = JSON.parse(configContent)
-      return keys[envVarName]
-    }
-  } catch (err) {
-    console.warn(`Failed to load API key from env-paths: ${err.message}`)
-  }
-  
-  return null
-}
+import * as common from './common.js'
 
 const importSDK = async (providerName) => {
   try {
@@ -177,7 +138,7 @@ const mohdel = (modelId) => {
       if (prop === 'completion') {
         return async (prompt, userParams = {}) => {
           const config = providers[providerName]
-          const apiKey = getAPIKey(config.apiKeyEnv)
+          const apiKey = common.getAPIKey(config.apiKeyEnv)
 
           if (!apiKey) {
             throw new Error(`API key not found for ${providerName} (env var: ${config.apiKeyEnv})`)

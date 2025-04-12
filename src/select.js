@@ -6,6 +6,7 @@ import * as dotenv from 'dotenv'
 import curated from './curated.js'
 import excluded from './excluded.js'
 import path from 'path'
+import { getAPIKey } from './common.js'
 
 const HELP_TEXT = `
       Usage: node ./src/build.js [options]
@@ -23,8 +24,8 @@ const initializeAPIs = async () => {
 
   for (const [name, config] of Object.entries(providers)) {
     try {
-      // Get API key from environment variable
-      const apiKey = process.env[config.apiKeyEnv]
+      // Get API key using the common.js functionality
+      const apiKey = getAPIKey(config.apiKeyEnv)
 
       if (!apiKey) {
         console.warn(`Warning: No API key found for ${name} (env var: ${config.apiKeyEnv})`)

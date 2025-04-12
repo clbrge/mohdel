@@ -1,6 +1,5 @@
 import providers from './providers.js'
-import curated from './curated.js'
-import { getAPIKey, getDefaultModelId } from './common.js'
+import { getAPIKey, getDefaultModelId, getCuratedModels } from './common.js'
 
 const importSDK = async (providerName) => {
   try {
@@ -15,7 +14,8 @@ const importSDK = async (providerName) => {
 }
 
 // Build an inverse lookup table from model IDs to their aliases
-const buildAliasMap = () => {
+const buildAliasMap = async () => {
+  const curated = await getCuratedModels()
   const aliasMap = new Map()
   const modelCountByName = new Map()
 
@@ -63,9 +63,11 @@ const buildAliasMap = () => {
   return aliasMap
 }
 
-const aliasMap = buildAliasMap()
-
-const expandModelAlias = (modelId) => {
+const expandModelAlias = async (modelId) => {
+  // Get the curated model list and build alias map
+  const curated = await getCuratedModels()
+  const aliasMap = await buildAliasMap()
+  
   // If the model ID is already in the curated list, return it as is
   if (curated[modelId]) return modelId
 
@@ -77,16 +79,19 @@ const expandModelAlias = (modelId) => {
   return modelId
 }
 
-const getProviderAndModel = (modelId) => {
+const getProviderAndModel = async (modelId) => {
   if (!modelId || typeof modelId !== 'string') {
     throw new Error('Model ID must be a string')
   }
 
+  // Get the curated model list
+  const curated = await getCuratedModels()
+  
   // Expand the model ID if it's an alias
-  const expandedModelId = expandModelAlias(modelId)
+  const expandedModelId = await expandModelAlias(modelId)
 
   // If the expanded ID is the same as the input and doesn't contain a slash,
-  // it might be a model name without provider prefix that wasn't in our alias map
+  // it might be a model name without provider prefix
   if (expandedModelId === modelId && !modelId.includes('/')) {
     // Check if any curated model ends with this model ID
     const matchingModels = Object.keys(curated).filter(id => {
@@ -125,7 +130,7 @@ const mohdel = (modelId) => {
         return async (prompt, userParams = {}) => {
           // Resolve model ID lazily when the completion method is called
           const resolvedModelId = modelId || await getDefaultModelId()
-          const { providerName, modelName } = getProviderAndModel(resolvedModelId)
+          const { providerName, modelName } = await getProviderAndModel(resolvedModelId)
           
           const config = providers[providerName]
           const apiKey = getAPIKey(config.apiKeyEnv)

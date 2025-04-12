@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 
 import { intro, outro, text, spinner, confirm, isCancel, cancel } from '@clack/prompts'
-import { writeFile } from 'fs/promises'
-import models from './models.js'
-import curated from './curated.js'
+import { getCuratedModels } from './common.js'
 
 const run = async () => {
   intro('Complete Model Information')
 
   const s = spinner()
-  s.start('Analyzing models...')
+  s.start('Loading models...')
+
+  // Import models dynamically
+  const { default: models } = await import('./models.js')
+  const curated = await getCuratedModels()
 
   // Track which models need completion
   const modelsToUpdate = []
@@ -130,6 +132,7 @@ const run = async () => {
   s.start('Saving updated model information...')
   
   try {
+    const { writeFile } = await import('fs/promises')
     const content = `const models = ${JSON.stringify(models, null, 2)}\n\nexport default models\n`
     await writeFile('./src/models.js', content, 'utf8')
     s.stop('Model information updated successfully')

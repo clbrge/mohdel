@@ -3,10 +3,14 @@ import minimist from 'minimist'
 import fs from 'fs/promises'
 import providers from './providers.js'
 import * as dotenv from 'dotenv'
-import curated from './curated.js'
-import excluded from './excluded.js'
 import path from 'path'
-import { getAPIKey } from './common.js'
+import { 
+  getAPIKey, 
+  getCuratedModels, 
+  getExcludedModels, 
+  saveCuratedModels, 
+  saveExcludedModels 
+} from './common.js'
 
 const HELP_TEXT = `
       Usage: node ./src/build.js [options]
@@ -50,13 +54,8 @@ const initializeAPIs = async () => {
   return { api, providersWithKeys }
 }
 
-const writeToFile = async (filePath, content) => {
-  const formattedContent = `const ${path.basename(filePath, '.js')} = ${JSON.stringify(content, null, 2)}\n\nexport default ${path.basename(filePath, '.js')}\n`
-  await fs.writeFile(filePath, formattedContent, 'utf8')
-}
-
 // Find potential models to replace based on the new model name
-const findReplacementCandidates = (providerName, modelId) => {
+const findReplacementCandidates = (providerName, modelId, curated) => {
   const baseNameMatch = modelId.match(/^(\w+[0-9\-\.]+)/)
   if (!baseNameMatch) return []
 
@@ -82,7 +81,7 @@ const findReplacementCandidates = (providerName, modelId) => {
 }
 
 // Replace a model: move it to excluded and add the new one to curated
-const replaceModel = async (modelToReplace, newModelKey, newModelLabel) => {
+const replaceModel = async (modelToReplace, newModelKey, newModelLabel, curated, excluded) => {
   // Move the model to be replaced to excluded
   excluded[modelToReplace.key] = { label: modelToReplace.label }
   delete curated[modelToReplace.key]
@@ -91,8 +90,8 @@ const replaceModel = async (modelToReplace, newModelKey, newModelLabel) => {
   curated[newModelKey] = { label: newModelLabel }
   
   // Update both files
-  await writeToFile('./src/curated.js', curated)
-  await writeToFile('./src/excluded.js', excluded)
+  await saveCuratedModels(curated)
+  await saveExcludedModels(excluded)
   
   return true
 }
@@ -105,6 +104,9 @@ const processModels = async (providerName, providerInstance) => {
 
   try {
     console.log(`Processing models for ${providerName}...`)
+
+    const curated = await getCuratedModels()
+    const excluded = await getExcludedModels()
 
     const response = await providerInstance.listModels()
 
@@ -126,7 +128,7 @@ const processModels = async (providerName, providerInstance) => {
       console.log(JSON.stringify(model, null, 2))
       
       // Find potential models that this new model could replace
-      const replacementCandidates = findReplacementCandidates(providerName, modelId)
+      const replacementCandidates = findReplacementCandidates(providerName, modelId, curated)
       
       // Build options for the select prompt
       const options = [
@@ -157,17 +159,17 @@ const processModels = async (providerName, providerInstance) => {
 
       if (answer === 'include') {
         curated[modelKey] = { label: model.label || modelId }
-        await writeToFile('./src/curated.js', curated)
+        await saveCuratedModels(curated)
         clack.log.success(`Added ${modelKey} to curated models`)
       } else if (answer === 'exclude') {
         excluded[modelKey] = { label: model.label || modelId }
-        await writeToFile('./src/excluded.js', excluded)
+        await saveExcludedModels(excluded)
         clack.log.success(`Added ${modelKey} to excluded models`)
       } else if (answer.startsWith('replace_')) {
         const index = parseInt(answer.split('_')[1], 10)
         const modelToReplace = replacementCandidates[index]
         
-        await replaceModel(modelToReplace, modelKey, model.label || modelId)
+        await replaceModel(modelToReplace, modelKey, model.label || modelId, curated, excluded)
         
         clack.log.success(
           `Replaced ${modelToReplace.key} with ${modelKey}. ` +

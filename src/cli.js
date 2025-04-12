@@ -2,12 +2,14 @@
 
 import { intro, outro, select, isCancel, cancel } from '@clack/prompts'
 import { existsSync } from 'fs'
-import curated from './curated.js'
+import { getCuratedModels, CONFIG_DIR, CONFIG_PATH, saveConfig } from './common.js'
 import providers from './providers.js'
-import { CONFIG_DIR, CONFIG_PATH, saveConfig } from './common.js'
 
 const run = async () => {
   intro('Mohdel Configuration')
+
+  // Load curated models from config directory
+  const curated = await getCuratedModels()
 
   // Create options from curated models
   const modelOptions = Object.entries(curated).map(([modelId, info]) => ({

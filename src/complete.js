@@ -18,7 +18,6 @@ const run = async () => {
     { name: 'outputPrice', label: 'Output price per 1M tokens', placeholder: '10.00' },
     { name: 'inputTokenLimit', label: 'Input token limit', placeholder: '8192' },
     { name: 'outputTokenLimit', label: 'Output token limit', placeholder: '4096' },
-    { name: 'description', label: 'Model description', placeholder: 'A powerful language model for...' }
   ]
 
   // Track which models need completion

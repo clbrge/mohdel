@@ -76,107 +76,75 @@ export const getAPIKey = (envVarName) => {
   return null
 }
 
-// Get configuration from config file
-export const getConfig = async () => {
-  try {
-    if (!existsSync(CONFIG_PATH)) {
-      return {}
+// Higher-order function to create file handling operations
+const createFileOperation = (filePath, defaultValue = {}, operationType) => {
+  // Handler for loading data from a file
+  const loadHandler = async () => {
+    try {
+      if (!existsSync(CONFIG_DIR)) {
+        await mkdir(CONFIG_DIR, { recursive: true })
+      }
+
+      if (!existsSync(filePath)) {
+        // If file doesn't exist and we have a default, save it first
+        if (defaultValue && Object.keys(defaultValue).length > 0) {
+          await writeFile(filePath, JSON.stringify(defaultValue, null, 2))
+          return defaultValue
+        }
+        return {}
+      }
+      
+      const data = await readFile(filePath, 'utf8')
+      return JSON.parse(data)
+    } catch (err) {
+      console.warn(`Failed to load ${operationType}: ${err.message}`)
+      return defaultValue || {}
     }
-    
-    const configData = await readFile(CONFIG_PATH, 'utf8')
-    return JSON.parse(configData)
-  } catch (err) {
-    console.warn(`Failed to load configuration: ${err.message}`)
-    return {}
   }
+
+  // Handler for saving data to a file
+  const saveHandler = async (data) => {
+    try {
+      if (!existsSync(CONFIG_DIR)) {
+        await mkdir(CONFIG_DIR, { recursive: true })
+      }
+      
+      await writeFile(filePath, JSON.stringify(data, null, 2))
+      return true
+    } catch (err) {
+      console.error(`Failed to save ${operationType}: ${err.message}`)
+      if (operationType !== 'configuration') {
+        throw new Error(`Failed to save ${operationType}: ${err.message}`)
+      }
+      return false
+    }
+  }
+
+  return { load: loadHandler, save: saveHandler }
 }
+
+// Create file operations for different types of data
+const configOps = createFileOperation(CONFIG_PATH, {}, 'configuration')
+const curatedOps = createFileOperation(CURATED_PATH, DEFAULT_CURATED, 'curated models')
+const excludedOps = createFileOperation(EXCLUDED_PATH, DEFAULT_EXCLUDED, 'excluded models')
+
+// Get configuration from config file
+export const getConfig = configOps.load
 
 // Save configuration to config file
-export const saveConfig = async (config) => {
-  try {
-    if (!existsSync(CONFIG_DIR)) {
-      await mkdir(CONFIG_DIR, { recursive: true })
-    }
-    
-    await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2))
-    return true
-  } catch (err) {
-    console.error(`Failed to save configuration: ${err.message}`)
-    return false
-  }
-}
+export const saveConfig = configOps.save
 
 // Get default curated models
-export const getCuratedModels = async () => {
-  try {
-    if (!existsSync(CONFIG_DIR)) {
-      await mkdir(CONFIG_DIR, { recursive: true })
-    }
-
-    if (!existsSync(CURATED_PATH)) {
-      // Use default curated models if no file exists
-      await saveCuratedModels(DEFAULT_CURATED)
-      return DEFAULT_CURATED
-    }
-    
-    const data = await readFile(CURATED_PATH, 'utf8')
-    return JSON.parse(data)
-  } catch (err) {
-    console.warn(`Failed to load curated models: ${err.message}`)
-    // Fall back to default curated models
-    return DEFAULT_CURATED
-  }
-}
+export const getCuratedModels = curatedOps.load
 
 // Save curated models to config directory
-export const saveCuratedModels = async (models) => {
-  try {
-    if (!existsSync(CONFIG_DIR)) {
-      await mkdir(CONFIG_DIR, { recursive: true })
-    }
-    await writeFile(CURATED_PATH, JSON.stringify(models, null, 2))
-    return true
-  } catch (err) {
-    console.error(`Failed to save curated models: ${err.message}`)
-    throw new Error(`Failed to save curated models: ${err.message}`)
-  }
-}
+export const saveCuratedModels = curatedOps.save
 
 // Get excluded models
-export const getExcludedModels = async () => {
-  try {
-    if (!existsSync(CONFIG_DIR)) {
-      await mkdir(CONFIG_DIR, { recursive: true })
-    }
-
-    if (!existsSync(EXCLUDED_PATH)) {
-      // Use default excluded models if no file exists
-      await saveExcludedModels(DEFAULT_EXCLUDED)
-      return DEFAULT_EXCLUDED
-    }
-    
-    const data = await readFile(EXCLUDED_PATH, 'utf8')
-    return JSON.parse(data)
-  } catch (err) {
-    console.warn(`Failed to load excluded models: ${err.message}`)
-    // Fall back to default excluded models
-    return DEFAULT_EXCLUDED
-  }
-}
+export const getExcludedModels = excludedOps.load
 
 // Save excluded models to config directory
-export const saveExcludedModels = async (models) => {
-  try {
-    if (!existsSync(CONFIG_DIR)) {
-      await mkdir(CONFIG_DIR, { recursive: true })
-    }
-    await writeFile(EXCLUDED_PATH, JSON.stringify(models, null, 2))
-    return true
-  } catch (err) {
-    console.error(`Failed to save excluded models: ${err.message}`)
-    throw new Error(`Failed to save excluded models: ${err.message}`)
-  }
-}
+export const saveExcludedModels = excludedOps.save
 
 // Get default model ID from configuration
 export const getDefaultModelId = async () => {

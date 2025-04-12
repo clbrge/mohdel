@@ -1,10 +1,6 @@
 import providers from './providers.js'
 import curated from './curated.js'
-import { readFileSync, existsSync } from 'fs'
-import { homedir } from 'os'
-import { join } from 'path'
-
-import * as common from './common.js'
+import { getAPIKey, getDefaultModelId } from './common.js'
 
 const importSDK = async (providerName) => {
   try {
@@ -121,24 +117,18 @@ const getProviderAndModel = (modelId) => {
   return { providerName, modelName }
 }
 
-const getDefaultModelId = () => {
-  if (defaultParams.defaultModel) {
-    return defaultParams.defaultModel
-  }
-  throw new Error('No default model configured. Run \'npx mohdel\' to set up a default model.')
-}
-
 const mohdel = (modelId) => {
-  const resolvedModelId = modelId || getDefaultModelId()
-  const { providerName, modelName } = getProviderAndModel(resolvedModelId)
-
-  // Create a proxy that will lazily load the SDK when methods are called
+  // Create a proxy that will lazily load the SDK and model when methods are called
   return new Proxy({}, {
     get: (target, prop) => {
       if (prop === 'completion') {
         return async (prompt, userParams = {}) => {
+          // Resolve model ID lazily when the completion method is called
+          const resolvedModelId = modelId || await getDefaultModelId()
+          const { providerName, modelName } = getProviderAndModel(resolvedModelId)
+          
           const config = providers[providerName]
-          const apiKey = common.getAPIKey(config.apiKeyEnv)
+          const apiKey = getAPIKey(config.apiKeyEnv)
 
           if (!apiKey) {
             throw new Error(`API key not found for ${providerName} (env var: ${config.apiKeyEnv})`)
@@ -147,10 +137,12 @@ const mohdel = (modelId) => {
           const SDK = await importSDK(providerName)
           const api = SDK(config.createConfiguration(apiKey))
 
+          // Get default parameters for this model from configuration
+          const defaultParams = await getModelDefaults(providerName, modelName)
+
           // Merge default parameters with user-provided parameters
           const mergedParams = {
-            ...defaultParams[providerName],
-            ...defaultParams[`${providerName}/${modelName}`],
+            ...defaultParams,
             ...userParams
           }
 
@@ -161,6 +153,12 @@ const mohdel = (modelId) => {
       return target[prop]
     }
   })
+}
+
+// Helper function to get default parameters for a model
+const getModelDefaults = async (providerName, modelName) => {
+  // This would be expanded to read from the config file in a real implementation
+  return {}
 }
 
 export default mohdel

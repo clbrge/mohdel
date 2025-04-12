@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 
 import { intro, outro, select, isCancel, cancel } from '@clack/prompts'
-import { mkdir, writeFile } from 'fs/promises'
-import { join } from 'path'
-import { homedir } from 'os'
 import { existsSync } from 'fs'
 import curated from './curated.js'
 import providers from './providers.js'
+import { CONFIG_DIR, CONFIG_PATH, saveConfig } from './common.js'
 
 const run = async () => {
   intro('Mohdel Configuration')
@@ -33,15 +31,7 @@ const run = async () => {
   // Extract provider name from the model ID
   const [providerName] = selectedModelId.split('/')
 
-  // Create configuration directory if it doesn't exist
-  const configDir = join(homedir(), '.mohdel')
-  const configPath = join(configDir, 'default.json')
-
   try {
-    if (!existsSync(configDir)) {
-      await mkdir(configDir, { recursive: true })
-    }
-
     // Create a basic configuration with the selected model
     const config = {
       defaultModel: selectedModelId
@@ -53,8 +43,8 @@ const run = async () => {
       config.apiKeyInfo = `Set ${apiKeyEnv} environment variable for this provider`
     }
 
-    await writeFile(configPath, JSON.stringify(config, null, 2))
-    outro(`Configuration saved to ${configPath}`)
+    await saveConfig(config)
+    outro(`Configuration saved to ${CONFIG_PATH}`)
   } catch (err) {
     cancel(`Error creating configuration: ${err.message}`)
     process.exit(1)

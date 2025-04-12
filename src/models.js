@@ -1,38 +1,88 @@
 const models = {
-  "anthropic/claude-3-7-sonnet-latest": {
-    "id": "claude-3-7-sonnet-20250219",
-    "displayName": "claude-3-7-sonnet-latest",
+  "anthropic/claude-3-5-sonnet-20240620": {
+    "id": "claude-3-5-sonnet-20240620",
+    "displayName": "claude-3-5-sonnet-20240620",
     "description": "",
     "inputTokenLimit": 0,
     "outputTokenLimit": 0,
     "type": "model",
-    "display_name": "Claude 3.7 Sonnet",
-    "created_at": "2025-02-24T00:00:00Z"
+    "display_name": "Claude 3.5 Sonnet (Old)",
+    "created_at": "2024-06-20T00:00:00Z"
   },
-  "anthropic/claude-3-7-sonnet-20250219": {
-    "id": "claude-3-7-sonnet-20250219",
-    "displayName": "claude-3-7-sonnet-20250219",
+  "anthropic/claude-3-opus-20240229": {
+    "id": "claude-3-opus-20240229",
+    "displayName": "claude-3-opus-20240229",
     "description": "",
     "inputTokenLimit": 0,
     "outputTokenLimit": 0,
     "type": "model",
-    "display_name": "Claude 3.7 Sonnet",
-    "created_at": "2025-02-24T00:00:00Z"
+    "display_name": "Claude 3 Opus",
+    "created_at": "2024-02-29T00:00:00Z"
   },
-  "anthropic/claude-3-5-haiku-20241022": {
-    "id": "claude-3-5-haiku-20241022",
-    "displayName": "claude-3-5-haiku-20241022",
+  "anthropic/claude-3-sonnet-20240229": {
+    "id": "claude-3-sonnet-20240229",
+    "displayName": "claude-3-sonnet-20240229",
     "description": "",
     "inputTokenLimit": 0,
     "outputTokenLimit": 0,
     "type": "model",
-    "display_name": "Claude 3.5 Haiku",
-    "created_at": "2024-10-22T00:00:00Z"
+    "display_name": "Claude 3 Sonnet",
+    "created_at": "2024-02-29T00:00:00Z"
   },
-  "gemini/gemini-1.5-pro-latest": {
-    "id": "gemini-1.5-pro-latest",
-    "displayName": "Gemini 1.5 Pro Latest",
-    "description": "Alias that points to the most recent production (non-experimental) release of Gemini 1.5 Pro, our mid-size multimodal model that supports up to 2 million tokens.",
+  "anthropic/claude-3-haiku-20240307": {
+    "id": "claude-3-haiku-20240307",
+    "displayName": "claude-3-haiku-20240307",
+    "description": "",
+    "inputTokenLimit": 0,
+    "outputTokenLimit": 0,
+    "type": "model",
+    "display_name": "Claude 3 Haiku",
+    "created_at": "2024-03-07T00:00:00Z"
+  },
+  "openai/gpt-4o": {
+    "id": "gpt-4o",
+    "displayName": "gpt-4o",
+    "description": "",
+    "inputTokenLimit": 0,
+    "outputTokenLimit": 0,
+    "object": "model",
+    "created": 1715367049,
+    "owned_by": "system"
+  },
+  "openai/gpt-4-turbo": {
+    "id": "gpt-4-turbo",
+    "displayName": "gpt-4-turbo",
+    "description": "",
+    "inputTokenLimit": 0,
+    "outputTokenLimit": 0,
+    "object": "model",
+    "created": 1712361441,
+    "owned_by": "system"
+  },
+  "openai/gpt-4": {
+    "id": "gpt-4",
+    "displayName": "gpt-4",
+    "description": "",
+    "inputTokenLimit": 0,
+    "outputTokenLimit": 0,
+    "object": "model",
+    "created": 1687882411,
+    "owned_by": "openai"
+  },
+  "openai/gpt-3.5-turbo": {
+    "id": "gpt-3.5-turbo",
+    "displayName": "gpt-3.5-turbo",
+    "description": "",
+    "inputTokenLimit": 0,
+    "outputTokenLimit": 0,
+    "object": "model",
+    "created": 1677610602,
+    "owned_by": "openai"
+  },
+  "gemini/gemini-1.5-pro": {
+    "id": "gemini-1.5-pro",
+    "displayName": "Gemini 1.5 Pro",
+    "description": "Stable version of Gemini 1.5 Pro, our mid-size multimodal model that supports up to 2 million tokens, released in May of 2024.",
     "inputTokenLimit": 2000000,
     "outputTokenLimit": 8192,
     "supportedActions": [
@@ -42,185 +92,14 @@ const models = {
     "version": "001",
     "tunedModelInfo": {}
   },
-  "gemini/gemini-2.0-flash-exp": {
-    "id": "gemini-2.0-flash-exp",
-    "displayName": "Gemini 2.0 Flash Experimental",
-    "description": "Gemini 2.0 Flash Experimental",
-    "inputTokenLimit": 1048576,
+  "gemini/gemini-1.5-flash": {
+    "id": "gemini-1.5-flash",
+    "displayName": "Gemini 1.5 Flash",
+    "description": "Alias that points to the most recent stable version of Gemini 1.5 Flash, our fast and versatile multimodal model for scaling across diverse tasks.",
+    "inputTokenLimit": 1000000,
     "outputTokenLimit": 8192,
     "supportedActions": [
       "generateContent",
-      "countTokens",
-      "bidiGenerateContent"
-    ],
-    "version": "2.0",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash": {
-    "id": "gemini-2.0-flash",
-    "displayName": "Gemini 2.0 Flash",
-    "description": "Gemini 2.0 Flash",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 8192,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.0",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-001": {
-    "id": "gemini-2.0-flash-001",
-    "displayName": "Gemini 2.0 Flash 001",
-    "description": "Stable version of Gemini 2.0 Flash, our fast and versatile multimodal model for scaling across diverse tasks, released in January of 2025.",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 8192,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.0",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-exp-image-generation": {
-    "id": "gemini-2.0-flash-exp-image-generation",
-    "displayName": "Gemini 2.0 Flash (Image Generation) Experimental",
-    "description": "Gemini 2.0 Flash (Image Generation) Experimental",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 8192,
-    "supportedActions": [
-      "generateContent",
-      "countTokens",
-      "bidiGenerateContent"
-    ],
-    "version": "2.0",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-lite-001": {
-    "id": "gemini-2.0-flash-lite-001",
-    "displayName": "Gemini 2.0 Flash-Lite 001",
-    "description": "Stable version of Gemini 2.0 Flash Lite",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 8192,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.0",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-lite": {
-    "id": "gemini-2.0-flash-lite",
-    "displayName": "Gemini 2.0 Flash-Lite",
-    "description": "Gemini 2.0 Flash-Lite",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 8192,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.0",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-lite-preview-02-05": {
-    "id": "gemini-2.0-flash-lite-preview-02-05",
-    "displayName": "Gemini 2.0 Flash-Lite Preview 02-05",
-    "description": "Preview release (February 5th, 2025) of Gemini 2.0 Flash Lite",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 8192,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "preview-02-05",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-lite-preview": {
-    "id": "gemini-2.0-flash-lite-preview",
-    "displayName": "Gemini 2.0 Flash-Lite Preview",
-    "description": "Preview release (February 5th, 2025) of Gemini 2.0 Flash Lite",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 8192,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "preview-02-05",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-thinking-exp-01-21": {
-    "id": "gemini-2.0-flash-thinking-exp-01-21",
-    "displayName": "Gemini 2.0 Flash Thinking Experimental 01-21",
-    "description": "Experimental release (January 21st, 2025) of Gemini 2.0 Flash Thinking",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 65536,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.0-exp-01-21",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-thinking-exp": {
-    "id": "gemini-2.0-flash-thinking-exp",
-    "displayName": "Gemini 2.0 Flash Thinking Experimental 01-21",
-    "description": "Experimental release (January 21st, 2025) of Gemini 2.0 Flash Thinking",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 65536,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.0-exp-01-21",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-thinking-exp-1219": {
-    "id": "gemini-2.0-flash-thinking-exp-1219",
-    "displayName": "Gemini 2.0 Flash Thinking Experimental",
-    "description": "Gemini 2.0 Flash Thinking Experimental",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 65536,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.0",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.5-pro-preview-03-25": {
-    "id": "gemini-2.5-pro-preview-03-25",
-    "displayName": "Gemini 2.5 Pro Preview 03-25",
-    "description": "Gemini 2.5 Pro Preview 03-25",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 65536,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.5-preview-03-25",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-exp-1206": {
-    "id": "gemini-exp-1206",
-    "displayName": "Gemini Experimental 1206",
-    "description": "Experimental release (March 25th, 2025) of Gemini 2.5 Pro",
-    "inputTokenLimit": 1048576,
-    "outputTokenLimit": 65536,
-    "supportedActions": [
-      "generateContent",
-      "countTokens"
-    ],
-    "version": "2.5-exp-03-25",
-    "tunedModelInfo": {}
-  },
-  "gemini/gemini-2.0-flash-live-001": {
-    "id": "gemini-2.0-flash-live-001",
-    "displayName": "Gemini 2.0 Flash 001",
-    "description": "Gemini 2.0 Flash 001",
-    "inputTokenLimit": 131072,
-    "outputTokenLimit": 8192,
-    "supportedActions": [
-      "bidiGenerateContent",
       "countTokens"
     ],
     "version": "001",

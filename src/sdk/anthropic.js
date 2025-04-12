@@ -5,7 +5,8 @@ const anthropicSDK = (config) => {
   const anthropic = new Anthropic(config)
 
   const infoTranslate = {
-    display_name: 'displayName'
+    display_name: 'displayName',
+    created_at: 'createdAt'
   }
 
   return {

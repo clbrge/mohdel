@@ -34,6 +34,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@google/genai": "^0.8.0",
     "@google/generative-ai": "^0.24.0",
+    "config": "^3.3.12",
     "dotenv": "^16.4.7",
     "env-paths": "^3.0.0",
     "groq-sdk": "^0.19.0",

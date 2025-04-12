@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { intro, outro, text, spinner, confirm, isCancel, cancel } from '@clack/prompts'
-import { getCuratedModels } from './common.js'
+import { intro, outro, text, spinner, confirm, isCancel, cancel, select } from '@clack/prompts'
+import { getCuratedModels, saveCuratedModels } from './common.js'
 
 const run = async () => {
   intro('Complete Model Information')
@@ -9,102 +9,135 @@ const run = async () => {
   const s = spinner()
   s.start('Loading models...')
 
-  // Import models dynamically
-  const { default: models } = await import('./models.js')
+  // Load curated models
   const curated = await getCuratedModels()
+
+  // Define the properties we want to ensure exist for each model
+  const requiredProperties = [
+    { name: 'inputPrice', label: 'Input price per 1M tokens', placeholder: '2.00' },
+    { name: 'outputPrice', label: 'Output price per 1M tokens', placeholder: '10.00' },
+    { name: 'inputTokenLimit', label: 'Input token limit', placeholder: '8192' },
+    { name: 'outputTokenLimit', label: 'Output token limit', placeholder: '4096' },
+    { name: 'description', label: 'Model description', placeholder: 'A powerful language model for...' }
+  ]
 
   // Track which models need completion
   const modelsToUpdate = []
   
   // Scan models for missing properties
-  for (const [modelId, modelInfo] of Object.entries(models)) {
-    if (!modelInfo.inputPrice || !modelInfo.outputPrice) {
+  for (const [modelId, modelInfo] of Object.entries(curated)) {
+    const missingProps = {}
+    let hasMissingProps = false
+    
+    for (const prop of requiredProperties) {
+      if (!modelInfo[prop.name]) {
+        missingProps[prop.name] = true
+        hasMissingProps = true
+      }
+    }
+    
+    if (hasMissingProps) {
       modelsToUpdate.push({
         modelId,
         modelInfo,
-        missing: {
-          inputPrice: !modelInfo.inputPrice,
-          outputPrice: !modelInfo.outputPrice
-        }
+        missing: missingProps
       })
     }
   }
 
-  s.stop(`Found ${modelsToUpdate.length} models that need pricing information`)
+  s.stop(`Found ${modelsToUpdate.length} models that need additional information`)
 
   if (modelsToUpdate.length === 0) {
-    outro('All models already have complete pricing information.')
+    outro('All models already have complete information.')
     return
   }
 
+  // Let user choose to continue or exit
+  const shouldContinue = await confirm({
+    message: `Ready to complete information for ${modelsToUpdate.length} models?`
+  })
+
+  if (isCancel(shouldContinue) || !shouldContinue) {
+    cancel('Operation cancelled')
+    return
+  }
+
+  // Ask user if they want to filter by provider
+  const providers = [...new Set(modelsToUpdate.map(model => model.modelId.split('/')[0]))]
+  
+  const filterOptions = [
+    { value: 'all', label: 'All providers' },
+    ...providers.map(provider => ({ value: provider, label: provider }))
+  ]
+  
+  const selectedProvider = await select({
+    message: 'Which provider models would you like to update?',
+    options: filterOptions
+  })
+  
+  if (isCancel(selectedProvider)) {
+    cancel('Operation cancelled')
+    return
+  }
+  
+  // Filter models by selected provider
+  const filteredModels = selectedProvider === 'all' 
+    ? modelsToUpdate 
+    : modelsToUpdate.filter(model => model.modelId.startsWith(`${selectedProvider}/`))
+
   // Process each model that needs completion
-  for (const { modelId, modelInfo, missing } of modelsToUpdate) {
+  for (const { modelId, modelInfo, missing } of filteredModels) {
     const [providerName, modelName] = modelId.split('/')
-    const displayName = modelInfo.displayName || curated[modelId]?.label || modelName
+    const displayName = modelInfo.displayName || modelInfo.label || modelName
     
     console.log(`\n${displayName} (${modelId})`)
     console.log('-'.repeat(40))
     
     // Display existing model information for context
     console.log('Current information:')
-    console.log(`- Input token limit: ${modelInfo.inputTokenLimit || 'Unknown'}`)
-    console.log(`- Output token limit: ${modelInfo.outputTokenLimit || 'Unknown'}`)
+    for (const prop of requiredProperties) {
+      console.log(`- ${prop.label}: ${modelInfo[prop.name] || 'Missing'}`)
+    }
     
     // Gather missing information
     let updated = false
     let shouldBreak = false
     
-    if (missing.inputPrice) {
-      const inputPrice = await text({
-        message: `Input price per 1M tokens for ${displayName}:`,
-        placeholder: '2.00',
-        validate: value => {
-          if (value === '.') return
-          if (value && value.trim() === '') return
-          if (value && isNaN(parseFloat(value))) {
-            return 'Please enter a valid number'
+    for (const prop of requiredProperties) {
+      if (missing[prop.name]) {
+        const value = await text({
+          message: `${prop.label} for ${displayName}:`,
+          placeholder: prop.placeholder,
+          validate: value => {
+            if (value === '.') return
+            if (value && value.trim() === '') return
+            
+            // For numerical properties, validate they're numbers
+            if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name) && 
+                value && isNaN(parseFloat(value))) {
+              return 'Please enter a valid number'
+            }
           }
+        })
+        
+        if (isCancel(value)) {
+          cancel('Operation cancelled')
+          return
         }
-      })
-      
-      if (isCancel(inputPrice)) {
-        cancel('Operation cancelled')
-        return
-      }
-      
-      // Check for exit signal
-      if (inputPrice === '.') {
-        shouldBreak = true
-      } else if (inputPrice && inputPrice.trim() !== '') {
-        modelInfo.inputPrice = parseFloat(inputPrice)
-        updated = true
-      }
-    }
-    
-    if (!shouldBreak && missing.outputPrice) {
-      const outputPrice = await text({
-        message: `Output price per 1M tokens for ${displayName}:`,
-        placeholder: '10.00',
-        validate: value => {
-          if (value === '.') return
-          if (value && value.trim() === '') return
-          if (value && isNaN(parseFloat(value))) {
-            return 'Please enter a valid number'
+        
+        // Check for exit signal
+        if (value === '.') {
+          shouldBreak = true
+          break
+        } else if (value && value.trim() !== '') {
+          // Convert to number for numerical properties
+          if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name)) {
+            modelInfo[prop.name] = parseFloat(value)
+          } else {
+            modelInfo[prop.name] = value
           }
+          updated = true
         }
-      })
-      
-      if (isCancel(outputPrice)) {
-        cancel('Operation cancelled')
-        return
-      }
-      
-      // Check for exit signal
-      if (outputPrice === '.') {
-        shouldBreak = true
-      } else if (outputPrice && outputPrice.trim() !== '') {
-        modelInfo.outputPrice = parseFloat(outputPrice)
-        updated = true
       }
     }
     
@@ -132,9 +165,7 @@ const run = async () => {
   s.start('Saving updated model information...')
   
   try {
-    const { writeFile } = await import('fs/promises')
-    const content = `const models = ${JSON.stringify(models, null, 2)}\n\nexport default models\n`
-    await writeFile('./src/models.js', content, 'utf8')
+    await saveCuratedModels(curated)
     s.stop('Model information updated successfully')
   } catch (err) {
     s.stop(`Error saving model information: ${err.message}`)

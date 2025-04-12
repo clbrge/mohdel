@@ -54,7 +54,6 @@ const initializeAPIs = async () => {
   return { api, providersWithKeys }
 }
 
-// Get model details from the provider API
 const getModelDetails = async (providerName, modelId, api) => {
   try {
     if (!api.getModelInfo) {
@@ -62,71 +61,14 @@ const getModelDetails = async (providerName, modelId, api) => {
       return null
     }
 
-    const modelDetails = await api.getModelInfo(modelId)
+    const modelInfo = await api.getModelInfo(modelId)
     
-    if (!modelDetails) {
+    if (!modelInfo) {
       console.warn(`Model ${modelId} not found in provider response`)
       return null
     }
     
-    // Process model details based on provider
-    if (providerName === 'gemini') {
-      // Return all properties from the model details
-      // Including core fields with fallbacks to ensure we always have basic info
-      return {
-        id: modelDetails.name?.replace('models/', '') || modelId,
-        displayName: modelDetails.displayName,
-        description: modelDetails.description,
-        inputTokenLimit: modelDetails.inputTokenLimit,
-        outputTokenLimit: modelDetails.outputTokenLimit,
-        supportedGenerationMethods: modelDetails.supportedGenerationMethods,
-        supportedActions: modelDetails.supportedActions,
-        temperature: modelDetails.temperature,
-        topP: modelDetails.topP,
-        topK: modelDetails.topK,
-        // Preserve all other properties from the response
-        ...Object.entries(modelDetails)
-          .filter(([key]) => !['name', 'displayName', 'description', 'inputTokenLimit', 'outputTokenLimit', 
-                             'supportedGenerationMethods', 'supportedActions', 'temperature', 'topP', 'topK'].includes(key))
-          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
-      }
-    } else if (providerName === 'anthropic') {
-      // Process Anthropic model details
-      return {
-        id: modelId,
-        displayName: modelDetails.name || modelId,
-        description: modelDetails.description || '',
-        inputTokenLimit: modelDetails.context_window_size || 0,
-        outputTokenLimit: modelDetails.max_tokens || 0,
-        // Include all other properties
-        ...Object.entries(modelDetails)
-          .filter(([key]) => !['name', 'description', 'context_window_size', 'max_tokens'].includes(key))
-          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
-      }
-    } else if (providerName === 'openai') {
-      // Process OpenAI model details
-      return {
-        id: modelId,
-        displayName: modelDetails.name || modelId,
-        description: modelDetails.description || '',
-        inputTokenLimit: modelDetails.context_window || 0,
-        outputTokenLimit: modelDetails.max_tokens || 0,
-        // Include all other properties
-        ...Object.entries(modelDetails)
-          .filter(([key]) => !['name', 'description', 'context_window', 'max_tokens'].includes(key))
-          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
-      }
-    } else {
-      // Generic model details for other providers - preserve all data
-      return {
-        id: modelId,
-        displayName: modelDetails.name || modelId,
-        description: modelDetails.description || 'No description available',
-        provider: providerName,
-        // Include all properties from the API response
-        ...modelDetails
-      }
-    }
+    return modelInfo
   } catch (err) {
     console.error(`Error getting model details for ${modelId}:`, err.message)
     return null
@@ -243,24 +185,20 @@ const processModels = async (providerName, providerInstance) => {
       const s = clack.spinner()
       s.start(`Fetching detailed information for ${modelKey}...`)
       
-      const modelDetails = await getModelDetails(providerName, modelId, providerInstance)
-      s.stop(modelDetails ? 'Model details retrieved successfully' : 'Could not retrieve detailed model information')
+      const modelInfo = await getModelDetails(providerName, modelId, providerInstance)
+      s.stop(modelInfo ? 'Model details retrieved successfully' : 'Could not retrieve detailed model information')
 
       if (answer === 'include') {
         curated[modelKey] = { 
-          label: model.label || modelId,
-          ...modelDetails 
+          ...modelInfo
         }
         await saveCuratedModels(curated)
         clack.log.success(`Added ${modelKey} to curated models with detailed information`)
       } else if (answer === 'exclude') {
         excluded[modelKey] = { 
-          label: model.label || modelId,
-          ...modelDetails 
+          ...modelInfo
         }
-        console.log('A')
         await saveExcludedModels(excluded)
-        console.log('B')
         clack.log.success(`Added ${modelKey} to excluded models with detailed information`)
       } else if (answer.startsWith('replace_')) {
         const index = parseInt(answer.split('_')[1], 10)
@@ -270,7 +208,7 @@ const processModels = async (providerName, providerInstance) => {
           modelToReplace, 
           modelKey, 
           model.label || modelId,
-          modelDetails, 
+          modelInfo,
           curated, 
           excluded
         )

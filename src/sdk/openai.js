@@ -20,20 +20,7 @@ const Provider = (defaultConfiguration) => {
         throw err
       }
     },
-    
-    getEmbeddings: (model = 'text-embedding-ada-002') => async (inputs) => {
-      try {
-        const { data } = await api.embeddings.create({
-          input: inputs,
-          model
-        })
-        return data
-      } catch (err) {
-        console.error('Error getting embeddings from (openai sdk):', err.message)
-        throw err
-      }
-    },
-    
+
     getModelInfo: async (model) => {
       try {
         const modelInfo = await api.models.retrieve(model)

@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
 import { intro, outro, spinner } from '@clack/prompts'
-import { writeFile } from 'fs/promises'
 import * as dotenv from 'dotenv'
 import providers from './providers.js'
-import { getCuratedModels, getExcludedModels } from './common.js'
+import { getCuratedModels, getExcludedModels, saveCuratedModels } from './common.js'
 
 dotenv.config()
 
@@ -106,16 +105,8 @@ const initializeAPI = async (providerName) => {
   return API(sdkConfig)
 }
 
-// Save model information to a file
-const saveModelInfo = async (modelInfo) => {
-  const content = `const models = ${JSON.stringify(modelInfo, null, 2)}\n\nexport default models\n`
-  await writeFile('./src/models.js', content, 'utf8')
-}
-
 const syncModels = async () => {
   intro('Syncing model characteristics')
-  
-  const modelInfo = {}
   
   // Process all models in curated list
   const progress = spinner()
@@ -151,7 +142,11 @@ const syncModels = async () => {
           const details = await getModelDetails(providerName, modelId, api)
           
           if (details) {
-            modelInfo[modelKey] = details
+            // Update the curated model info with details from the API
+            curated[modelKey] = {
+              ...curated[modelKey],
+              ...details
+            }
           }
         }
       } catch (err) {
@@ -160,9 +155,9 @@ const syncModels = async () => {
       }
     }
     
-    progress.message('Saving model information')
-    await saveModelInfo(modelInfo)
-    progress.stop('Model details synced successfully')
+    progress.message('Saving updated curated model information')
+    await saveCuratedModels(curated)
+    progress.stop('Model details synced successfully to curated.json')
   } catch (err) {
     progress.stop(`Error syncing models: ${err.message}`)
     console.error('Error syncing models:', err.message)

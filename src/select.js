@@ -188,16 +188,20 @@ const processModels = async (providerName, providerInstance) => {
       const modelInfo = await getModelDetails(providerName, modelId, providerInstance)
       s.stop(modelInfo ? 'Model details retrieved successfully' : 'Could not retrieve detailed model information')
 
+      // Add provider and sdk properties to the model info
+      const providerConfig = providers[providerName]
+      const modelInfoWithMeta = {
+        ...modelInfo,
+        provider: providerName,
+        sdk: providerConfig.sdk
+      }
+
       if (answer === 'include') {
-        curated[modelKey] = { 
-          ...modelInfo
-        }
+        curated[modelKey] = modelInfoWithMeta
         await saveCuratedModels(curated)
         clack.log.success(`Added ${modelKey} to curated models with detailed information`)
       } else if (answer === 'exclude') {
-        excluded[modelKey] = { 
-          ...modelInfo
-        }
+        excluded[modelKey] = modelInfoWithMeta
         await saveExcludedModels(excluded)
         clack.log.success(`Added ${modelKey} to excluded models with detailed information`)
       } else if (answer.startsWith('replace_')) {
@@ -208,7 +212,7 @@ const processModels = async (providerName, providerInstance) => {
           modelToReplace, 
           modelKey, 
           model.label || modelId,
-          modelInfo,
+          modelInfoWithMeta,
           curated, 
           excluded
         )

@@ -22,11 +22,19 @@ const getModelDetails = async (providerName, modelId, api) => {
       return null
     }
     
+    // Add provider and sdk properties to all model details
+    const providerConfig = providers[providerName]
+    const baseDetails = {
+      provider: providerName,
+      sdk: providerConfig.sdk
+    }
+    
     // Process model details based on provider
     if (providerName === 'gemini') {
       // Return all properties from the model details
       // Including core fields with fallbacks to ensure we always have basic info
       return {
+        ...baseDetails,
         id: modelDetails.name?.replace('models/', '') || modelId,
         displayName: modelDetails.displayName,
         description: modelDetails.description,
@@ -46,6 +54,7 @@ const getModelDetails = async (providerName, modelId, api) => {
     } else if (providerName === 'anthropic') {
       // Process Anthropic model details
       return {
+        ...baseDetails,
         id: modelId,
         displayName: modelDetails.name || modelId,
         description: modelDetails.description || '',
@@ -59,6 +68,7 @@ const getModelDetails = async (providerName, modelId, api) => {
     } else if (providerName === 'openai') {
       // Process OpenAI model details
       return {
+        ...baseDetails,
         id: modelId,
         displayName: modelDetails.name || modelId,
         description: modelDetails.description || '',
@@ -72,10 +82,10 @@ const getModelDetails = async (providerName, modelId, api) => {
     } else {
       // Generic model details for other providers - preserve all data
       return {
+        ...baseDetails,
         id: modelId,
         displayName: modelDetails.name || modelId,
         description: modelDetails.description || 'No description available',
-        provider: providerName,
         // Include all properties from the API response
         ...modelDetails
       }
@@ -146,6 +156,16 @@ const syncModels = async () => {
             curated[modelKey] = {
               ...curated[modelKey],
               ...details
+            }
+          } else {
+            // If we couldn't get details from the API, at least ensure
+            // provider and sdk properties are present
+            if (!curated[modelKey].provider || !curated[modelKey].sdk) {
+              curated[modelKey] = {
+                ...curated[modelKey],
+                provider: providerName,
+                sdk: providers[providerName].sdk
+              }
             }
           }
         }

@@ -6,8 +6,10 @@ const Provider = (defaultConfiguration) => {
 
   const groq = new Groq(defaultConfiguration)
   
-  // Property name translations (empty for now)
-  const infoTranslate = {}
+  const infoTranslate = {
+    max_completion_tokens: 'outputTokenLimit',
+    context_window: 'inputTokenLimit'
+  }
 
   $.call = (model, configuration = {}, type = 'chat') => args => {
     const api = Object.keys(configuration).length ? new Groq(configuration) : groq

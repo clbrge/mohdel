@@ -16,7 +16,7 @@ const Provider = (defaultConfiguration) => {
         })
         return response.choices[0].message.content
       } catch (err) {
-        console.error('Error calling OpenAI API:', err.message)
+        console.error('Error calling openai sdk:', err.message)
         throw err
       }
     },
@@ -29,7 +29,7 @@ const Provider = (defaultConfiguration) => {
         })
         return data
       } catch (err) {
-        console.error('Error getting embeddings from OpenAI:', err.message)
+        console.error('Error getting embeddings from (openai sdk):', err.message)
         throw err
       }
     },
@@ -37,10 +37,9 @@ const Provider = (defaultConfiguration) => {
     getModelInfo: async (model) => {
       try {
         const modelInfo = await api.models.retrieve(model)
-        console.log('xxxxxxxxxx', modelInfo)
         return translateModelInfo(modelInfo, infoTranslate)
       } catch (err) {
-        console.error('Error retrieving OpenAI model info:', err.message)
+        console.error('Error retrieving model info (openai sdk):', err.message)
         return null
       }
     },
@@ -50,7 +49,7 @@ const Provider = (defaultConfiguration) => {
         const models = await api.models.list()
         return models
       } catch (err) {
-        console.error('Error listing OpenAI models:', err.message)
+        console.error('Error listing (openai sdk) models:', err.message)
         return { data: [] }
       }
     }

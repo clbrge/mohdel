@@ -139,7 +139,7 @@ export const saveCuratedModels = async (models) => {
     return true
   } catch (err) {
     console.error(`Failed to save curated models: ${err.message}`)
-    return false
+    throw new Error(`Failed to save curated models: ${err.message}`)
   }
 }
 
@@ -176,7 +176,7 @@ export const saveExcludedModels = async (models) => {
     return true
   } catch (err) {
     console.error(`Failed to save excluded models: ${err.message}`)
-    return false
+    throw new Error(`Failed to save excluded models: ${err.message}`)
   }
 }
 

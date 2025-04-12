@@ -3,6 +3,10 @@ import Anthropic from '@anthropic-ai/sdk'
 const anthropicSDK = (config) => {
   const anthropic = new Anthropic(config)
 
+  const infoTranslate = {
+    display_name: 'displayName'
+  }
+
   return {
     completion: (modelName) => async (prompt) => {
       try {
@@ -32,7 +36,7 @@ const anthropicSDK = (config) => {
     getModelInfo: async (modelName) => {
       try {
         const model = await anthropic.models.retrieve(modelName)
-        console.log( model )
+        delete Object.assign(model, { displayName: o.display_name }).display_name
         return model
       } catch (err) {
         console.error('Error retrieving Anthropic model info:', err.message)

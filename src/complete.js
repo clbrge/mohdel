@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { intro, outro, text, spinner, confirm, isCancel, cancel, select } from '@clack/prompts'
-import { getCuratedModels, saveCuratedModels } from './common.js'
+import { getCuratedModels, saveCuratedModels, getConfig } from './common.js'
 
 const run = async () => {
   intro('Complete Model Information')
@@ -11,14 +11,20 @@ const run = async () => {
 
   // Load curated models
   const curated = await getCuratedModels()
+  
+  // Get configuration to check for requiredInfo
+  const config = await getConfig()
 
   // Define the properties we want to ensure exist for each model
-  const requiredProperties = [
+  const defaultRequiredInfo = [
     { name: 'inputPrice', label: 'Input price per 1M tokens', placeholder: '2.00' },
     { name: 'outputPrice', label: 'Output price per 1M tokens', placeholder: '10.00' },
     { name: 'inputTokenLimit', label: 'Input token limit', placeholder: '8192' },
     { name: 'outputTokenLimit', label: 'Output token limit', placeholder: '4096' },
   ]
+  
+  // Use requiredInfo from config if available, otherwise use the default
+  const requiredInfo = config.requiredInfo || defaultRequiredInfo
 
   // Track which models need completion
   const modelsToUpdate = []
@@ -28,7 +34,7 @@ const run = async () => {
     const missingProps = {}
     let hasMissingProps = false
     
-    for (const prop of requiredProperties) {
+    for (const prop of requiredInfo) {
       if (!modelInfo[prop.name]) {
         missingProps[prop.name] = true
         hasMissingProps = true
@@ -94,7 +100,7 @@ const run = async () => {
     
     // Display existing model information for context
     console.log('Current information:')
-    for (const prop of requiredProperties) {
+    for (const prop of requiredInfo) {
       console.log(`- ${prop.label}: ${modelInfo[prop.name] || 'Missing'}`)
     }
     
@@ -102,7 +108,7 @@ const run = async () => {
     let updated = false
     let shouldBreak = false
     
-    for (const prop of requiredProperties) {
+    for (const prop of requiredInfo) {
       if (missing[prop.name]) {
         const value = await text({
           message: `${prop.label} for ${displayName}:`,

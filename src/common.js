@@ -10,6 +10,48 @@ export const CURATED_PATH = join(CONFIG_DIR, 'curated.json')
 export const EXCLUDED_PATH = join(CONFIG_DIR, 'excluded.json')
 export const ENV_PATH = join(CONFIG_DIR, 'environment')
 
+// Default curated and excluded models
+const DEFAULT_CURATED = {
+  "anthropic/claude-3-5-sonnet-20240620": {
+    "label": "Claude 3.5 Sonnet"
+  },
+  "anthropic/claude-3-opus-20240229": {
+    "label": "Claude 3 Opus"
+  },
+  "anthropic/claude-3-sonnet-20240229": {
+    "label": "Claude 3 Sonnet"
+  },
+  "anthropic/claude-3-haiku-20240307": {
+    "label": "Claude 3 Haiku"
+  },
+  "openai/gpt-4o": {
+    "label": "GPT-4o"
+  },
+  "openai/gpt-4-turbo": {
+    "label": "GPT-4 Turbo"
+  },
+  "openai/gpt-4": {
+    "label": "GPT-4"
+  },
+  "openai/gpt-3.5-turbo": {
+    "label": "GPT-3.5 Turbo"
+  },
+  "gemini/gemini-1.5-pro": {
+    "label": "Gemini 1.5 Pro"
+  },
+  "gemini/gemini-1.5-flash": {
+    "label": "Gemini 1.5 Flash"
+  },
+  "groq/llama3-70b-8192": {
+    "label": "Llama3 70B"
+  },
+  "groq/mixtral-8x7b-32768": {
+    "label": "Mixtral 8x7B"
+  }
+}
+
+const DEFAULT_EXCLUDED = []
+
 // Load environment variables from .env files
 const loadDefaultEnv = () => {
   console.log(CONFIG_DIR)
@@ -72,10 +114,9 @@ export const getCuratedModels = async () => {
     }
 
     if (!existsSync(CURATED_PATH)) {
-      // Import default curated models if no file exists
-      const { default: defaultCurated } = await import('./curated.js')
-      await saveCuratedModels(defaultCurated)
-      return defaultCurated
+      // Use default curated models if no file exists
+      await saveCuratedModels(DEFAULT_CURATED)
+      return DEFAULT_CURATED
     }
     
     const data = await readFile(CURATED_PATH, 'utf8')
@@ -83,8 +124,7 @@ export const getCuratedModels = async () => {
   } catch (err) {
     console.warn(`Failed to load curated models: ${err.message}`)
     // Fall back to default curated models
-    const { default: defaultCurated } = await import('./curated.js')
-    return defaultCurated
+    return DEFAULT_CURATED
   }
 }
 
@@ -111,10 +151,9 @@ export const getExcludedModels = async () => {
     }
 
     if (!existsSync(EXCLUDED_PATH)) {
-      // Import default excluded models if no file exists
-      const { default: defaultExcluded } = await import('./excluded.js')
-      await saveExcludedModels(defaultExcluded)
-      return defaultExcluded
+      // Use default excluded models if no file exists
+      await saveExcludedModels(DEFAULT_EXCLUDED)
+      return DEFAULT_EXCLUDED
     }
     
     const data = await readFile(EXCLUDED_PATH, 'utf8')
@@ -122,8 +161,7 @@ export const getExcludedModels = async () => {
   } catch (err) {
     console.warn(`Failed to load excluded models: ${err.message}`)
     // Fall back to default excluded models
-    const { default: defaultExcluded } = await import('./excluded.js')
-    return defaultExcluded
+    return DEFAULT_EXCLUDED
   }
 }
 

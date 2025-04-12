@@ -1,10 +1,14 @@
 import { GoogleGenAI } from '@google/genai'
+import { translateModelInfo } from './utils.js'
 
 // documentation
 // https://googleapis.github.io/js-genai/main/index.html
 
 const Provider = (defaultConfiguration) => {
   const ai = new GoogleGenAI(defaultConfiguration)
+  
+  // Property name translations (empty for now)
+  const infoTranslate = {}
 
   return {
     completion: (model) => async (prompt) => {
@@ -22,7 +26,7 @@ const Provider = (defaultConfiguration) => {
     getModelInfo: async (model) => {
       try {
         const modelInfo = await ai.models.get({ model })
-        return modelInfo
+        return translateModelInfo(modelInfo, infoTranslate)
       } catch (err) {
         console.error('Error calling GoogleGenAI:', err.message)
         throw err

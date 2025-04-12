@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { translateModelInfo } from './utils.js'
 
 const anthropicSDK = (config) => {
   const anthropic = new Anthropic(config)
@@ -36,8 +37,7 @@ const anthropicSDK = (config) => {
     getModelInfo: async (modelName) => {
       try {
         const model = await anthropic.models.retrieve(modelName)
-        delete Object.assign(model, { displayName: o.display_name }).display_name
-        return model
+        return translateModelInfo(model, infoTranslate)
       } catch (err) {
         console.error('Error retrieving Anthropic model info:', err.message)
         return null

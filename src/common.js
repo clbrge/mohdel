@@ -76,6 +76,18 @@ export const getAPIKey = (envVarName) => {
   return null
 }
 
+// Sort object keys alphabetically (first level only)
+const sortObjectKeys = (obj) => {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj
+  
+  return Object.keys(obj)
+    .sort()
+    .reduce((sorted, key) => {
+      sorted[key] = obj[key]
+      return sorted
+    }, {})
+}
+
 // Higher-order function to create file handling operations
 const createFileOperation = (filePath, defaultValue = {}, operationType) => {
   // Handler for loading data from a file
@@ -109,7 +121,10 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
         await mkdir(CONFIG_DIR, { recursive: true })
       }
       
-      await writeFile(filePath, JSON.stringify(data, null, 2))
+      // Sort the keys of the object alphabetically before saving
+      const sortedData = sortObjectKeys(data)
+      
+      await writeFile(filePath, JSON.stringify(sortedData, null, 2))
       return true
     } catch (err) {
       console.error(`Failed to save ${operationType}: ${err.message}`)

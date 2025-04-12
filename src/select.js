@@ -54,6 +54,85 @@ const initializeAPIs = async () => {
   return { api, providersWithKeys }
 }
 
+// Get model details from the provider API
+const getModelDetails = async (providerName, modelId, api) => {
+  try {
+    if (!api.getModelInfo) {
+      console.warn(`Provider ${providerName} does not support getModelInfo method`)
+      return null
+    }
+
+    const modelDetails = await api.getModelInfo(modelId)
+    
+    if (!modelDetails) {
+      console.warn(`Model ${modelId} not found in provider response`)
+      return null
+    }
+    
+    // Process model details based on provider
+    if (providerName === 'gemini') {
+      // Return all properties from the model details
+      // Including core fields with fallbacks to ensure we always have basic info
+      return {
+        id: modelDetails.name?.replace('models/', '') || modelId,
+        displayName: modelDetails.displayName,
+        description: modelDetails.description,
+        inputTokenLimit: modelDetails.inputTokenLimit,
+        outputTokenLimit: modelDetails.outputTokenLimit,
+        supportedGenerationMethods: modelDetails.supportedGenerationMethods,
+        supportedActions: modelDetails.supportedActions,
+        temperature: modelDetails.temperature,
+        topP: modelDetails.topP,
+        topK: modelDetails.topK,
+        // Preserve all other properties from the response
+        ...Object.entries(modelDetails)
+          .filter(([key]) => !['name', 'displayName', 'description', 'inputTokenLimit', 'outputTokenLimit', 
+                             'supportedGenerationMethods', 'supportedActions', 'temperature', 'topP', 'topK'].includes(key))
+          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
+      }
+    } else if (providerName === 'anthropic') {
+      // Process Anthropic model details
+      return {
+        id: modelId,
+        displayName: modelDetails.name || modelId,
+        description: modelDetails.description || '',
+        inputTokenLimit: modelDetails.context_window_size || 0,
+        outputTokenLimit: modelDetails.max_tokens || 0,
+        // Include all other properties
+        ...Object.entries(modelDetails)
+          .filter(([key]) => !['name', 'description', 'context_window_size', 'max_tokens'].includes(key))
+          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
+      }
+    } else if (providerName === 'openai') {
+      // Process OpenAI model details
+      return {
+        id: modelId,
+        displayName: modelDetails.name || modelId,
+        description: modelDetails.description || '',
+        inputTokenLimit: modelDetails.context_window || 0,
+        outputTokenLimit: modelDetails.max_tokens || 0,
+        // Include all other properties
+        ...Object.entries(modelDetails)
+          .filter(([key]) => !['name', 'description', 'context_window', 'max_tokens'].includes(key))
+          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
+      }
+    } else {
+      // Generic model details for other providers - preserve all data
+      return {
+        id: modelId,
+        displayName: modelDetails.name || modelId,
+        description: modelDetails.description || 'No description available',
+        provider: providerName,
+        // Include all properties from the API response
+        ...modelDetails
+      }
+    }
+  } catch (err) {
+    console.error(`Error getting model details for ${modelId}:`, err.message)
+    return null
+  }
+}
+
 // Find potential models to replace based on the new model name
 const findReplacementCandidates = (providerName, modelId, curated) => {
   const baseNameMatch = modelId.match(/^(\w+[0-9\-\.]+)/)
@@ -81,13 +160,16 @@ const findReplacementCandidates = (providerName, modelId, curated) => {
 }
 
 // Replace a model: move it to excluded and add the new one to curated
-const replaceModel = async (modelToReplace, newModelKey, newModelLabel, curated, excluded) => {
+const replaceModel = async (modelToReplace, newModelKey, newModelLabel, newModelDetails, curated, excluded) => {
   // Move the model to be replaced to excluded
   excluded[modelToReplace.key] = { label: modelToReplace.label }
   delete curated[modelToReplace.key]
   
-  // Add new model to curated
-  curated[newModelKey] = { label: newModelLabel }
+  // Add new model to curated with detailed information
+  curated[newModelKey] = { 
+    label: newModelLabel,
+    ...newModelDetails 
+  }
   
   // Update both files
   await saveCuratedModels(curated)
@@ -157,19 +239,39 @@ const processModels = async (providerName, providerInstance) => {
         return
       }
 
+      // Get detailed model information if available
+      const s = clack.spinner()
+      s.start(`Fetching detailed information for ${modelKey}...`)
+      
+      const modelDetails = await getModelDetails(providerName, modelId, providerInstance)
+      s.stop(modelDetails ? 'Model details retrieved successfully' : 'Could not retrieve detailed model information')
+
       if (answer === 'include') {
-        curated[modelKey] = { label: model.label || modelId }
+        curated[modelKey] = { 
+          label: model.label || modelId,
+          ...modelDetails 
+        }
         await saveCuratedModels(curated)
-        clack.log.success(`Added ${modelKey} to curated models`)
+        clack.log.success(`Added ${modelKey} to curated models with detailed information`)
       } else if (answer === 'exclude') {
-        excluded[modelKey] = { label: model.label || modelId }
+        excluded[modelKey] = { 
+          label: model.label || modelId,
+          ...modelDetails 
+        }
         await saveExcludedModels(excluded)
-        clack.log.success(`Added ${modelKey} to excluded models`)
+        clack.log.success(`Added ${modelKey} to excluded models with detailed information`)
       } else if (answer.startsWith('replace_')) {
         const index = parseInt(answer.split('_')[1], 10)
         const modelToReplace = replacementCandidates[index]
         
-        await replaceModel(modelToReplace, modelKey, model.label || modelId, curated, excluded)
+        await replaceModel(
+          modelToReplace, 
+          modelKey, 
+          model.label || modelId,
+          modelDetails, 
+          curated, 
+          excluded
+        )
         
         clack.log.success(
           `Replaced ${modelToReplace.key} with ${modelKey}. ` +

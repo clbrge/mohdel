@@ -258,7 +258,9 @@ const processModels = async (providerName, providerInstance) => {
           label: model.label || modelId,
           ...modelDetails 
         }
+        console.log('A')
         await saveExcludedModels(excluded)
+        console.log('B')
         clack.log.success(`Added ${modelKey} to excluded models with detailed information`)
       } else if (answer.startsWith('replace_')) {
         const index = parseInt(answer.split('_')[1], 10)

@@ -134,7 +134,6 @@ export const saveCuratedModels = async (models) => {
     if (!existsSync(CONFIG_DIR)) {
       await mkdir(CONFIG_DIR, { recursive: true })
     }
-    
     await writeFile(CURATED_PATH, JSON.stringify(models, null, 2))
     return true
   } catch (err) {
@@ -171,7 +170,6 @@ export const saveExcludedModels = async (models) => {
     if (!existsSync(CONFIG_DIR)) {
       await mkdir(CONFIG_DIR, { recursive: true })
     }
-    
     await writeFile(EXCLUDED_PATH, JSON.stringify(models, null, 2))
     return true
   } catch (err) {

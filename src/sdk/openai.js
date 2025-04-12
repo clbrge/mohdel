@@ -37,6 +37,7 @@ const Provider = (defaultConfiguration) => {
     getModelInfo: async (model) => {
       try {
         const modelInfo = await api.models.retrieve(model)
+        console.log('xxxxxxxxxx', modelInfo)
         return translateModelInfo(modelInfo, infoTranslate)
       } catch (err) {
         console.error('Error retrieving OpenAI model info:', err.message)

@@ -4,7 +4,7 @@ import { intro, outro, spinner } from '@clack/prompts'
 import { writeFile } from 'fs/promises'
 import * as dotenv from 'dotenv'
 import providers from './providers.js'
-import curated from './curated.js'
+import { getCuratedModels, getExcludedModels } from './common.js'
 
 dotenv.config()
 
@@ -122,6 +122,10 @@ const syncModels = async () => {
   progress.start('Initializing APIs for all providers')
   
   try {
+    // Get curated and excluded models from config directory
+    const curated = await getCuratedModels()
+    const excluded = await getExcludedModels()
+    
     // Group models by provider for efficient API initialization
     const modelsByProvider = {}
     

@@ -118,6 +118,153 @@ const excluded = {
   },
   "gemini/veo-2.0-generate-001": {
     "label": "Veo 2"
+  },
+  "openai/gpt-4o-audio-preview-2024-12-17": {
+    "label": "gpt-4o-audio-preview-2024-12-17"
+  },
+  "openai/dall-e-3": {
+    "label": "dall-e-3"
+  },
+  "openai/dall-e-2": {
+    "label": "dall-e-2"
+  },
+  "openai/gpt-4o-audio-preview-2024-10-01": {
+    "label": "gpt-4o-audio-preview-2024-10-01"
+  },
+  "openai/gpt-4o-realtime-preview-2024-10-01": {
+    "label": "gpt-4o-realtime-preview-2024-10-01"
+  },
+  "openai/gpt-4o-realtime-preview": {
+    "label": "gpt-4o-realtime-preview"
+  },
+  "openai/babbage-002": {
+    "label": "babbage-002"
+  },
+  "openai/tts-1-hd-1106": {
+    "label": "tts-1-hd-1106"
+  },
+  "openai/text-embedding-3-large": {
+    "label": "text-embedding-3-large"
+  },
+  "openai/text-embedding-ada-002": {
+    "label": "text-embedding-ada-002"
+  },
+  "openai/tts-1-hd": {
+    "label": "tts-1-hd"
+  },
+  "openai/gpt-4-0125-preview": {
+    "label": "gpt-4-0125-preview"
+  },
+  "openai/gpt-4o-mini-audio-preview": {
+    "label": "gpt-4o-mini-audio-preview"
+  },
+  "openai/gpt-4-turbo-preview": {
+    "label": "gpt-4-turbo-preview"
+  },
+  "openai/gpt-4o-audio-preview": {
+    "label": "gpt-4o-audio-preview"
+  },
+  "openai/gpt-4o-mini-realtime-preview": {
+    "label": "gpt-4o-mini-realtime-preview"
+  },
+  "openai/gpt-4o-mini-realtime-preview-2024-12-17": {
+    "label": "gpt-4o-mini-realtime-preview-2024-12-17"
+  },
+  "openai/gpt-3.5-turbo-instruct-0914": {
+    "label": "gpt-3.5-turbo-instruct-0914"
+  },
+  "openai/gpt-4o-mini-search-preview": {
+    "label": "gpt-4o-mini-search-preview"
+  },
+  "openai/tts-1-1106": {
+    "label": "tts-1-1106"
+  },
+  "openai/davinci-002": {
+    "label": "davinci-002"
+  },
+  "openai/gpt-3.5-turbo-1106": {
+    "label": "gpt-3.5-turbo-1106"
+  },
+  "openai/gpt-4o-search-preview": {
+    "label": "gpt-4o-search-preview"
+  },
+  "openai/gpt-4-turbo": {
+    "label": "gpt-4-turbo"
+  },
+  "openai/gpt-4o-realtime-preview-2024-12-17": {
+    "label": "gpt-4o-realtime-preview-2024-12-17"
+  },
+  "openai/gpt-3.5-turbo-instruct": {
+    "label": "gpt-3.5-turbo-instruct"
+  },
+  "openai/gpt-3.5-turbo": {
+    "label": "gpt-3.5-turbo"
+  },
+  "openai/gpt-4o-mini-search-preview-2025-03-11": {
+    "label": "gpt-4o-mini-search-preview-2025-03-11"
+  },
+  "openai/gpt-4o-2024-11-20": {
+    "label": "gpt-4o-2024-11-20"
+  },
+  "openai/whisper-1": {
+    "label": "whisper-1"
+  },
+  "openai/gpt-4-turbo-2024-04-09": {
+    "label": "gpt-4-turbo-2024-04-09"
+  },
+  "openai/gpt-3.5-turbo-16k": {
+    "label": "gpt-3.5-turbo-16k"
+  },
+  "openai/gpt-4-1106-preview": {
+    "label": "gpt-4-1106-preview"
+  },
+  "openai/gpt-4.5-preview-2025-02-27": {
+    "label": "gpt-4.5-preview-2025-02-27"
+  },
+  "openai/gpt-4o-search-preview-2025-03-11": {
+    "label": "gpt-4o-search-preview-2025-03-11"
+  },
+  "openai/computer-use-preview": {
+    "label": "computer-use-preview"
+  },
+  "openai/tts-1": {
+    "label": "tts-1"
+  },
+  "openai/omni-moderation-2024-09-26": {
+    "label": "omni-moderation-2024-09-26"
+  },
+  "openai/text-embedding-3-small": {
+    "label": "text-embedding-3-small"
+  },
+  "openai/gpt-4o-mini-tts": {
+    "label": "gpt-4o-mini-tts"
+  },
+  "openai/gpt-4o-2024-08-06": {
+    "label": "gpt-4o-2024-08-06"
+  },
+  "openai/gpt-4o-transcribe": {
+    "label": "gpt-4o-transcribe"
+  },
+  "openai/gpt-4o-mini-2024-07-18": {
+    "label": "gpt-4o-mini-2024-07-18"
+  },
+  "openai/gpt-4o-mini-transcribe": {
+    "label": "gpt-4o-mini-transcribe"
+  },
+  "openai/gpt-4o-mini-audio-preview-2024-12-17": {
+    "label": "gpt-4o-mini-audio-preview-2024-12-17"
+  },
+  "openai/gpt-3.5-turbo-0125": {
+    "label": "gpt-3.5-turbo-0125"
+  },
+  "openai/o1-mini-2024-09-12": {
+    "label": "o1-mini-2024-09-12"
+  },
+  "openai/computer-use-preview-2025-03-11": {
+    "label": "computer-use-preview-2025-03-11"
+  },
+  "openai/omni-moderation-latest": {
+    "label": "omni-moderation-latest"
   }
 }
 

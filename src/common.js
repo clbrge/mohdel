@@ -1,16 +1,16 @@
 import * as dotenv from 'dotenv'
 import { join } from 'path'
-import { homedir } from 'os'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
+import envPaths from 'env-paths'
 
-// Base configuration directory in user's home folder
-export const CONFIG_DIR = join(homedir(), '.mohdel')
+export const CONFIG_DIR = envPaths('mohdel', { suffix: null }).config
 export const CONFIG_PATH = join(CONFIG_DIR, 'default.json')
 export const ENV_PATH = join(CONFIG_DIR, 'environment')
 
 // Load environment variables from .env files
 const loadDefaultEnv = () => {
+  console.log(CONFIG_DIR)
   try {
     if (existsSync(ENV_PATH)) {
       dotenv.config({ path: ENV_PATH })

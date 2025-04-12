@@ -52,6 +52,54 @@ const curated = {
   },
   "anthropic/claude-3-5-haiku-20241022": {
     "label": "claude-3-5-haiku-20241022"
+  },
+  "openai/o3-mini-2025-01-31": {
+    "label": "o3-mini-2025-01-31"
+  },
+  "openai/gpt-4": {
+    "label": "gpt-4"
+  },
+  "openai/o1-pro-2025-03-19": {
+    "label": "o1-pro-2025-03-19"
+  },
+  "openai/o1-preview-2024-09-12": {
+    "label": "o1-preview-2024-09-12"
+  },
+  "openai/o3-mini": {
+    "label": "o3-mini"
+  },
+  "openai/o1-2024-12-17": {
+    "label": "o1-2024-12-17"
+  },
+  "openai/o1-pro": {
+    "label": "o1-pro"
+  },
+  "openai/o1": {
+    "label": "o1"
+  },
+  "openai/chatgpt-4o-latest": {
+    "label": "chatgpt-4o-latest"
+  },
+  "openai/gpt-4o-2024-05-13": {
+    "label": "gpt-4o-2024-05-13"
+  },
+  "openai/o1-preview": {
+    "label": "o1-preview"
+  },
+  "openai/gpt-4-0613": {
+    "label": "gpt-4-0613"
+  },
+  "openai/gpt-4.5-preview": {
+    "label": "gpt-4.5-preview"
+  },
+  "openai/gpt-4o": {
+    "label": "gpt-4o"
+  },
+  "openai/gpt-4o-mini": {
+    "label": "gpt-4o-mini"
+  },
+  "openai/o1-mini": {
+    "label": "o1-mini"
   }
 }
 

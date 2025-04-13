@@ -6,7 +6,7 @@ import { translateModelInfo } from './utils.js'
 
 const Provider = (defaultConfiguration) => {
   const ai = new GoogleGenAI(defaultConfiguration)
-  
+
   // Property name translations (empty for now)
   const infoTranslate = {}
 

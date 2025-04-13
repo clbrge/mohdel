@@ -16,19 +16,19 @@ const getModelDetails = async (providerName, modelId, api) => {
     }
 
     const modelDetails = await api.getModelInfo(modelId)
-    
+
     if (!modelDetails) {
       console.warn(`Model ${modelId} not found in provider response`)
       return null
     }
-    
+
     // Add provider and sdk properties to all model details
     const providerConfig = providers[providerName]
     const baseDetails = {
       provider: providerName,
       sdk: providerConfig.sdk
     }
-    
+
     // Process model details based on provider
     if (providerName === 'gemini') {
       // Return all properties from the model details
@@ -47,8 +47,8 @@ const getModelDetails = async (providerName, modelId, api) => {
         topK: modelDetails.topK,
         // Preserve all other properties from the response
         ...Object.entries(modelDetails)
-          .filter(([key]) => !['name', 'displayName', 'description', 'inputTokenLimit', 'outputTokenLimit', 
-                             'supportedGenerationMethods', 'supportedActions', 'temperature', 'topP', 'topK'].includes(key))
+          .filter(([key]) => !['name', 'displayName', 'description', 'inputTokenLimit', 'outputTokenLimit',
+            'supportedGenerationMethods', 'supportedActions', 'temperature', 'topP', 'topK'].includes(key))
           .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
       }
     } else if (providerName === 'anthropic') {
@@ -102,34 +102,34 @@ const initializeAPI = async (providerName) => {
   if (!providerConfig) {
     throw new Error(`Provider ${providerName} not found`)
   }
-  
+
   const apiKey = process.env[providerConfig.apiKeyEnv]
   if (!apiKey) {
     throw new Error(`API key not found for ${providerName} (env var: ${providerConfig.apiKeyEnv})`)
   }
-  
+
   const sdkConfig = providerConfig.createConfiguration(apiKey)
   const sdkPath = `./sdk/${providerConfig.sdk}.js`
   const { default: API } = await import(sdkPath)
-  
+
   return API(sdkConfig)
 }
 
 const syncModels = async () => {
   intro('Syncing model characteristics')
-  
+
   // Process all models in curated list
   const progress = spinner()
   progress.start('Initializing APIs for all providers')
-  
+
   try {
     // Get curated and excluded models from config directory
     const curated = await getCuratedModels()
     const excluded = await getExcludedModels()
-    
+
     // Group models by provider for efficient API initialization
     const modelsByProvider = {}
-    
+
     for (const modelKey in curated) {
       const [providerName] = modelKey.split('/')
       if (!modelsByProvider[providerName]) {
@@ -137,20 +137,20 @@ const syncModels = async () => {
       }
       modelsByProvider[providerName].push(modelKey)
     }
-    
+
     // Process each provider's models
     for (const [providerName, models] of Object.entries(modelsByProvider)) {
       try {
         progress.message(`Initializing ${providerName} API`)
         const api = await initializeAPI(providerName)
-        
+
         for (const modelKey of models) {
           const [, ...modelParts] = modelKey.split('/')
           const modelId = modelParts.join('/')
-          
+
           progress.message(`Fetching details for ${modelKey}`)
           const details = await getModelDetails(providerName, modelId, api)
-          
+
           if (details) {
             // Update the curated model info with details from the API
             curated[modelKey] = {
@@ -174,7 +174,7 @@ const syncModels = async () => {
         // Continue with next provider
       }
     }
-    
+
     progress.message('Saving updated curated model information')
     await saveCuratedModels(curated)
     progress.stop('Model details synced successfully to curated.json')
@@ -183,7 +183,7 @@ const syncModels = async () => {
     console.error('Error syncing models:', err.message)
     process.exit(1)
   }
-  
+
   outro('Model sync complete')
 }
 

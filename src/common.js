@@ -12,41 +12,41 @@ export const ENV_PATH = join(CONFIG_DIR, 'environment')
 
 // Default curated and excluded models
 const DEFAULT_CURATED = {
-  "anthropic/claude-3-5-sonnet-20240620": {
-    "label": "Claude 3.5 Sonnet"
+  'anthropic/claude-3-5-sonnet-20240620': {
+    label: 'Claude 3.5 Sonnet'
   },
-  "anthropic/claude-3-opus-20240229": {
-    "label": "Claude 3 Opus"
+  'anthropic/claude-3-opus-20240229': {
+    label: 'Claude 3 Opus'
   },
-  "anthropic/claude-3-sonnet-20240229": {
-    "label": "Claude 3 Sonnet"
+  'anthropic/claude-3-sonnet-20240229': {
+    label: 'Claude 3 Sonnet'
   },
-  "anthropic/claude-3-haiku-20240307": {
-    "label": "Claude 3 Haiku"
+  'anthropic/claude-3-haiku-20240307': {
+    label: 'Claude 3 Haiku'
   },
-  "openai/gpt-4o": {
-    "label": "GPT-4o"
+  'openai/gpt-4o': {
+    label: 'GPT-4o'
   },
-  "openai/gpt-4-turbo": {
-    "label": "GPT-4 Turbo"
+  'openai/gpt-4-turbo': {
+    label: 'GPT-4 Turbo'
   },
-  "openai/gpt-4": {
-    "label": "GPT-4"
+  'openai/gpt-4': {
+    label: 'GPT-4'
   },
-  "openai/gpt-3.5-turbo": {
-    "label": "GPT-3.5 Turbo"
+  'openai/gpt-3.5-turbo': {
+    label: 'GPT-3.5 Turbo'
   },
-  "gemini/gemini-1.5-pro": {
-    "label": "Gemini 1.5 Pro"
+  'gemini/gemini-1.5-pro': {
+    label: 'Gemini 1.5 Pro'
   },
-  "gemini/gemini-1.5-flash": {
-    "label": "Gemini 1.5 Flash"
+  'gemini/gemini-1.5-flash': {
+    label: 'Gemini 1.5 Flash'
   },
-  "groq/llama3-70b-8192": {
-    "label": "Llama3 70B"
+  'groq/llama3-70b-8192': {
+    label: 'Llama3 70B'
   },
-  "groq/mixtral-8x7b-32768": {
-    "label": "Mixtral 8x7B"
+  'groq/mixtral-8x7b-32768': {
+    label: 'Mixtral 8x7B'
   }
 }
 
@@ -79,7 +79,7 @@ export const getAPIKey = (envVarName) => {
 // Sort object keys alphabetically (first level only)
 const sortObjectKeys = (obj) => {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj
-  
+
   return Object.keys(obj)
     .sort()
     .reduce((sorted, key) => {
@@ -105,7 +105,7 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
         }
         return {}
       }
-      
+
       const data = await readFile(filePath, 'utf8')
       return JSON.parse(data)
     } catch (err) {
@@ -120,10 +120,10 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
       if (!existsSync(CONFIG_DIR)) {
         await mkdir(CONFIG_DIR, { recursive: true })
       }
-      
+
       // Sort the keys of the object alphabetically before saving
       const sortedData = sortObjectKeys(data)
-      
+
       await writeFile(filePath, JSON.stringify(sortedData, null, 2))
       return true
     } catch (err) {
@@ -164,10 +164,10 @@ export const saveExcludedModels = excludedOps.save
 // Get default model ID from configuration
 export const getDefaultModelId = async () => {
   const config = await getConfig()
-  
+
   if (config.defaultModel) {
     return config.defaultModel
   }
-  
+
   throw new Error('No default model configured. Run \'npx mohdel\' to set up a default model.')
 }

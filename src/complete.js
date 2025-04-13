@@ -11,7 +11,7 @@ const run = async () => {
 
   // Load curated models
   const curated = await getCuratedModels()
-  
+
   // Get configuration to check for requiredInfo
   const config = await getConfig()
 
@@ -20,27 +20,27 @@ const run = async () => {
     { name: 'inputPrice', label: 'Input price per 1M tokens', placeholder: '2.00' },
     { name: 'outputPrice', label: 'Output price per 1M tokens', placeholder: '10.00' },
     { name: 'inputTokenLimit', label: 'Input token limit', placeholder: '8192' },
-    { name: 'outputTokenLimit', label: 'Output token limit', placeholder: '4096' },
+    { name: 'outputTokenLimit', label: 'Output token limit', placeholder: '4096' }
   ]
-  
+
   // Use requiredInfo from config if available, otherwise use the default
   const requiredInfo = config.requiredInfo || defaultRequiredInfo
 
   // Track which models need completion
   const modelsToUpdate = []
-  
+
   // Scan models for missing properties
   for (const [modelId, modelInfo] of Object.entries(curated)) {
     const missingProps = {}
     let hasMissingProps = false
-    
+
     for (const prop of requiredInfo) {
       if (!modelInfo[prop.name]) {
         missingProps[prop.name] = true
         hasMissingProps = true
       }
     }
-    
+
     if (hasMissingProps) {
       modelsToUpdate.push({
         modelId,
@@ -69,45 +69,45 @@ const run = async () => {
 
   // Ask user if they want to filter by provider
   const providers = [...new Set(modelsToUpdate.map(model => model.modelId.split('/')[0]))]
-  
+
   const filterOptions = [
     { value: 'all', label: 'All providers' },
     ...providers.map(provider => ({ value: provider, label: provider }))
   ]
-  
+
   const selectedProvider = await select({
     message: 'Which provider models would you like to update?',
     options: filterOptions
   })
-  
+
   if (isCancel(selectedProvider)) {
     cancel('Operation cancelled')
     return
   }
-  
+
   // Filter models by selected provider
-  const filteredModels = selectedProvider === 'all' 
-    ? modelsToUpdate 
+  const filteredModels = selectedProvider === 'all'
+    ? modelsToUpdate
     : modelsToUpdate.filter(model => model.modelId.startsWith(`${selectedProvider}/`))
 
   // Process each model that needs completion
   for (const { modelId, modelInfo, missing } of filteredModels) {
     const [providerName, modelName] = modelId.split('/')
     const displayName = modelInfo.displayName || modelInfo.label || modelName
-    
+
     console.log(`\n${displayName} (${modelId})`)
     console.log('-'.repeat(40))
-    
+
     // Display existing model information for context
     console.log('Current information:')
     for (const prop of requiredInfo) {
       console.log(`- ${prop.label}: ${modelInfo[prop.name] || 'Missing'}`)
     }
-    
+
     // Gather missing information
     let updated = false
     let shouldBreak = false
-    
+
     for (const prop of requiredInfo) {
       if (missing[prop.name]) {
         const value = await text({
@@ -116,20 +116,20 @@ const run = async () => {
           validate: value => {
             if (value === '.') return
             if (value && value.trim() === '') return
-            
+
             // For numerical properties, validate they're numbers
-            if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name) && 
+            if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name) &&
                 value && isNaN(parseFloat(value))) {
               return 'Please enter a valid number'
             }
           }
         })
-        
+
         if (isCancel(value)) {
           cancel('Operation cancelled')
           return
         }
-        
+
         // Check for exit signal
         if (value === '.') {
           shouldBreak = true
@@ -145,30 +145,30 @@ const run = async () => {
         }
       }
     }
-    
+
     if (updated) {
       console.log(`Updated information for ${displayName}`)
     }
-    
+
     if (shouldBreak) {
       console.log('Exiting input loop. Previous updates were saved.')
       break
     }
   }
-  
+
   // Ask for confirmation before saving changes
   const shouldSave = await confirm({
     message: 'Save updated model information?'
   })
-  
+
   if (isCancel(shouldSave) || !shouldSave) {
     cancel('Changes discarded')
     return
   }
-  
+
   // Save updated models
   s.start('Saving updated model information...')
-  
+
   try {
     await saveCuratedModels(curated)
     s.stop('Model information updated successfully')
@@ -176,7 +176,7 @@ const run = async () => {
     s.stop(`Error saving model information: ${err.message}`)
     console.error('Error:', err)
   }
-  
+
   outro('Model completion process finished')
 }
 

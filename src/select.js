@@ -4,12 +4,12 @@ import fs from 'fs/promises'
 import providers from './providers.js'
 import * as dotenv from 'dotenv'
 import path from 'path'
-import { 
-  getAPIKey, 
-  getCuratedModels, 
-  getExcludedModels, 
-  saveCuratedModels, 
-  saveExcludedModels 
+import {
+  getAPIKey,
+  getCuratedModels,
+  getExcludedModels,
+  saveCuratedModels,
+  saveExcludedModels
 } from './common.js'
 
 const HELP_TEXT = `
@@ -62,12 +62,12 @@ const getModelDetails = async (providerName, modelId, api) => {
     }
 
     const modelInfo = await api.getModelInfo(modelId)
-    
+
     if (!modelInfo) {
       console.warn(`Model ${modelId} not found in provider response`)
       return null
     }
-    
+
     return modelInfo
   } catch (err) {
     console.error(`Error getting model details for ${modelId}:`, err.message)
@@ -82,9 +82,9 @@ const findReplacementCandidates = (providerName, modelId, curated) => {
 
   const baseName = baseNameMatch[1]
   const baseRegExp = new RegExp(`^${baseName}`)
-  
+
   const candidates = []
-  
+
   for (const [curatedKey, curatedInfo] of Object.entries(curated)) {
     const [curProviderName, curModelId] = curatedKey.split('/')
     if (curProviderName === providerName && curModelId !== modelId) {
@@ -97,7 +97,7 @@ const findReplacementCandidates = (providerName, modelId, curated) => {
       }
     }
   }
-  
+
   return candidates
 }
 
@@ -106,17 +106,17 @@ const replaceModel = async (modelToReplace, newModelKey, newModelLabel, newModel
   // Move the model to be replaced to excluded
   excluded[modelToReplace.key] = { label: modelToReplace.label }
   delete curated[modelToReplace.key]
-  
+
   // Add new model to curated with detailed information
-  curated[newModelKey] = { 
+  curated[newModelKey] = {
     label: newModelLabel,
-    ...newModelDetails 
+    ...newModelDetails
   }
-  
+
   // Update both files
   await saveCuratedModels(curated)
   await saveExcludedModels(excluded)
-  
+
   return true
 }
 
@@ -150,17 +150,17 @@ const processModels = async (providerName, providerInstance) => {
       // Display full model object for context
       console.log('\nModel details:')
       console.log(JSON.stringify(model, null, 2))
-      
+
       // Find potential models that this new model could replace
       const replacementCandidates = findReplacementCandidates(providerName, modelId, curated)
-      
+
       // Build options for the select prompt
       const options = [
         { value: 'include', label: 'Include in curated models' },
         { value: 'exclude', label: 'Add to excluded models' },
         { value: 'skip', label: 'Skip for now' }
       ]
-      
+
       // Add replacement options for each candidate
       for (let i = 0; i < replacementCandidates.length; i++) {
         const candidate = replacementCandidates[i]
@@ -184,7 +184,7 @@ const processModels = async (providerName, providerInstance) => {
       // Get detailed model information if available
       const s = clack.spinner()
       s.start(`Fetching detailed information for ${modelKey}...`)
-      
+
       const modelInfo = await getModelDetails(providerName, modelId, providerInstance)
       s.stop(modelInfo ? 'Model details retrieved successfully' : 'Could not retrieve detailed model information')
 
@@ -207,19 +207,19 @@ const processModels = async (providerName, providerInstance) => {
       } else if (answer.startsWith('replace_')) {
         const index = parseInt(answer.split('_')[1], 10)
         const modelToReplace = replacementCandidates[index]
-        
+
         await replaceModel(
-          modelToReplace, 
-          modelKey, 
+          modelToReplace,
+          modelKey,
           model.label || modelId,
           modelInfoWithMeta,
-          curated, 
+          curated,
           excluded
         )
-        
+
         clack.log.success(
           `Replaced ${modelToReplace.key} with ${modelKey}. ` +
-          `The old model has been moved to excluded models.`
+          'The old model has been moved to excluded models.'
         )
       }
     }
@@ -234,7 +234,7 @@ const main = async () => {
   clack.intro('Model Selection Tool')
 
   const { api, providersWithKeys } = await initializeAPIs()
-  
+
   if (providersWithKeys.length === 0) {
     clack.log.error('No providers with valid API keys found. Please set up API keys in your environment variables.')
     process.exit(1)

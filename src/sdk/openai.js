@@ -3,7 +3,7 @@ import { translateModelInfo } from './utils.js'
 
 const Provider = (defaultConfiguration) => {
   const api = new OpenAI(defaultConfiguration)
-  
+
   // Property name translations (empty for now)
   const infoTranslate = {}
 
@@ -30,7 +30,7 @@ const Provider = (defaultConfiguration) => {
         return null
       }
     },
-    
+
     listModels: async () => {
       try {
         const models = await api.models.list()

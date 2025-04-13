@@ -5,7 +5,7 @@ const Provider = (defaultConfiguration) => {
   const $ = {}
 
   const groq = new Groq(defaultConfiguration)
-  
+
   const infoTranslate = {
     max_completion_tokens: 'outputTokenLimit',
     context_window: 'inputTokenLimit'
@@ -24,7 +24,7 @@ const Provider = (defaultConfiguration) => {
       return []
     }
   }
-  
+
   $.getModelInfo = async (model) => {
     try {
       const modelInfo = await groq.models.retrieve(model)

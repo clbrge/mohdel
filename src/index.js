@@ -67,7 +67,7 @@ const expandModelAlias = async (modelId) => {
   // Get the curated model list and build alias map
   const curated = await getCuratedModels()
   const aliasMap = await buildAliasMap()
-  
+
   // If the model ID is already in the curated list, return it as is
   if (curated[modelId]) return modelId
 
@@ -86,7 +86,7 @@ const getProviderAndModel = async (modelId) => {
 
   // Get the curated model list
   const curated = await getCuratedModels()
-  
+
   // Expand the model ID if it's an alias
   const expandedModelId = await expandModelAlias(modelId)
 
@@ -131,7 +131,7 @@ const mohdel = (modelId) => {
           // Resolve model ID lazily when the completion method is called
           const resolvedModelId = modelId || await getDefaultModelId()
           const { providerName, modelName } = await getProviderAndModel(resolvedModelId)
-          
+
           const config = providers[providerName]
           const apiKey = getAPIKey(config.apiKeyEnv)
 

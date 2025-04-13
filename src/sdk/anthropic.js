@@ -24,7 +24,7 @@ const anthropicSDK = (config) => {
         throw err
       }
     },
-    
+
     listModels: async (options = {}) => {
       try {
         const response = await anthropic.models.list(options)
@@ -34,7 +34,7 @@ const anthropicSDK = (config) => {
         return { data: [] }
       }
     },
-    
+
     getModelInfo: async (modelName) => {
       try {
         const model = await anthropic.models.retrieve(modelName)

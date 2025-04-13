@@ -37,9 +37,13 @@ const run = async () => {
     for (const prop of requiredInfo) {
       // Check if this property should be included based on onlyIf condition
       const shouldInclude = !prop.onlyIf || (modelInfo[prop.onlyIf] && !!modelInfo[prop.onlyIf])
-      
+      if (prop === 'daEngineId') console.log({ prop, shouldInclude })
       // Only check for missing properties if this property should be included
       if (shouldInclude && (modelInfo[prop.name] === undefined || modelInfo[prop.name] === null)) {
+
+        if (prop === 'daEngineId')  console.log({ modelId, prop, shouldInclude, x: modelInfo[prop.name] })
+
+
         missingProps[prop.name] = true
         hasMissingProps = true
       }

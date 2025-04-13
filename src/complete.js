@@ -168,12 +168,9 @@ const run = async () => {
             shouldBreak = true
             break
           } else if (value && value.trim() !== '') {
-            // Convert to number for numerical properties
-            if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name)) {
-              modelInfo[prop.name] = parseFloat(value)
-            } else {
-              modelInfo[prop.name] = value
-            }
+            // Dynamically determine if the value should be stored as a number or string
+            const parsedValue = parseFloat(value)
+            modelInfo[prop.name] = !isNaN(parsedValue) ? parsedValue : value
             updated = true
           }
         }

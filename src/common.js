@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, writeFile, mkdir, copyFile } from 'fs/promises'
 import envPaths from 'env-paths'
 
 export const CONFIG_DIR = envPaths('mohdel', { suffix: null }).config
@@ -88,6 +88,23 @@ const sortObjectKeys = (obj) => {
     }, {})
 }
 
+// Create a backup of a file before modifying it
+const createBackup = async (filePath) => {
+  if (!existsSync(filePath)) return
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupPath = `${filePath}.${timestamp}.bak`
+  
+  try {
+    await copyFile(filePath, backupPath)
+    console.log(`Backup created: ${backupPath}`)
+    return backupPath
+  } catch (err) {
+    console.warn(`Failed to create backup of ${filePath}: ${err.message}`)
+    return null
+  }
+}
+
 // Higher-order function to create file handling operations
 const createFileOperation = (filePath, defaultValue = {}, operationType) => {
   // Handler for loading data from a file
@@ -119,6 +136,11 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
     try {
       if (!existsSync(CONFIG_DIR)) {
         await mkdir(CONFIG_DIR, { recursive: true })
+      }
+
+      // Create a backup of the original file if it exists
+      if (existsSync(filePath)) {
+        await createBackup(filePath)
       }
 
       // Sort the keys of the object alphabetically before saving

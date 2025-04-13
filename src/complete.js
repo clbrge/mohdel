@@ -35,7 +35,7 @@ const run = async () => {
     let hasMissingProps = false
 
     for (const prop of requiredInfo) {
-      if (!modelInfo[prop.name]) {
+      if (modelInfo[prop.name] === undefined || modelInfo[prop.name] === null) {
         missingProps[prop.name] = true
         hasMissingProps = true
       }
@@ -101,7 +101,7 @@ const run = async () => {
     // Display existing model information for context
     console.log('Current information:')
     for (const prop of requiredInfo) {
-      console.log(`- ${prop.label}: ${modelInfo[prop.name] || 'Missing'}`)
+      console.log(`- ${prop.label}: ${modelInfo[prop.name] !== undefined ? modelInfo[prop.name] : 'Missing'}`)
     }
 
     // Gather missing information

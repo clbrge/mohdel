@@ -35,7 +35,11 @@ const run = async () => {
     let hasMissingProps = false
 
     for (const prop of requiredInfo) {
-      if (modelInfo[prop.name] === undefined || modelInfo[prop.name] === null) {
+      // Check if this property should be included based on onlyIf condition
+      const shouldInclude = !prop.onlyIf || (modelInfo[prop.onlyIf] && !!modelInfo[prop.onlyIf])
+      
+      // Only check for missing properties if this property should be included
+      if (shouldInclude && (modelInfo[prop.name] === undefined || modelInfo[prop.name] === null)) {
         missingProps[prop.name] = true
         hasMissingProps = true
       }
@@ -101,7 +105,12 @@ const run = async () => {
     // Display existing model information for context
     console.log('Current information:')
     for (const prop of requiredInfo) {
-      console.log(`- ${prop.label}: ${modelInfo[prop.name] !== undefined ? modelInfo[prop.name] : 'Missing'}`)
+      // Check if this property should be included based on onlyIf condition
+      const shouldInclude = !prop.onlyIf || (modelInfo[prop.onlyIf] && !!modelInfo[prop.onlyIf])
+      
+      if (shouldInclude) {
+        console.log(`- ${prop.label}: ${modelInfo[prop.name] !== undefined ? modelInfo[prop.name] : 'Missing'}`)
+      }
     }
 
     // Gather missing information
@@ -109,7 +118,10 @@ const run = async () => {
     let shouldBreak = false
 
     for (const prop of requiredInfo) {
-      if (missing[prop.name]) {
+      // Check if this property should be included based on onlyIf condition
+      const shouldInclude = !prop.onlyIf || (modelInfo[prop.onlyIf] && !!modelInfo[prop.onlyIf])
+      
+      if (shouldInclude && missing[prop.name]) {
         const value = await text({
           message: `${prop.label} for ${displayName}:`,
           placeholder: prop.placeholder,

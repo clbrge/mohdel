@@ -122,38 +122,60 @@ const run = async () => {
       const shouldInclude = !prop.onlyIf || (modelInfo[prop.onlyIf] && !!modelInfo[prop.onlyIf])
       
       if (shouldInclude && missing[prop.name]) {
-        const value = await text({
-          message: `${prop.label} for ${displayName}:`,
-          placeholder: prop.placeholder,
-          validate: value => {
-            if (value === '.') return
-            if (value && value.trim() === '') return
-
-            // For numerical properties, validate they're numbers
-            if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name) &&
-                value && isNaN(parseFloat(value))) {
-              return 'Please enter a valid number'
-            }
+        if (prop.select && Array.isArray(prop.select)) {
+          const options = prop.select.map(option => {
+            return typeof option === 'string'
+              ? { value: option, label: option }
+              : option
+          })
+          
+          const value = await select({
+            message: `${prop.label} for ${displayName}:`,
+            options
+          })
+          
+          if (isCancel(value)) {
+            cancel('Operation cancelled')
+            return
           }
-        })
-
-        if (isCancel(value)) {
-          cancel('Operation cancelled')
-          return
-        }
-
-        // Check for exit signal
-        if (value === '.') {
-          shouldBreak = true
-          break
-        } else if (value && value.trim() !== '') {
-          // Convert to number for numerical properties
-          if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name)) {
-            modelInfo[prop.name] = parseFloat(value)
-          } else {
-            modelInfo[prop.name] = value
-          }
+          
+          modelInfo[prop.name] = value
           updated = true
+        } else {
+          // Use text input for non-select properties
+          const value = await text({
+            message: `${prop.label} for ${displayName}:`,
+            placeholder: prop.placeholder,
+            validate: value => {
+              if (value === '.') return
+              if (value && value.trim() === '') return
+
+              // For numerical properties, validate they're numbers
+              if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name) &&
+                  value && isNaN(parseFloat(value))) {
+                return 'Please enter a valid number'
+              }
+            }
+          })
+
+          if (isCancel(value)) {
+            cancel('Operation cancelled')
+            return
+          }
+
+          // Check for exit signal
+          if (value === '.') {
+            shouldBreak = true
+            break
+          } else if (value && value.trim() !== '') {
+            // Convert to number for numerical properties
+            if (['inputPrice', 'outputPrice', 'inputTokenLimit', 'outputTokenLimit'].includes(prop.name)) {
+              modelInfo[prop.name] = parseFloat(value)
+            } else {
+              modelInfo[prop.name] = value
+            }
+            updated = true
+          }
         }
       }
     }

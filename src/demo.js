@@ -25,7 +25,7 @@ const main = async () => {
   const prompt = createUniquePromptFromLegacyInputs(inputs)
   //const prompt = 'make a small hiaiku in json format'
 
-  //const llm = mohdel('openai/gpt-4.1-mini')
+  const llm = mohdel('openai/gpt-4.1-mini')
   //const llm = mohdel('openai/o3-mini')
   //const llm = mohdel('anthropic/claude-3-5-haiku')
   //const llm = mohdel('anthropic/claude-3-7-sonnet')
@@ -33,7 +33,7 @@ const main = async () => {
   // const llm = mohdel('groq/meta-llama/llama-4-scout-17b-16e-instruct')
   //const llm = mohdel('groq/meta-llama/llama-4-maverick-17b-128e-instruct')
   //const llm = mohdel('deepseek/deepseek-chat')
-  const llm = mohdel('deepseek/deepseek-reasoner')
+  //const llm = mohdel('deepseek/deepseek-reasoner')
 
   const {
     output,

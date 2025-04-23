@@ -47,14 +47,17 @@ const Provider = (defaultConfiguration, specs) => {
   return {
     ...$,
     answer: (modelName) => async (input, options) => {
-      const { model, thinkingEffortLevels, provider } = specs[modelName]
+      const { model, thinkingEffortLevels, provider, outputTokenLimit } = specs[modelName]
       // deepseek does not support response API
       if (provider === 'deepseek') return $.deepseekChatCompletion(modelName)(input, options)
       try {
+        if (options.outputBudget > outputTokenLimit) {
+          options.outputBudget = outputTokenLimit
+        }
         const args = {
           model,
           input,
-          store: false,
+          store: false
         }
         if (thinkingEffortLevels) {
           options.outputEffort ||= 'medium'
@@ -66,8 +69,10 @@ const Provider = (defaultConfiguration, specs) => {
         if (options.identifier) {
           args.user = options.identifier
         }
+        // both think and output tokens!
+        args.max_output_tokens = options.outputBudget || outputTokenLimit
         //instructions: 'todo',
-        // max_output_tokens // both think and output
+        // max_output_tokens
         // text: {
         //   format: {
         //     type: "json_schema",

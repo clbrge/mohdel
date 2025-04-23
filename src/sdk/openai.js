@@ -3,16 +3,53 @@ import { translateModelInfo } from './utils.js'
 
 const Provider = (defaultConfiguration, specs) => {
   const api = new OpenAI(defaultConfiguration)
-  console.log('xxxxxxxxxxx', specs)
+
   // Property name translations (empty for now)
   const infoTranslate = {}
 
   // todo use headers
   // https://platform.openai.com/docs/api-reference/debugging-requests
+  const $ = {
+    deepseekChatCompletion: (modelName) => async (input, options) => {
+      const { model, thinkingEffortLevels, outputTokenLimit } = specs[modelName]
+      try {
+        if (options.outputBudget > outputTokenLimit) {
+          options.outputBudget = outputTokenLimit
+        }
+        const args = {
+          model,
+          // max tokens is without thinking effort tokens
+          max_tokens: options.outputBudget || outputTokenLimit,
+          messages: [
+            { role: 'user', content: input }
+          ]
+        }
+        // not yet available
+        // if (thinkingEffortLevels) {
+        // options.outputEffort ||= 'medium'
+        // args.reasoning_effort = ?
+        //}
+        //temperature: 1,
+        const { choices, usage } = await api.chat.completions.create(args)
+        return {
+          output: choices[0].message.content.trim(),
+          inputTokens: usage.prompt_tokens,
+          outputTokens: usage.completion_tokens,
+          thinkingTokens: usage.completion_tokens_details?.reasoning_tokens || 0,
+        }
+      } catch (err) {
+        console.error('Error calling deepseekChatCompletion (openai sdk)', err.message)
+        throw err
+      }
+    }
+  }
 
   return {
+    ...$,
     answer: (modelName) => async (input, options) => {
-      const { model, thinkingEffortLevels } = specs[modelName]
+      const { model, thinkingEffortLevels, provider } = specs[modelName]
+      // deepseek does not support response API
+      if (provider === 'deepseek') return $.deepseekChatCompletion(modelName)(input, options)
       try {
         const args = {
           model,
@@ -73,7 +110,7 @@ const Provider = (defaultConfiguration, specs) => {
         }
         // console.log({ id, status, error, output, usage })
       } catch (err) {
-        console.error('Error calling responses (openai sdk)', err.message)
+        console.error('Error calling answer (openai sdk)', err.message)
         throw err
       }
     },

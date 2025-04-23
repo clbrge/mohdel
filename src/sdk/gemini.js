@@ -4,37 +4,64 @@ import { translateModelInfo } from './utils.js'
 // documentation
 // https://googleapis.github.io/js-genai/main/index.html
 
-const Provider = (defaultConfiguration) => {
+const Provider = (defaultConfiguration, specs) => {
   const ai = new GoogleGenAI(defaultConfiguration)
 
-  // Property name translations (empty for now)
-  const infoTranslate = {}
-  const format = queue => {
-    const last = queue.pop()
-
-    return {
-      msg: last.content,
-      history: queue.map(({ role, content }) => ({ role: role === 'assistant' ? 'model' : 'user', parts: [{ text: content }] }))
-    }
+  const infoTranslate = {
+    name: str => [ 'model', str.replace('models/', '') ]
   }
 
   return {
-    responses: (model) => async (content) => {
-      const messages = typeof content === 'string' ? [{ role: 'user', content }] : format(content)
+    answer: (modelName) => async (input, options) => {
+      const { model, thinkingEffortLevels, outputTokenLimit } = specs[modelName]
       try {
-        const data = await ai.models.generateContent({
+        // API doc https://googleapis.github.io/js-genai/main/index.html
+        if (options.outputBudget > outputTokenLimit) {
+          options.outputBudget = outputTokenLimit
+        }
+        const args = {
           model,
-          contents: prompt
-        })
-
+          contents: input,
+          config: {
+            maxOutputTokens: options.outputBudget,
+            // audioTimestamp?: boolean;
+            // cachedContent?: string;
+            // candidateCount?: number;
+            // frequencyPenalty?: number;
+            // httpOptions?: HttpOptions;
+            // labels?: Record<string, string>;
+            // logprobs?: number;
+            // maxOutputTokens?: number;
+            // mediaResolution?: MediaResolution;
+            // presencePenalty?: number;
+            // responseLogprobs?: boolean;
+            // responseMimeType?: string;
+            // responseModalities?: string[];
+            // responseSchema?: Schema;
+            // routingConfig?: GenerationConfigRoutingConfig;
+            // safetySettings?: SafetySetting[];
+            // seed?: number;
+            // speechConfig?: SpeechConfigUnion;
+            // stopSequences?: string[];
+            // systemInstruction?: ContentUnion;
+            // temperature?: number;
+            // thinkingConfig?: ThinkingConfig;
+            // toolConfig?: ToolConfig;
+            // tools?: ToolListUnion;
+            // topK?: number;
+            // topP?: number;
+          }
+        }
+        const { candidates, usageMetadata } = await ai.models.generateContent(args)
+        // console.log(candidates[0].content.parts[0].text)
         return {
-          output: data.choices[0].message.content.trim(),
-          inputTokens: data.usage.prompt_tokens,
-          outputTokens: data.usage.completion_tokens,
+          output: candidates[0].content.parts[0].text.trim(),
+          inputTokens: usageMetadata.promptTokenCount,
+          outputTokens: usageMetadata.candidatesTokenCount,
           thinkingTokens: 0
         }
       } catch (err) {
-        console.error('Error calling openai sdk:', err.message)
+        console.error('Error calling answer (gemini sdk)', err.message)
         throw err
       }
     },

@@ -10,3 +10,20 @@ export const translateModelInfo = (model, infoTranslate = {}) => {
   }
   return result
 }
+
+export const createUniquePromptFromLegacyInputs = inputs => {
+  let prompt = ''
+  let currentTag
+  for (const { content, tag } of inputs) {
+    if (currentTag !== tag) {
+      if (currentTag) {
+        prompt += `</${currentTag}>
+`      }
+      prompt += `<${tag}>`
+      currentTag = tag
+    }
+    prompt += content
+  }
+  prompt += `</${currentTag}>`
+  return prompt
+}

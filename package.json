@@ -32,14 +32,14 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@google/genai": "^0.8.0",
+    "@google/genai": "^0.9.0",
     "@google/generative-ai": "^0.24.0",
     "config": "^3.3.12",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "env-paths": "^3.0.0",
     "groq-sdk": "^0.19.0",
-    "openai": "^4.93.0",
-    "vitest": "^3.1.1"
+    "openai": "^4.95.1",
+    "vitest": "^3.1.2"
   },
   "devDependencies": {
     "@clack/prompts": "^0.10.1",

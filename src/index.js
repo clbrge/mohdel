@@ -1,17 +1,7 @@
 import providers from './providers.js'
 import { getAPIKey, getDefaultModelId, getCuratedModels } from './common.js'
+import sdks from './sdk/index.js'
 
-const importSDK = async (providerName) => {
-  try {
-    const { sdk } = providers[providerName]
-    // Use import.meta.url to create a proper URL for dynamic imports
-    const sdkPath = new URL(`./sdk/${sdk}.js`, import.meta.url).href
-    const { default: SDK } = await import(sdkPath)
-    return SDK
-  } catch (err) {
-    throw new Error(`Failed to import SDK for provider ${providerName}: ${err.message}`)
-  }
-}
 
 // Build an inverse lookup table from model IDs to their aliases
 const buildAliasMap = async () => {
@@ -123,9 +113,27 @@ const getProviderAndModel = async (modelId) => {
 }
 
 const mohdel = (modelId) => {
-  // Create a proxy that will lazily load the SDK and model when methods are called
   return new Proxy({}, {
     get: (target, prop) => {
+      if (prop === 'answer') {
+        return async (prompt, options = {}) => {
+          const resolvedModelId = modelId || await getDefaultModelId()
+          const { providerName, modelName } = await getProviderAndModel(resolvedModelId)
+
+          const config = providers[providerName]
+          const apiKey = getAPIKey(config.apiKeyEnv)
+
+          if (!apiKey) {
+            throw new Error(`API key not found for ${providerName} (env var: ${config.apiKeyEnv})`)
+          }
+
+          const curated = await getCuratedModels()
+          const sdk = sdks[config.sdk]
+          const api = sdk(config.createConfiguration(apiKey), { [modelName]: curated[modelId] })
+
+          return await api.answer(modelName)(prompt, options)
+        }
+      }
       if (prop === 'completion') {
         return async (prompt, userParams = {}) => {
           // Resolve model ID lazily when the completion method is called

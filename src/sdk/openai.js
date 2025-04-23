@@ -1,13 +1,100 @@
 import OpenAI from 'openai'
 import { translateModelInfo } from './utils.js'
 
-const Provider = (defaultConfiguration) => {
+const Provider = (defaultConfiguration, specs) => {
   const api = new OpenAI(defaultConfiguration)
-
+  console.log('xxxxxxxxxxx', specs)
   // Property name translations (empty for now)
   const infoTranslate = {}
 
+  // todo use headers
+  // https://platform.openai.com/docs/api-reference/debugging-requests
+
   return {
+    answer: (modelName) => async (input, options) => {
+      const { model, thinkingEffortLevels } = specs[modelName]
+      try {
+        const args = {
+          model,
+          input,
+          store: false,
+        }
+        if (thinkingEffortLevels) {
+          options.outputEffort ||= 'medium'
+          args.reasoning = { effort: options.outputEffort }
+        }
+        if (options.outputType == 'json') {
+          args.text = { format: { type: "json_object" } }
+        }
+        if (options.identifier) {
+          args.user = options.identifier
+        }
+        //instructions: 'todo',
+        // max_output_tokens // both think and output
+        // text: {
+        //   format: {
+        //     type: "json_schema",
+        //     strict: True
+        //     name: 'basic',
+        //     schema: {
+        //       type: "object",
+        //       additionalProperties: true,
+        //     }
+        //   }
+        // }
+        //temperature: 1,
+        const { id, status, error, output, usage } = await api.responses.create(args)
+        // output format
+        // {
+        //   id: 'msg_6807afa55120819196474a69caa79ccd0407e855946b42dd',
+        //   type: 'message',
+        //   status: 'completed',
+        //   content: [
+        //     {
+        //       type: 'output_text',
+        //       annotations: [],
+        //       text: ""
+        //     }
+        //   ],
+        //   role: 'assistant'
+        // }
+        for (const { id, type, status, content } of output) {
+          // if (type === 'reasoning') {
+          //   //
+          // }
+          if (type === 'message') {
+            return {
+              output: content[0].text.trim(),
+              inputTokens: usage.input_tokens,
+              outputTokens: usage.output_tokens - usage.output_tokens_details.reasoning_tokens,
+              thinkingTokens: usage.output_tokens_details.reasoning_tokens
+            }
+          }
+        }
+        // console.log({ id, status, error, output, usage })
+      } catch (err) {
+        console.error('Error calling responses (openai sdk)', err.message)
+        throw err
+      }
+    },
+
+    chat: (model) => async (content) => {
+      const messages = typeof content === 'string' ? [{ role: 'user', content }] : format(content)
+      try {
+        const data = await api.chat.completions.create({ model, messages })
+        return {
+          output: data.choices[0].message.content.trim(),
+          inputTokens: data.usage.prompt_tokens,
+          outputTokens: data.usage.completion_tokens,
+          thinkingTokens: 0
+        }
+      } catch (err) {
+        console.error('Error calling openai sdk:', err.message)
+        throw err
+      }
+    },
+
+
     completion: (model) => async (prompt) => {
       try {
         const response = await api.chat.completions.create({

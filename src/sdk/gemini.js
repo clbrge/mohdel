@@ -8,12 +8,14 @@ const Provider = (defaultConfiguration, specs) => {
   const ai = new GoogleGenAI(defaultConfiguration)
 
   const infoTranslate = {
-    name: str => [ 'model', str.replace('models/', '') ]
+    name: str => ['model', str.replace('models/', '')]
   }
 
   return {
-    answer: (modelName) => async (input, options) => {
-      const { model, thinkingEffortLevels, outputTokenLimit } = specs[modelName]
+    answer: (modelName, configuration) => async (input, options) => {
+      const api = configuration ? new GoogleGenAI({ ...defaultConfiguration, ...configuration }) : ai
+
+      const { model, /* thinkingEffortLevels, */ outputTokenLimit } = specs[modelName]
       try {
         // API doc https://googleapis.github.io/js-genai/main/index.html
         if (options.outputBudget > outputTokenLimit) {
@@ -21,9 +23,10 @@ const Provider = (defaultConfiguration, specs) => {
         }
         const args = {
           model,
+          temperature: 0,
           contents: input,
           config: {
-            maxOutputTokens: options.outputBudget,
+            maxOutputTokens: options.outputBudget
             // audioTimestamp?: boolean;
             // cachedContent?: string;
             // candidateCount?: number;
@@ -52,7 +55,7 @@ const Provider = (defaultConfiguration, specs) => {
             // topP?: number;
           }
         }
-        const { candidates, usageMetadata } = await ai.models.generateContent(args)
+        const { candidates, usageMetadata } = await api.models.generateContent(args)
         // console.log(candidates[0].content.parts[0].text)
         return {
           output: candidates[0].content.parts[0].text.trim(),

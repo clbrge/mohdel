@@ -94,7 +94,7 @@ const createBackup = async (filePath) => {
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const backupPath = `${filePath}.${timestamp}.bak`
-  
+
   try {
     await copyFile(filePath, backupPath)
     console.log(`Backup created: ${backupPath}`)

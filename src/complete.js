@@ -37,7 +37,7 @@ const run = async () => {
     for (const prop of requiredInfo) {
       // Check if this property should be included based on onlyIf condition
       const shouldInclude = !prop.onlyIf || (modelInfo[prop.onlyIf] && !!modelInfo[prop.onlyIf])
-      
+
       // Only check for missing properties if this property should be included
       if (shouldInclude && (modelInfo[prop.name] === undefined || modelInfo[prop.name] === null)) {
         missingProps[prop.name] = true
@@ -107,7 +107,7 @@ const run = async () => {
     for (const prop of requiredInfo) {
       // Check if this property should be included based on onlyIf condition
       const shouldInclude = !prop.onlyIf || (modelInfo[prop.onlyIf] && !!modelInfo[prop.onlyIf])
-      
+
       if (shouldInclude) {
         console.log(`- ${prop.label}: ${modelInfo[prop.name] !== undefined ? modelInfo[prop.name] : 'Missing'}`)
       }
@@ -120,7 +120,7 @@ const run = async () => {
     for (const prop of requiredInfo) {
       // Check if this property should be included based on onlyIf condition
       const shouldInclude = !prop.onlyIf || (modelInfo[prop.onlyIf] && !!modelInfo[prop.onlyIf])
-      
+
       if (shouldInclude && missing[prop.name]) {
         if (prop.select && Array.isArray(prop.select)) {
           const options = prop.select.map(option => {
@@ -128,23 +128,23 @@ const run = async () => {
               ? { value: option, label: option }
               : option
           })
-          
+
           const value = await select({
             message: `${prop.label} for ${displayName}:`,
             options
           })
-          
+
           if (isCancel(value)) {
             cancel('Operation cancelled')
             return
           }
-          
+
           modelInfo[prop.name] = value
           updated = true
         } else {
           // Use text input for non-select properties
           const placeholder = prop.placeholder ? String(prop.placeholder) : ''
-          
+
           const value = await text({
             message: `${prop.label} for ${displayName}:`,
             placeholder,

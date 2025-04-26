@@ -2,7 +2,6 @@ import providers from './providers.js'
 import { getAPIKey, getDefaultModelId, getCuratedModels } from './common.js'
 import sdks from './sdk/index.js'
 
-
 // Build an inverse lookup table from model IDs to their aliases
 const buildAliasMap = async () => {
   const curated = await getCuratedModels()

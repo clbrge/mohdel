@@ -18,7 +18,8 @@ export const createUniquePromptFromLegacyInputs = inputs => {
     if (currentTag !== tag) {
       if (currentTag) {
         prompt += `</${currentTag}>
-`      }
+`
+      }
       prompt += `<${tag}>`
       currentTag = tag
     }

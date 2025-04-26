@@ -10,14 +10,16 @@ const anthropicSDK = (defaultConfiguration, specs) => {
   }
 
   return {
-    answer: (modelName) => async (input, options) => {
-      const { model, thinkingEffortLevels, outputTokenLimit } = specs[modelName]
+    answer: (modelName, configuration) => async (input, options) => {
+      const api = configuration ? new Anthropic({ ...defaultConfiguration, ...configuration }) : anthropic
+      const { model, outputTokenLimit } = specs[modelName]
       try {
         if (options.outputBudget > outputTokenLimit) {
           options.outputBudget = outputTokenLimit
         }
         const args = {
           model,
+          temperature: 0,
           max_tokens: options.outputBudget || outputTokenLimit,
           messages: [
             { role: 'user', content: input }
@@ -32,7 +34,7 @@ const anthropicSDK = (defaultConfiguration, specs) => {
         //   type: "enabled",
         //   budget_tokens: 0
         // }
-        const { content, usage} = await anthropic.messages.create(args)
+        const { content, usage } = await api.messages.create(args)
         return {
           output: content[0].text.trim(),
           inputTokens: usage.input_tokens,

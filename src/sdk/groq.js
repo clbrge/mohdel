@@ -11,20 +11,22 @@ const Provider = (defaultConfiguration, specs) => {
     context_window: 'inputTokenLimit'
   }
 
-  $.answer = (modelName) => async (input, options) => {
-    const { model, thinkingEffortLevels, outputTokenLimit } = specs[modelName]
+  $.answer = (modelName, configuration) => async (input, options) => {
+    const api = configuration ? new Groq({ ...defaultConfiguration, ...configuration }) : groq
+    const { model, outputTokenLimit } = specs[modelName]
     try {
       if (options.outputBudget > outputTokenLimit) {
         options.outputBudget = outputTokenLimit
       }
       const args = {
         model,
+        temperature: 0,
         max_completion_tokens: options.outputBudget || outputTokenLimit,
         messages: [
           { role: 'user', content: input }
         ]
       }
-      const { choices, usage } = await groq.chat.completions.create(args)
+      const { choices, usage } = await api.chat.completions.create(args)
       // {
       //   "id": "chatcmpl-f51b2cd2-bef7-417e-964e-a08f0b513c22",
       //   "object": "chat.completion",

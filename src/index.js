@@ -111,10 +111,23 @@ const getProviderAndModel = async (modelId) => {
   return { providerName, modelName }
 }
 
+// Helper function to get default parameters for a model
+const getModelDefaults = async (providerName, modelName) => {
+  // TODO: This could be expanded to read from the config file
+  // For now, it accesses the curated model data if needed,
+  // but the current SDK structure doesn't seem to pass defaults this way.
+  const curated = await getCuratedModels()
+  const fullModelId = `${providerName}/${modelName}`
+  return curated[fullModelId] || {}
+}
+
+
 const mohdel = (modelId) => {
   return new Proxy({}, {
     get: (target, prop) => {
       if (prop === 'answer') {
+        // NOTE: 'answer' method seems slightly different, potentially older implementation?
+        // It directly uses sdks[config.sdk] and passes curated specs.
         return async (prompt, options = {}) => {
           const resolvedModelId = modelId || await getDefaultModelId()
           const { providerName, modelName } = await getProviderAndModel(resolvedModelId)
@@ -127,10 +140,10 @@ const mohdel = (modelId) => {
           }
 
           const curated = await getCuratedModels()
-          const sdk = sdks[config.sdk]
-          const api = sdk(config.createConfiguration(apiKey), { [modelName]: curated[modelId] })
+          const sdk = sdks[config.sdk] // Gets the SDK function (e.g., anthropicSDK)
+          const api = sdk(config.createConfiguration(apiKey), { [resolvedModelId]: curated[resolvedModelId] }) // Instantiates SDK
 
-          return await api.answer(modelName)(prompt, options)
+          return await api.answer(resolvedModelId)(prompt, options) // Calls the specific model's answer method
         }
       }
       if (prop === 'completion') {
@@ -146,19 +159,27 @@ const mohdel = (modelId) => {
             throw new Error(`API key not found for ${providerName} (env var: ${config.apiKeyEnv})`)
           }
 
-          const SDK = await importSDK(providerName)
-          const api = SDK(config.createConfiguration(apiKey))
+          const sdkName = config.sdk // Get the SDK name ('openai', 'anthropic', etc.)
+          const SDK = sdks[sdkName] // Get the SDK function from the imported sdks object
+
+          if (!SDK) {
+            throw new Error(`SDK implementation not found for '${sdkName}'`)
+          }
+
+          const api = SDK(config.createConfiguration(apiKey)) // Instantiate the SDK
 
           // Get default parameters for this model from configuration
           const defaultParams = await getModelDefaults(providerName, modelName)
 
           // Merge default parameters with user-provided parameters
+          // NOTE: User params might override SDK defaults if they exist in userParams
           const mergedParams = {
-            ...defaultParams,
-            ...userParams
+            ...defaultParams, // Could include 'label', etc. from curated list
+            ...userParams // User-specified params like temperature, max_tokens
           }
 
           // Call the completion method as defined in the SDK interface
+          // It expects the model name and merged parameters
           return await api.completion(modelName)(prompt, mergedParams)
         }
       }
@@ -167,10 +188,5 @@ const mohdel = (modelId) => {
   })
 }
 
-// Helper function to get default parameters for a model
-const getModelDefaults = async (providerName, modelName) => {
-  // This would be expanded to read from the config file in a real implementation
-  return {}
-}
 
 export default mohdel

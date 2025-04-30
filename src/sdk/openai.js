@@ -7,6 +7,47 @@ const Provider = (defaultConfiguration, specs) => {
   // Property name translations (empty for now)
   const infoTranslate = {}
 
+  const formatImages = images => {
+    const list = []
+    if (images && Array.isArray(images)) {
+      for (const image of images) {
+        if (!image || !image.data || !image.mimetype) continue
+        list.push({
+          type: 'image_url',
+          image_url: `data:${image.mimetype};base64,${image.data}`,
+          detail: 'high' // Use auto by default, could be made configurable
+        })
+      }
+    }
+    return list
+  }
+
+  const estimateImageTokens = (model, { mimetype, width, height, data }) => {
+    // Check for openAI supported MIME types
+    const supportedMimeTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+    if (!supportedMimeTypes.includes(mimetype)) {
+      return Infinity // Return Infinity for unsupported types
+    }
+    if (['gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.1'].includes(model)) {
+      // For GPT-4.1 family models (mini, nano, standard)
+      // They typically use approximately 2048 tokens per high-res image
+      return 2048
+    } else if (model === 'o4-mini') {
+      // o4-mini uses a different token calculation
+      // Estimated at 1792 tokens per standard image
+      return 1792
+    } else if (model === 'o3') {
+      // o3 has its own token count for images
+      return 2304
+    } else if (model === 'o1-pro') {
+      // o1-pro has higher image token usage
+      return 2560
+    }
+    // Default to Infinity if model doesn't match known image-supporting models
+    // or if the logic needs a fallback
+    return Infinity
+  }
+
   // todo use headers
   // https://platform.openai.com/docs/api-reference/debugging-requests
   const $ = {
@@ -48,6 +89,7 @@ const Provider = (defaultConfiguration, specs) => {
 
   return {
     ...$,
+    estimateImageTokens,
     answer: (modelName, configuration) => async (input, options) => {
       const { model, thinkingEffortLevels, provider, outputTokenLimit } = specs[modelName]
       // deepseek does not support response API
@@ -63,15 +105,25 @@ const Provider = (defaultConfiguration, specs) => {
           input,
           store: false
         }
-        if (thinkingEffortLevels) {
-          options.outputEffort ||= 'medium'
-          args.reasoning = { effort: options.outputEffort }
-        }
         if (options.outputType === 'json') {
           args.text = { format: { type: 'json_object' } }
         }
         if (options.identifier) {
           args.user = options.identifier
+        }
+        if (thinkingEffortLevels) {
+          options.outputEffort ||= 'medium'
+          args.reasoning = { effort: options.outputEffort }
+          delete args.temperature
+        }
+        if (options.images && options.images.length > 0) {
+          args.input = [{
+            role: 'user',
+            content: [
+              { type: 'input_text', text: input },
+              ...formatImages(options.images)
+            ]
+          }]
         }
         // both think and output tokens!
         args.max_output_tokens = options.outputBudget || outputTokenLimit

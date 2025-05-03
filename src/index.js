@@ -123,64 +123,35 @@ const getModelDefaults = async (providerName, modelName) => {
 
 
 const mohdel = (modelId) => {
+  const answer = async (prompt, options = {}) => {
+    const resolvedModelId = modelId || await getDefaultModelId()
+    const { providerName, modelName } = await getProviderAndModel(resolvedModelId)
+
+    const config = providers[providerName]
+    const apiKey = getAPIKey(config.apiKeyEnv)
+
+    if (!apiKey) {
+      throw new Error(`API key not found for ${providerName} (env var: ${config.apiKeyEnv})`)
+    }
+
+    const curated = await getCuratedModels()
+    const sdk = sdks[config.sdk] // Gets the SDK function (e.g., anthropicSDK)
+    const api = sdk(config.createConfiguration(apiKey), { [resolvedModelId]: curated[resolvedModelId] }) // Instantiates SDK
+
+    return await api.answer(resolvedModelId)(prompt, options) // Calls the specific model's answer method
+  }
+
   return new Proxy({}, {
     get: (target, prop) => {
       if (prop === 'answer') {
         // NOTE: 'answer' method seems slightly different, potentially older implementation?
         // It directly uses sdks[config.sdk] and passes curated specs.
-        return async (prompt, options = {}) => {
-          const resolvedModelId = modelId || await getDefaultModelId()
-          const { providerName, modelName } = await getProviderAndModel(resolvedModelId)
-
-          const config = providers[providerName]
-          const apiKey = getAPIKey(config.apiKeyEnv)
-
-          if (!apiKey) {
-            throw new Error(`API key not found for ${providerName} (env var: ${config.apiKeyEnv})`)
-          }
-
-          const curated = await getCuratedModels()
-          const sdk = sdks[config.sdk] // Gets the SDK function (e.g., anthropicSDK)
-          const api = sdk(config.createConfiguration(apiKey), { [resolvedModelId]: curated[resolvedModelId] }) // Instantiates SDK
-
-          return await api.answer(resolvedModelId)(prompt, options) // Calls the specific model's answer method
-        }
+        return answer
       }
       if (prop === 'completion') {
-        return async (prompt, userParams = {}) => {
-          // Resolve model ID lazily when the completion method is called
-          const resolvedModelId = modelId || await getDefaultModelId()
-          const { providerName, modelName } = await getProviderAndModel(resolvedModelId)
-
-          const config = providers[providerName]
-          const apiKey = getAPIKey(config.apiKeyEnv)
-
-          if (!apiKey) {
-            throw new Error(`API key not found for ${providerName} (env var: ${config.apiKeyEnv})`)
-          }
-
-          const sdkName = config.sdk // Get the SDK name ('openai', 'anthropic', etc.)
-          const SDK = sdks[sdkName] // Get the SDK function from the imported sdks object
-
-          if (!SDK) {
-            throw new Error(`SDK implementation not found for '${sdkName}'`)
-          }
-
-          const api = SDK(config.createConfiguration(apiKey)) // Instantiate the SDK
-
-          // Get default parameters for this model from configuration
-          const defaultParams = await getModelDefaults(providerName, modelName)
-
-          // Merge default parameters with user-provided parameters
-          // NOTE: User params might override SDK defaults if they exist in userParams
-          const mergedParams = {
-            ...defaultParams, // Could include 'label', etc. from curated list
-            ...userParams // User-specified params like temperature, max_tokens
-          }
-
-          // Call the completion method as defined in the SDK interface
-          // It expects the model name and merged parameters
-          return await api.completion(modelName)(prompt, mergedParams)
+        return async (prompt, options = {}) => {
+          const { output } = await answer(prompt, options)
+          return output
         }
       }
       return target[prop]

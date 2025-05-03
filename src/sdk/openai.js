@@ -4,8 +4,10 @@ import { translateModelInfo } from './utils.js'
 const Provider = (defaultConfiguration, specs) => {
   const openai = new OpenAI(defaultConfiguration)
 
-  // Property name translations (empty for now)
-  const infoTranslate = {}
+  // important for xai
+  const infoTranslate = {
+    id: 'model',
+  }
 
   const formatImages = images => {
     const list = []

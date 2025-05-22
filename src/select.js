@@ -141,8 +141,11 @@ const processModels = async (providerName, providerInstance) => {
       const modelId = model.id
       const modelKey = `${providerName}/${modelId}`
 
+      const isInCurated = Object.values(curated).some(entry => entry.coreIds?.includes(modelKey))
+      const isInExcluded = Object.values(excluded).some(entry => entry.coreIds?.includes(modelKey))
+
       // Skip if already in curated or excluded
-      if (curated[modelKey] || excluded[modelKey]) {
+      if (isInCurated || isInExcluded) {
         continue
       }
 

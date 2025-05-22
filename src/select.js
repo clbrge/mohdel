@@ -1,9 +1,8 @@
 import * as clack from '@clack/prompts'
 import minimist from 'minimist'
-import fs from 'fs/promises'
 import providers from './providers.js'
-import * as dotenv from 'dotenv'
-import path from 'path'
+import *
+as dotenv from 'dotenv'
 import {
   getAPIKey,
   getCuratedModels,
@@ -103,14 +102,37 @@ const findReplacementCandidates = (providerName, modelId, curated) => {
 
 // Replace a model: move it to excluded and add the new one to curated
 const replaceModel = async (modelToReplace, newModelKey, newModelLabel, newModelDetails, curated, excluded) => {
-  // Move the model to be replaced to excluded
-  excluded[modelToReplace.key] = { label: modelToReplace.label }
+  // Get the full data of the model to be replaced from the curated list
+  const oldModelDataFromCurated = curated[modelToReplace.key]
+
+  // Move the model to be replaced to excluded, preserving its original data
+  if (oldModelDataFromCurated) {
+    excluded[modelToReplace.key] = { ...oldModelDataFromCurated }
+  } else {
+    // Fallback if old data wasn't in curated (should not typically happen)
+    excluded[modelToReplace.key] = { label: modelToReplace.label }
+  }
   delete curated[modelToReplace.key]
 
-  // Add new model to curated with detailed information
+  // Preserve custom properties from the old model entry,
+  // but explicitly exclude 'model' and 'models' fields from the old entry.
+  // This prevents old model identifiers from polluting the new entry if the
+  // new model's details (newModelDetails) don't specify them, ensuring correct `coreIds` generation.
+  const {
+    model: _discardedOldModelIdentifier, // eslint-disable-line no-unused-vars
+    models: _discardedOldModelIdentifiers, // eslint-disable-line no-unused-vars
+    ...restOfOldModelDataProperties
+  } = oldModelDataFromCurated || {}
+
+  // Add new model to curated.
+  // Merge properties: Start with applicable old properties (restOfOldModelDataProperties),
+  // then layer new model details (newModelDetails), which includes new provider & sdk.
+  // Finally, ensure the new label (newModelLabel) is set.
+  // Properties in newModelDetails and newModelLabel will override any from restOfOldModelDataProperties.
   curated[newModelKey] = {
-    label: newModelLabel,
-    ...newModelDetails
+    ...restOfOldModelDataProperties,
+    ...newModelDetails,
+    label: newModelLabel
   }
 
   // Update both files
@@ -214,8 +236,8 @@ const processModels = async (providerName, providerInstance) => {
         await replaceModel(
           modelToReplace,
           modelKey,
-          model.label || modelId,
-          modelInfoWithMeta,
+          model.label || modelId, // newModelLabel
+          modelInfoWithMeta, // newModelDetails
           curated,
           excluded
         )

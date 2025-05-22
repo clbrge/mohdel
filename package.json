@@ -31,15 +31,13 @@
     "test:multi": "node ./src/test-runner.js 10"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "@google/genai": "^0.9.0",
-    "@google/generative-ai": "^0.24.0",
-    "config": "^3.3.12",
+    "@anthropic-ai/sdk": "^0.51.0",
+    "@google/genai": "^1.0.1",
     "dotenv": "^16.5.0",
     "env-paths": "^3.0.0",
-    "groq-sdk": "^0.19.0",
-    "openai": "^4.95.1",
-    "vitest": "^3.1.2"
+    "groq-sdk": "^0.22.0",
+    "openai": "^4.102.0",
+    "vitest": "^3.1.4"
   },
   "devDependencies": {
     "@clack/prompts": "^0.10.1",

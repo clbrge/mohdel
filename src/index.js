@@ -121,7 +121,6 @@ const getModelDefaults = async (providerName, modelName) => {
   return curated[fullModelId] || {}
 }
 
-
 const mohdel = (modelId) => {
   const answer = async (prompt, options = {}) => {
     const resolvedModelId = modelId || await getDefaultModelId()
@@ -158,6 +157,5 @@ const mohdel = (modelId) => {
     }
   })
 }
-
 
 export default mohdel

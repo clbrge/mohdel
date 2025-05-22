@@ -6,7 +6,7 @@ const Provider = (defaultConfiguration, specs) => {
 
   // important for xai
   const infoTranslate = {
-    id: 'model',
+    id: 'model'
   }
 
   const formatImages = images => {
@@ -53,7 +53,22 @@ const Provider = (defaultConfiguration, specs) => {
   // todo use headers
   // https://platform.openai.com/docs/api-reference/debugging-requests
   const $ = {
-    deepseekChatCompletion: (modelName, configuration) => async (input, options) => {
+
+    completion: (model) => async (prompt) => {
+      try {
+        const response = await openai.chat.completions.create({
+          model,
+          temperature: 0,
+          messages: [{ role: 'user', content: prompt }]
+        })
+        return response.choices[0].message.content
+      } catch (err) {
+        console.error('Error calling openai sdk:', err.message)
+        throw err
+      }
+    },
+
+    thirdpartyChatCompletion: (modelName, configuration) => async (input, options) => {
       const api = configuration ? new OpenAI({ ...defaultConfiguration, ...configuration }) : openai
       const { model, outputTokenLimit } = specs[modelName]
       try {
@@ -83,7 +98,7 @@ const Provider = (defaultConfiguration, specs) => {
           thinkingTokens: usage.completion_tokens_details?.reasoning_tokens || 0
         }
       } catch (err) {
-        console.error('Error calling deepseekChatCompletion (openai sdk)', err.message)
+        console.error('Error calling thirdpartyChatCompletion (openai sdk)', err.message)
         throw err
       }
     }
@@ -143,6 +158,7 @@ const Provider = (defaultConfiguration, specs) => {
         //   }
         // }
         // temperature: 1,
+
         const { /* id, status, error, */ output, usage } = await api.responses.create(args)
         // output format
         // {
@@ -166,28 +182,14 @@ const Provider = (defaultConfiguration, specs) => {
             return {
               output: content[0].text.trim(),
               inputTokens: usage.input_tokens,
-              outputTokens: usage.output_tokens - usage.output_tokens_details.reasoning_tokens,
-              thinkingTokens: usage.output_tokens_details.reasoning_tokens
+              outputTokens: usage.output_tokens - (usage.output_tokens_details?.reasoning_tokens || 0),
+              thinkingTokens: usage.output_tokens_details?.reasoning_tokens || 0
             }
           }
         }
         // console.log({ id, status, error, output, usage })
       } catch (err) {
         console.error('Error calling answer (openai sdk)', err.message)
-        throw err
-      }
-    },
-
-    completion: (model) => async (prompt) => {
-      try {
-        const response = await openai.chat.completions.create({
-          model,
-          temperature: 0,
-          messages: [{ role: 'user', content: prompt }]
-        })
-        return response.choices[0].message.content
-      } catch (err) {
-        console.error('Error calling openai sdk:', err.message)
         throw err
       }
     },

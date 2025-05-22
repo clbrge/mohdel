@@ -109,25 +109,56 @@ const createBackup = async (filePath) => {
 const createFileOperation = (filePath, defaultValue = {}, operationType) => {
   // Handler for loading data from a file
   const loadHandler = async () => {
+    let loadedData
     try {
       if (!existsSync(CONFIG_DIR)) {
         await mkdir(CONFIG_DIR, { recursive: true })
       }
 
       if (!existsSync(filePath)) {
-        // If file doesn't exist and we have a default, save it first
         if (defaultValue && Object.keys(defaultValue).length > 0) {
           await writeFile(filePath, JSON.stringify(defaultValue, null, 2))
-          return defaultValue
+          // Use a clone of defaultValue for subsequent processing to avoid mutating the original
+          loadedData = JSON.parse(JSON.stringify(defaultValue))
+        } else {
+          loadedData = {}
         }
-        return {}
+      } else {
+        const fileContent = await readFile(filePath, 'utf8')
+        loadedData = JSON.parse(fileContent)
       }
 
-      const data = await readFile(filePath, 'utf8')
-      return JSON.parse(data)
+      if (operationType === 'curated models' && typeof loadedData === 'object' && loadedData !== null && !Array.isArray(loadedData)) {
+        const processedData = {}
+        for (const [key, entryValue] of Object.entries(loadedData)) {
+          // Work with a copy of the entry to avoid modifying the objects from loadedData directly
+          const entry = { ...entryValue }
+          let coreIds
+
+          // Rule 1: 'models' array takes precedence
+          if (entry.models && Array.isArray(entry.models) && entry.models.length > 0 && entry.provider) {
+            coreIds = entry.models.map(modelName => `${entry.provider}/${modelName}`)
+          }
+          // Rule 2: 'model' property
+          else if (entry.model && entry.provider) {
+            coreIds = [`${entry.provider}/${entry.model}`]
+          }
+          // Rule 3: Fallback to key
+          else {
+            coreIds = [key]
+          }
+          
+          // Ensure coreIds is always a non-empty array (already handled by Rule 3 as fallback)
+          processedData[key] = { ...entry, coreIds }
+        }
+        return processedData
+      }
+
+      return loadedData
     } catch (err) {
       console.warn(`Failed to load ${operationType}: ${err.message}`)
-      return defaultValue || {}
+      // Return a clone of defaultValue on error
+      return JSON.parse(JSON.stringify(defaultValue || {}))
     }
   }
 
@@ -138,14 +169,21 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
         await mkdir(CONFIG_DIR, { recursive: true })
       }
 
-      // Create a backup of the original file if it exists
       if (existsSync(filePath)) {
         await createBackup(filePath)
       }
 
-      // Sort the keys of the object alphabetically before saving
-      const sortedData = sortObjectKeys(data)
+      let dataToSave = data
+      if (operationType === 'curated models' && typeof data === 'object' && data !== null && !Array.isArray(data)) {
+        const cleanedData = {}
+        for (const [key, entry] of Object.entries(data)) {
+          const { coreIds, ...rest } = entry // Remove coreIds
+          cleanedData[key] = rest
+        }
+        dataToSave = cleanedData
+      }
 
+      const sortedData = sortObjectKeys(dataToSave)
       await writeFile(filePath, JSON.stringify(sortedData, null, 2))
       return true
     } catch (err) {

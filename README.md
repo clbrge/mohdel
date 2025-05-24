@@ -7,4 +7,4 @@ This draft package, `modhel`, will provide a streamlined, high-level abstraction
 It's deliberately designed as a JavaScript-centric library, focusing solely on simplifying LLM integration within JavaScript applications.
 The library is opinionated and favors convention, making it extremely easy to use specific models in node or browser.
 It eliminates the need to manage multiple SDKs and configurations, offering a unified interface.
-For now only the `completion` method for Anthropics is functional.
+The library aims to provide `completion` and `answer` methods that work across all supported providers (Anthropic, Gemini, Groq, OpenAI). Currently, the underlying `answer` method is implemented for all these providers, and `completion` is derived from it. Direct SDK modules for Anthropic and OpenAI also offer their own `completion` implementations, while Gemini and Groq SDKs primarily use their `answer` methods for core functionality.

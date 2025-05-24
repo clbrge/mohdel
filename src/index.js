@@ -159,3 +159,4 @@ const mohdel = (modelId) => {
 }
 
 export default mohdel
+export { expandModelAlias, getProviderAndModel }

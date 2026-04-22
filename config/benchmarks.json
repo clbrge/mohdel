@@ -1,0 +1,39 @@
+{
+  "benchmarks": {
+    "gpqa_score": { "weight": 0.20, "group": "analysis", "label": "GPQA Diamond", "scale": "0-1" },
+    "mmmu_pro_score": { "weight": 0.15, "group": "analysis", "label": "MMMU-Pro", "scale": "0-1" },
+    "mrcr_v2_score": { "weight": 0.10, "group": "analysis", "label": "MRCR v2", "scale": "0-1" },
+    "tau_bench_retail_score": { "weight": 0.20, "group": "tool_loop", "label": "Tau2 Retail", "scale": "0-1" },
+    "toolathlon_score": { "weight": 0.15, "group": "tool_loop", "label": "Toolathlon", "scale": "0-1" },
+    "swe_bench_verified_score": { "weight": 0.20, "group": "cowork", "label": "SWE-bench Verified", "scale": "0-1" }
+  },
+  "minCoverage": 2,
+  "defaultTop": 20,
+  "cacheTtlHours": 24,
+  "useCasePresets": {
+    "analysis": {
+      "gpqa_score": 0.35,
+      "mmmu_pro_score": 0.25,
+      "mrcr_v2_score": 0.20,
+      "tau_bench_retail_score": 0.10,
+      "toolathlon_score": 0.05,
+      "swe_bench_verified_score": 0.05
+    },
+    "tool_loop": {
+      "gpqa_score": 0.05,
+      "mmmu_pro_score": 0.05,
+      "mrcr_v2_score": 0.05,
+      "tau_bench_retail_score": 0.40,
+      "toolathlon_score": 0.25,
+      "swe_bench_verified_score": 0.20
+    },
+    "cowork": {
+      "gpqa_score": 0.10,
+      "mmmu_pro_score": 0.05,
+      "mrcr_v2_score": 0.05,
+      "tau_bench_retail_score": 0.10,
+      "toolathlon_score": 0.10,
+      "swe_bench_verified_score": 0.60
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "mohdel-thin-gate-linux-x64-gnu",
+  "version": "0.89.0",
+  "license": "MIT",
+  "author": {
+    "name": "Christophe Le Bars",
+    "email": "clb@toort.net"
+  },
+  "description": "Prebuilt thin-gate binary for mohdel (Linux x64, glibc). Installed automatically as an optional dependency of the mohdel npm package.",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "mohdel-thin-gate": "./bin/mohdel-thin-gate"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "files": [
+    "bin/mohdel-thin-gate",
+    "index.js",
+    "README.md"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clbrge/mohdel.git"
+  }
+}

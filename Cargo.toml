@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = [
+    "rust/thin-gate",
+    "rust/napi-addon",
+]
+
+[workspace.package]
+version = "0.89.0"
+edition = "2021"
+license = "MIT"
+authors = ["Christophe Le Bars <clb@toort.net>"]
+repository = "https://github.com/clbrge/mohdel"
+rust-version = "1.80"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+async-trait = "0.1"
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
+zeroize = "1"
+hyper = { version = "1", features = ["server", "http1", "client"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+toml = "0.8"
+dirs = "5"
+opentelemetry = { version = "0.27", features = ["metrics"] }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio", "metrics"] }
+opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "metrics"] }
+clap = { version = "4", features = ["derive"] }
+
+# Release profile used when packaging thin-gate for npm distribution.
+# `strip = true` drops debug symbols (~15 MB → ~3-4 MB), `lto = "thin"`
+# enables cross-crate inlining for ~10-15% runtime improvement on the
+# hot paths, `codegen-units = 1` trades build time for peak codegen
+# quality — fine for a release-only binary.
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

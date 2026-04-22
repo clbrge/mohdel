@@ -1,0 +1,36 @@
+[package]
+name = "mohdel-thin-gate"
+description = "Generic multiplexer / scheduler / state owner for mohdel inference traffic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "mohdel_thin_gate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mohdel-thin-gate"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+tokio.workspace = true
+zeroize.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+bytes.workspace = true
+toml.workspace = true
+dirs.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+clap.workspace = true

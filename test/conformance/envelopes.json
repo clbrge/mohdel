@@ -1,0 +1,293 @@
+{
+  "minimal-string-prompt": {
+    "callId": "c1",
+    "authId": "a1",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5-mini",
+    "prompt": "Say hi."
+  },
+  "minimal-messages-prompt": {
+    "callId": "c2",
+    "authId": "a2",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "anthropic/claude-haiku-4-5",
+    "prompt": [
+      {
+        "role": "system",
+        "content": "Be terse."
+      },
+      {
+        "role": "user",
+        "content": "Say hi."
+      }
+    ]
+  },
+  "full-options": {
+    "callId": "c3",
+    "authId": "a3",
+    "auth": {
+      "key": "sk-ant-test"
+    },
+    "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01",
+    "baggage": "user=a3",
+    "model": "anthropic/claude-opus-4-5",
+    "prompt": "Solve this.",
+    "outputBudget": 1024,
+    "outputType": "json",
+    "outputStyle": "analysis",
+    "outputEffort": "high",
+    "images": [
+      {
+        "fileUri": "file:///tmp/img.png",
+        "mimeType": "image/png"
+      }
+    ],
+    "videos": [
+      {
+        "fileUri": "file:///tmp/clip.mp4",
+        "mimeType": "video/mp4"
+      }
+    ],
+    "cache": true,
+    "tools": [
+      {
+        "name": "weather",
+        "description": "get weather",
+        "parameters": {
+          "type": "object"
+        }
+      }
+    ],
+    "toolChoice": "auto",
+    "parallelToolCalls": false,
+    "identifier": "user-abc"
+  },
+  "structured-prompt-with-parts": {
+    "callId": "c4",
+    "authId": "a4",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5-mini",
+    "prompt": [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "text",
+            "text": "Be terse."
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Think step by step."
+          },
+          {
+            "type": "reasoning",
+            "text": "prior chain of thought"
+          }
+        ]
+      }
+    ]
+  },
+  "tool-roundtrip-with-assistant-reply": {
+    "callId": "c5",
+    "authId": "a5",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5-mini",
+    "prompt": [
+      {
+        "role": "user",
+        "content": "what is the weather in paris?"
+      },
+      {
+        "role": "assistant",
+        "content": ""
+      },
+      {
+        "role": "tool",
+        "content": "{\"temp\":21}",
+        "toolCallId": "call_1"
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ]
+        }
+      }
+    ],
+    "toolChoice": "required",
+    "parallelToolCalls": true
+  },
+  "named-tool-choice": {
+    "callId": "c6",
+    "authId": "a6",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5-mini",
+    "prompt": "force a tool call",
+    "tools": [
+      {
+        "name": "do_it",
+        "parameters": {
+          "type": "object"
+        }
+      }
+    ],
+    "toolChoice": "do_it"
+  },
+  "output-style-coding": {
+    "callId": "c7",
+    "authId": "a7",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5",
+    "prompt": "refactor this",
+    "outputStyle": "coding"
+  },
+  "output-style-translation": {
+    "callId": "c8",
+    "authId": "a8",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5",
+    "prompt": "en\u2192fr",
+    "outputStyle": "translation"
+  },
+  "tool-history-full": {
+    "callId": "c10",
+    "authId": "a10",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "anthropic/claude-sonnet-4-5",
+    "prompt": [
+      {
+        "role": "system",
+        "content": "Summarize the tool results."
+      },
+      {
+        "role": "user",
+        "content": "Get the hostname and OS name."
+      },
+      {
+        "role": "assistant",
+        "content": "Let me check both.",
+        "toolCalls": [
+          {
+            "id": "call_001",
+            "name": "get_hostname",
+            "arguments": {}
+          },
+          {
+            "id": "call_002",
+            "name": "get_os",
+            "arguments": {}
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "toolCallId": "call_001",
+        "content": "dev-box",
+        "toolName": "get_hostname"
+      },
+      {
+        "role": "tool",
+        "toolCallId": "call_002",
+        "content": "linux",
+        "toolName": "get_os"
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_hostname",
+        "parameters": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "get_os",
+        "parameters": {
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "openrouter-routing": {
+    "callId": "c11",
+    "authId": "a11",
+    "auth": {
+      "key": "sk-or-test"
+    },
+    "model": "openrouter/anthropic/claude-3.5-sonnet",
+    "prompt": "route me",
+    "providerOptions": {
+      "openrouter": {
+        "order": [
+          "anthropic",
+          "openai"
+        ],
+        "deny": [
+          "azure"
+        ]
+      }
+    }
+  },
+  "image-data-uri": {
+    "callId": "c9",
+    "authId": "a9",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5",
+    "prompt": "describe",
+    "images": [
+      {
+        "fileUri": "data:image/png;base64,iVBORw0KGgoA",
+        "mimeType": "image/png"
+      }
+    ]
+  },
+  "parallel-tool-calls-explicit-true": {
+    "callId": "c12",
+    "authId": "a12",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5",
+    "prompt": "weather in Paris and Tokyo?",
+    "tools": [
+      {
+        "name": "weather",
+        "parameters": {
+          "type": "object"
+        }
+      }
+    ],
+    "parallelToolCalls": true
+  }
+}

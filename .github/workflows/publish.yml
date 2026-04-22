@@ -1,0 +1,85 @@
+name: Release and Publish
+
+on:
+  release:
+    types: [created]  # Triggered when a GitHub Release is created
+
+# `id-token: write` is required for npm provenance attestation via
+# GitHub OIDC. `contents: read` is standard for checkout.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Get Release Version
+        run: |
+          # Extract version and remove 'v' prefix if present
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+      # Build thin-gate for Linux x64 glibc. Profile `[profile.release]`
+      # in the workspace Cargo.toml applies strip + LTO for a ~3-4 MB
+      # stripped artifact.
+      - name: Build thin-gate binary
+        run: cargo build --release -p mohdel-thin-gate --target x86_64-unknown-linux-gnu
+
+      - name: Stage binary into sub-package
+        run: |
+          SRC=target/x86_64-unknown-linux-gnu/release/mohdel-thin-gate
+          DST=packages/thin-gate-linux-x64-gnu/bin/mohdel-thin-gate
+          test -x "$SRC" || (echo "::error::binary not found at $SRC" && exit 1)
+          mkdir -p "$(dirname "$DST")"
+          cp "$SRC" "$DST"
+          chmod 755 "$DST"
+          # Sanity: sub-package version must match the release tag
+          # (and the main package's optionalDependencies pin).
+          SUBVER=$(node -p "require('./packages/thin-gate-linux-x64-gnu/package.json').version")
+          if [ "$SUBVER" != "$VERSION" ]; then
+            echo "::error::sub-package version $SUBVER does not match release tag $VERSION"
+            exit 1
+          fi
+          # Report final size for CI-log observability.
+          ls -lh "$DST"
+
+      # Publish order matters: sub-package first, then main. If the
+      # main package published before its optional dependency exists
+      # on the registry, consumers installing main immediately after
+      # publish would see the optional dep fail to resolve (silently,
+      # since optionalDependencies don't block install).
+      #
+      # `--provenance` produces a verifiable supply-chain attestation
+      # via GitHub OIDC. npmjs.org surfaces the badge on the package
+      # page. Requires `permissions.id-token: write` above.
+      - name: Publish thin-gate sub-package
+        run: npm publish --provenance
+        working-directory: packages/thin-gate-linux-x64-gnu
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main mohdel package
+        run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

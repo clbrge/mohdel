@@ -1,0 +1,73 @@
+{
+  "envelope-minimal": {
+    "callId": "i1",
+    "authId": "a1",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-image-1",
+    "prompt": "A red sphere."
+  },
+  "envelope-full": {
+    "callId": "i2",
+    "authId": "a2",
+    "auth": {
+      "key": "sk-test"
+    },
+    "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01",
+    "baggage": "user=a2",
+    "model": "novita/sd-xl-1.0",
+    "prompt": "A red sphere on a blue background.",
+    "size": "1024x1024",
+    "seed": 42
+  },
+  "result-url-only": {
+    "status": "completed",
+    "images": [
+      {
+        "mimeType": "image/png",
+        "url": "https://cdn.example/abc.png"
+      }
+    ],
+    "seed": 42,
+    "timestamps": {
+      "start": "1000000000",
+      "first": "3000000000",
+      "end": "3000000000"
+    }
+  },
+  "result-base64-only": {
+    "status": "completed",
+    "images": [
+      {
+        "mimeType": "image/png",
+        "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8AAAAMBAQAY3Y2wAAAAAElFTkSuQmCC"
+      }
+    ],
+    "seed": null,
+    "timestamps": {
+      "start": "0",
+      "first": "100",
+      "end": "100"
+    }
+  },
+  "result-multi-image": {
+    "status": "completed",
+    "images": [
+      {
+        "mimeType": "image/png",
+        "url": "https://cdn.example/a.png"
+      },
+      {
+        "mimeType": "image/png",
+        "url": "https://cdn.example/b.png"
+      }
+    ],
+    "seed": null,
+    "timestamps": {
+      "start": "0",
+      "first": "1",
+      "end": "1"
+    }
+  }
+}

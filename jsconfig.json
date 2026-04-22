@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "target": "es2022",
+    "checkJs": false,
+    "baseUrl": ".",
+    "paths": {
+      "$src/*": ["src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist"]
+}

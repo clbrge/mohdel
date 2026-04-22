@@ -1,0 +1,163 @@
+{
+  "delta-message": {
+    "type": "delta",
+    "delta": { "type": "message", "delta": "Hello, world." }
+  },
+  "delta-function_call": {
+    "type": "delta",
+    "delta": { "type": "function_call", "delta": "{\"city\":\"" }
+  },
+  "done-completed": {
+    "type": "done",
+    "result": {
+      "status": "completed",
+      "output": "Hello, world.",
+      "inputTokens": 10,
+      "outputTokens": 3,
+      "thinkingTokens": 0,
+      "cost": 0.00042,
+      "timestamps": { "start": "1000000000", "first": "1050000000", "end": "1200000000" }
+    }
+  },
+  "done-completed-with-thinking": {
+    "type": "done",
+    "result": {
+      "status": "completed",
+      "output": "42",
+      "inputTokens": 8,
+      "outputTokens": 2,
+      "thinkingTokens": 1200,
+      "cost": 0.0032,
+      "timestamps": { "start": "1000", "first": "1050", "end": "2000" }
+    }
+  },
+  "done-incomplete-budget": {
+    "type": "done",
+    "result": {
+      "status": "incomplete",
+      "output": "...truncated",
+      "inputTokens": 10,
+      "outputTokens": 1024,
+      "thinkingTokens": 50,
+      "cost": 0.005,
+      "timestamps": { "start": "1000", "first": "1050", "end": "2000" },
+      "warning": "insufficientOutputBudget"
+    }
+  },
+  "done-incomplete-cancelled": {
+    "type": "done",
+    "result": {
+      "status": "incomplete",
+      "output": null,
+      "inputTokens": 5,
+      "outputTokens": 0,
+      "thinkingTokens": 0,
+      "cost": 0.0,
+      "timestamps": { "start": "1000", "first": "1050", "end": "1100" },
+      "warning": "cancelled"
+    }
+  },
+  "done-tool_use": {
+    "type": "done",
+    "result": {
+      "status": "tool_use",
+      "output": null,
+      "inputTokens": 12,
+      "outputTokens": 30,
+      "thinkingTokens": 0,
+      "cost": 0.002,
+      "timestamps": { "start": "1000", "first": "1050", "end": "1500" },
+      "toolCalls": [
+        { "id": "t1", "name": "weather", "arguments": { "city": "Paris" } }
+      ]
+    }
+  },
+  "done-tool_use-multi": {
+    "type": "done",
+    "result": {
+      "status": "tool_use",
+      "output": "let me look those up",
+      "inputTokens": 30,
+      "outputTokens": 80,
+      "thinkingTokens": 0,
+      "cost": 0.0041,
+      "timestamps": { "start": "1000", "first": "1050", "end": "2500" },
+      "toolCalls": [
+        { "id": "t1", "name": "weather", "arguments": { "city": "Paris" } },
+        { "id": "t2", "name": "time", "arguments": { "zone": "Europe/Paris" } }
+      ]
+    }
+  },
+  "error-cooldown": {
+    "type": "error",
+    "error": {
+      "message": "rate limit exceeded",
+      "severity": "warn",
+      "retryable": true,
+      "type": "PROVIDER_COOLDOWN"
+    }
+  },
+  "error-auth": {
+    "type": "error",
+    "error": {
+      "message": "authentication failed",
+      "detail": "key invalid",
+      "severity": "error",
+      "retryable": false,
+      "type": "AUTH_INVALID"
+    }
+  },
+  "error-fatal-session-died": {
+    "type": "error",
+    "error": {
+      "message": "session subprocess exited mid-call",
+      "severity": "error",
+      "retryable": true,
+      "type": "SESSION_DIED"
+    }
+  },
+  "error-no-type": {
+    "type": "error",
+    "error": {
+      "message": "unclassified failure",
+      "severity": "warn",
+      "retryable": false
+    }
+  },
+  "error-severity-trace": {
+    "type": "error",
+    "error": {
+      "message": "trace-level diagnostic",
+      "severity": "trace",
+      "retryable": false,
+      "type": "DIAGNOSTIC"
+    }
+  },
+  "error-severity-debug": {
+    "type": "error",
+    "error": {
+      "message": "debug-level diagnostic",
+      "severity": "debug",
+      "retryable": false,
+      "type": "DIAGNOSTIC"
+    }
+  },
+  "error-severity-info": {
+    "type": "error",
+    "error": {
+      "message": "advisory notice",
+      "severity": "info",
+      "retryable": false,
+      "type": "ADVISORY"
+    }
+  },
+  "error-severity-fatal": {
+    "type": "error",
+    "error": {
+      "message": "unrecoverable failure",
+      "severity": "fatal",
+      "retryable": false,
+      "type": "SESSION_POOL_CLOSED"
+    }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "name": "mohdel",
+  "version": "0.89.0",
+  "license": "MIT",
+  "author": {
+    "name": "Christophe Le Bars",
+    "email": "clb@toort.net"
+  },
+  "description": "Self-hosted LLM gateway with an embeddable SDK. Process-isolated, OpenTelemetry-native inference across 11 providers — streaming, tools, thinking control — without orchestration. Use the Node factory in-process, or run thin-gate for fault isolation and any-language HTTP callers.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clbrge/mohdel.git"
+  },
+  "homepage": "https://github.com/clbrge/mohdel#readme",
+  "bugs": {
+    "url": "https://github.com/clbrge/mohdel/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "src/lib/index.js",
+  "exports": {
+    ".": "./src/lib/index.js",
+    "./providers": "./src/lib/providers.js",
+    "./creators": "./src/lib/creators.js",
+    "./utils": "./src/lib/utils.js",
+    "./errors": "./src/lib/errors.js",
+    "./client": "./js/client/index.js",
+    "./session": "./js/session/index.js",
+    "./session/bin": "./js/session/bin.js"
+  },
+  "imports": {
+    "#core": "./js/core/index.js",
+    "#core/*": "./js/core/*"
+  },
+  "bin": {
+    "mo": "./src/cli/index.js"
+  },
+  "files": [
+    "js",
+    "src/lib",
+    "src/cli",
+    "config",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "lint": "standard",
+    "test": "vitest run test/unit",
+    "prerelease": "npm run lint && npm run test",
+    "release": "release-it",
+    "test:provider": "vitest run test/integration/provider.test.js",
+    "test:multiturn": "vitest run test/integration/multiturn.test.js",
+    "test:vision": "vitest run test/integration/vision.test.js",
+    "test:live": "vitest run test/live"
+  },
+  "release-it": {
+    "hooks": {
+      "after:bump": "node scripts/sync-version.js"
+    },
+    "git": {
+      "commitMessage": "release: v${version}",
+      "requireUpstream": false,
+      "tagName": "v${version}",
+      "push": true
+    },
+    "npm": {
+      "publish": false
+    },
+    "github": {
+      "release": false
+    }
+  },
+  "optionalDependencies": {
+    "@clack/prompts": "^1.2.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.215.0",
+    "@opentelemetry/sdk-node": "^0.215.0",
+    "chalk": "^5.4.0",
+    "mohdel-thin-gate-linux-x64-gnu": "0.89.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "@cerebras/cerebras_cloud_sdk": "^1.61.1",
+    "@google/genai": "^1.50.1",
+    "@opentelemetry/api": "^1.9.1",
+    "env-paths": "^4.0.0",
+    "groq-sdk": "^1.1.2",
+    "openai": "^6.34.0"
+  },
+  "lint-staged": {
+    "*.{js,cjs}": "standard"
+  },
+  "devDependencies": {
+    "lint-staged": "^16.4.0",
+    "release-it": "^20.0.0",
+    "standard": "^17.1.2",
+    "vitest": "^4.1.5"
+  }
+}

@@ -1,0 +1,7 @@
+cerebras/gpt-oss-120b~low
+cerebras/gpt-oss-120b
+openai/gpt-5-nano
+gemini/gemini-2.5-flash
+gemini/gemini-2.5-flash-lite
+xai/grok-4-fast-non-reasoning
+openai/gpt-5-mini

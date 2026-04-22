@@ -74,7 +74,9 @@
       "publish": false
     },
     "github": {
-      "release": true
+      "release": true,
+      "releaseName": "mohdel v${version}",
+      "releaseNotes": "awk '/^## \\[${version}\\]/{flag=1;next}/^## \\[/{flag=0}flag' CHANGELOG.md"
     }
   },
   "optionalDependencies": {

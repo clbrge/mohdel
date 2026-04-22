@@ -22,11 +22,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Rust integration tests (rust/thin-gate/tests/session_dispatch.rs)
+      # spawn the JS session subprocess, which imports `env-paths` et
+      # al. from node_modules. Install Node deps before cargo test so
+      # the subprocess resolves them.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
       # Compile-check the embedder example. A future refactor that
-      # removes something embedders depend on (spore-gate, custom
+      # removes something embedders depend on (custom supervisors,
       # wrappers) fails here at PR time rather than in the consuming
       # repo.
       - run: cargo build --example embedder -p mohdel-thin-gate

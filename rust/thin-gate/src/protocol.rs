@@ -266,6 +266,8 @@ pub struct AnswerResult {
     pub warning: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_inter_frame_ms: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

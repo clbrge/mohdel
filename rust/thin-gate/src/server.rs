@@ -1074,6 +1074,7 @@ fn synthetic_events() -> Vec<Event> {
                 },
                 warning: None,
                 tool_calls: None,
+                max_inter_frame_ms: None,
             },
         },
     ]
@@ -1204,6 +1205,7 @@ mod tests {
             },
             warning: warning.map(|w| w.to_string()),
             tool_calls: None,
+            max_inter_frame_ms: None,
         }
     }
 

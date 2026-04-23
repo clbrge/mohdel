@@ -220,6 +220,9 @@ interface AnswerResult {
     name:      string
     arguments: object                    // parsed — not a JSON string
   }>
+  maxInterFrameMs?: number               // longest gap (ms) between adapter events
+                                         // in this call: startedAt→first frame,
+                                         // between consecutive frames, last frame→terminal
 }
 ```
 

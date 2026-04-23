@@ -4,6 +4,40 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.92.0] — Catalog CLI rebuild, streaming-health metric
+
+### Fixed
+
+- **`mo curate` was broken.** The CLI browser loaded provider
+  wrappers from `src/lib/sdk/*.js` — files deleted during the 0.90
+  public release. Plain `fetch()` against each provider's `/models`
+  endpoint, no extra SDK dependency. Inference adapters in
+  `js/session/adapters/` are untouched.
+- **Fireworks curated entries kept the `accounts/fireworks/models/`
+  prefix.** The runtime adapter prepends it on call, so curated IDs
+  should stay short. `catalog/fireworks.js` now strips the prefix in
+  both `listModels` and `getModelInfo`, matching existing
+  `fireworks/<short-id>` catalog entries.
+
+### Added
+
+- **Creator selector `Other…` escape hatch.** `promptMissingFields`
+  now appends an `Other… (enter a name)` option to the closed
+  `clack.select`, falling through to a free-text prompt. Unblocks
+  multi-creator hosts (Fireworks, OpenRouter, Novita, Cerebras)
+  without needing to widen every provider's hardcoded `creators`
+  list.
+- **`AnswerResult.maxInterFrameMs`.** The longest gap (ms) between
+  adapter events within a call — from `startedAt` to the first
+  frame, between consecutive frames, and from the last frame to the
+  terminal. Surfaced on the `done` result and on spans as
+  `mohdel.max_inter_frame_ms`. Direct signal for calibrating
+  host-side idle-watchdog timeouts: a 15-min call streaming deltas
+  every 30s is safe; a 5-min call with zero intermediate frames is
+  dangerous.
+
+[0.92.0]: https://github.com/clbrge/mohdel/releases/tag/v0.92.0
+
 ## [0.91.0] — Session-pool catalog refresh
 
 ### Fixed

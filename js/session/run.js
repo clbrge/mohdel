@@ -141,9 +141,33 @@ export async function * run (envelope, {
   }
 
   let sawTerminal = false
+  // Track whether the adapter emitted any `delta` events during the
+  // call. Recorded as `mohdel.stream` on the span at finalize time —
+  // a non-streaming terminal (adapter fell back to wait-for-done, or
+  // the provider SDK collapsed stream events) is a hazard for any
+  // host-side read-timeout watchdog and shows up in traces before
+  // it turns into an abort downstream.
+  let sawDelta = false
+  // Track the longest gap between adapter events within this call —
+  // from `startedAt` to the first frame, between consecutive frames,
+  // and from the last frame to the terminal. A direct signal for any
+  // host-side read-timeout watchdog: a 15-min call that streams
+  // deltas every 30s is safe; a 5-min call with zero intermediate
+  // frames is dangerous. Surfaced on `AnswerResult.maxInterFrameMs`
+  // and the span's `mohdel.max_inter_frame_ms` attribute so hosts
+  // can aggregate it for adaptive-timeout calibration.
+  let lastFrameAt = startedAt
+  let maxInterFrameMs = 0
   try {
     for await (const ev of adapter(envelope, { signal, log, span })) {
-      if (ev.type === 'done') {
+      const now = Date.now()
+      const gap = now - lastFrameAt
+      if (gap > maxInterFrameMs) maxInterFrameMs = gap
+      lastFrameAt = now
+
+      if (ev.type === 'delta') {
+        sawDelta = true
+      } else if (ev.type === 'done') {
         sawTerminal = true
         // A cancelled terminal is the caller's action, not evidence
         // of provider recovery — don't wipe an accumulated failure
@@ -160,7 +184,11 @@ export async function * run (envelope, {
             (ev.result.thinkingTokens || 0)
           if (total > 0) limiter.recordTokens(bucketKey, total)
         }
-        finalizeSpanOk(span, ev.result)
+        // Surface on AnswerResult so hosts that pass the whole
+        // result upstream pick it up without needing a separate
+        // wire field.
+        if (ev.result) ev.result.maxInterFrameMs = maxInterFrameMs
+        finalizeSpanOk(span, ev.result, sawDelta, maxInterFrameMs)
         log.debug(summarizeDone(ev.result, startedAt), '[mohdel:answer] done')
       } else if (ev.type === 'error') {
         sawTerminal = true
@@ -168,7 +196,8 @@ export async function * run (envelope, {
         log.warn({
           err: ev.error,
           provider: envelope.provider,
-          totalMs: Date.now() - startedAt
+          totalMs: Date.now() - startedAt,
+          maxInterFrameMs
         }, '[mohdel:answer] failed')
         endSpanError(span, new Error(ev.error?.message || 'adapter error'))
       }
@@ -177,11 +206,12 @@ export async function * run (envelope, {
   } catch (e) {
     if (signal?.aborted && !sawTerminal) {
       const fallback = cancelledFallback()
-      finalizeSpanOk(span, fallback.result)
+      if (fallback.result) fallback.result.maxInterFrameMs = maxInterFrameMs
+      finalizeSpanOk(span, fallback.result, sawDelta, maxInterFrameMs)
       yield fallback
       return
     }
-    log.warn({ err: e, provider: envelope.provider }, '[mohdel:answer] adapter threw')
+    log.warn({ err: e, provider: envelope.provider, maxInterFrameMs }, '[mohdel:answer] adapter threw')
     endSpanError(span, e)
     yield errorEvent(messageOf(e), 'SESSION_ADAPTER_THREW')
     return
@@ -190,11 +220,12 @@ export async function * run (envelope, {
   if (!sawTerminal) {
     if (signal?.aborted) {
       const fallback = cancelledFallback()
-      finalizeSpanOk(span, fallback.result)
+      if (fallback.result) fallback.result.maxInterFrameMs = maxInterFrameMs
+      finalizeSpanOk(span, fallback.result, sawDelta, maxInterFrameMs)
       yield fallback
     } else {
       const err = 'adapter returned without a terminal event'
-      log.error({ provider: envelope.provider }, '[mohdel:answer] no terminal event')
+      log.error({ provider: envelope.provider, maxInterFrameMs }, '[mohdel:answer] no terminal event')
       endSpanError(span, new Error(err))
       yield errorEvent(err, 'SESSION_ADAPTER_NO_TERMINAL')
     }
@@ -288,14 +319,25 @@ function scopedLogger (logger, envelope, span) {
 /**
  * @param {any} span
  * @param {any} result
+ * @param {boolean} sawDelta  Whether the adapter emitted at least one
+ *   `delta` event during the call. Surfaces as `mohdel.stream` on the
+ *   span so traces can flag calls that completed without streaming —
+ *   a non-streaming long-running call is invisible to upstream idle
+ *   watchdogs until the terminal lands.
+ * @param {number} maxInterFrameMs  Longest gap between adapter events
+ *   during the call (including pre-first-frame and post-last-frame).
+ *   Surfaces as `mohdel.max_inter_frame_ms` so downstream timeout
+ *   calibration has a direct signal independent of total elapsed.
  */
-function finalizeSpanOk (span, result) {
+function finalizeSpanOk (span, result, sawDelta = false, maxInterFrameMs = 0) {
   /** @type {Record<string, any>} */
   const attrs = {
     'gen_ai.usage.input_tokens': result?.inputTokens || 0,
     'gen_ai.usage.output_tokens': result?.outputTokens || 0,
     'mohdel.thinking_tokens': result?.thinkingTokens || 0,
-    'mohdel.status': result?.status || 'unknown'
+    'mohdel.status': result?.status || 'unknown',
+    'mohdel.stream': !!sawDelta,
+    'mohdel.max_inter_frame_ms': maxInterFrameMs
   }
   if (result?.cost != null) attrs['mohdel.cost'] = result.cost
   if (result?.warning) attrs['mohdel.warning'] = result.warning
@@ -323,7 +365,8 @@ function summarizeDone (result, startedAt) {
     think: result?.thinkingTokens || 0,
     cost: result?.cost,
     warning: result?.warning,
-    totalMs: Date.now() - startedAt
+    totalMs: Date.now() - startedAt,
+    maxInterFrameMs: result?.maxInterFrameMs
   }
 }
 

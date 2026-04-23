@@ -37,11 +37,9 @@ export const initializeAPIs = async () => {
       // Create configuration
       const sdkConfig = config.createConfiguration(apiKey)
 
-      // Import the SDK module dynamically
-      const sdkPath = `./sdk/${config.sdk}.js`
+      const sdkPath = `./catalog/${config.sdk}.js`
       const { default: API } = await import(sdkPath)
 
-      // Initialize the provider with the configuration, no specs
       api[name] = API(sdkConfig, {}, silent)
       providersWithKeys.push(name)
     } catch (err) {
@@ -195,10 +193,22 @@ export const promptMissingFields = async (entry, curatedKey) => {
     } else {
       const creatorVal = await clack.select({
         message: `Creator for ${curatedKey}:`,
-        options: creatorsList.map(c => ({ value: c, label: c }))
+        options: [
+          ...creatorsList.map(c => ({ value: c, label: c })),
+          { value: '__other', label: 'Other… (enter a name)' }
+        ]
       })
       if (clack.isCancel(creatorVal)) return entry
-      entry.creator = creatorVal
+      if (creatorVal === '__other') {
+        const custom = await clack.text({
+          message: `New creator name for ${curatedKey}:`,
+          validate: (v) => v?.trim() ? undefined : 'Creator is required'
+        })
+        if (clack.isCancel(custom)) return entry
+        entry.creator = custom.trim()
+      } else {
+        entry.creator = creatorVal
+      }
     }
   }
 

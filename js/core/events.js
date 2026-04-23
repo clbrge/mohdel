@@ -64,6 +64,13 @@
  *   `'insufficientOutputBudget' | 'cancelled' | ...` additive union.
  * @property {ToolCall[]} [toolCalls]
  *   Present when `status === 'tool_use'`.
+ * @property {number} [maxInterFrameMs]
+ *   Longest gap (ms) between adapter events during the call —
+ *   from `startedAt` to the first frame, between consecutive
+ *   frames, and from the last frame to the terminal. Direct signal
+ *   for calibrating downstream read timeouts: a 15-min call that
+ *   streams deltas every 30s is safe; a 5-min call with zero
+ *   intermediate frames is dangerous.
  */
 
 /**

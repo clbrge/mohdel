@@ -35,7 +35,7 @@
     "#core/*": "./js/core/*"
   },
   "bin": {
-    "mo": "./src/cli/index.js"
+    "mo": "src/cli/index.js"
   },
   "files": [
     "js",

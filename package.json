@@ -52,7 +52,9 @@
   },
   "scripts": {
     "lint": "standard",
-    "test": "vitest run test/unit",
+    "test": "npm run test:js && npm run test:rust",
+    "test:js": "vitest run test/unit",
+    "test:rust": "cargo test --manifest-path rust/thin-gate/Cargo.toml && cargo test --manifest-path rust/napi-addon/Cargo.toml",
     "prerelease": "npm run lint && npm run test",
     "release": "release-it",
     "test:provider": "vitest run test/integration/provider.test.js",

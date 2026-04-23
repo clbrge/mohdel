@@ -21,7 +21,7 @@ fn non_ponging_session() -> SessionConfig {
 #[tokio::test]
 async fn readiness_ping_times_out_when_session_never_ponges() {
     let cfg = non_ponging_session();
-    let result = PooledSession::spawn_and_ready(&cfg, Duration::from_millis(300)).await;
+    let result = PooledSession::spawn_and_ready(&cfg, Duration::from_millis(300), 0).await;
     match result {
         Err(PoolError::ReadinessTimeout(d)) => assert_eq!(d, Duration::from_millis(300)),
         Err(other) => panic!("expected ReadinessTimeout, got {other:?}"),
@@ -39,7 +39,7 @@ async fn readiness_fails_when_session_emits_garbage_instead_of_pong() {
         ],
         catalog: None,
     };
-    let result = PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT).await;
+    let result = PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT, 0).await;
     match result {
         Err(PoolError::ReadinessFailed(msg)) => {
             assert!(msg.contains("invalid") || msg.contains("unexpected"), "got: {msg}");
@@ -72,7 +72,7 @@ rl.on('line', (line) => {
         ],
         catalog: None,
     };
-    let sess = PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT)
+    let sess = PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT, 0)
         .await
         .expect("readiness should succeed");
     // If we got here the ping-pong handshake completed. Drop sess to

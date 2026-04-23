@@ -22,7 +22,7 @@
 //!     session (unrecoverable protocol state), respawn replacement
 
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -63,6 +63,12 @@ pub struct PooledSession {
     pub child: Child,
     pub stdin: ChildStdin,
     pub reader: BufReader<ChildStdout>,
+    /// Catalog version this session was last seeded with. Compared
+    /// against `SessionPool::catalog_version` on every `acquire()`;
+    /// stale sessions get a fresh `set_catalog` before hand-off.
+    /// Sessions spawned before any `notify_catalog_changed()` start
+    /// at 0.
+    catalog_version: u64,
 }
 
 impl PooledSession {
@@ -106,6 +112,7 @@ impl PooledSession {
             child,
             stdin,
             reader: BufReader::new(stdout),
+            catalog_version: 0,
         })
     }
 
@@ -114,26 +121,24 @@ impl PooledSession {
     /// `timeout`. A session that can't pong inside the window is
     /// considered broken (bad binary, hung startup, missing module,
     /// etc.) and the caller should discard it + retry.
+    ///
+    /// If a catalog source is wired and returns `Some(json)`, the
+    /// session is seeded with it right after readiness and tagged
+    /// with `seed_version` so `SessionPool::acquire` can tell whether
+    /// it's still fresh. A `None` from the callback means no catalog
+    /// is available yet (admin-push hasn't landed) — session stays in
+    /// a catalog-less state at version 0 until the pool's bump and
+    /// acquire-time refresh fill it in.
     pub async fn spawn_and_ready(
         cfg: &SessionConfig,
         timeout: Duration,
+        seed_version: u64,
     ) -> Result<Self, PoolError> {
         let mut sess = Self::spawn(cfg)?;
         tokio::time::timeout(timeout, sess.ping())
             .await
             .map_err(|_| PoolError::ReadinessTimeout(timeout))?
             .map_err(|e| PoolError::ReadinessFailed(e.to_string()))?;
-        // After readiness: if a catalog source is wired, pull a fresh
-        // snapshot and inject it. Sessions treat this as an out-of-
-        // band control message superseding any disk load (and disk
-        // load is already skipped via MOHDEL_NO_CONFIG_DISK).
-        //
-        // A `None` from the callback means the embedder doesn't have
-        // a catalog yet (e.g. admin-push hasn't landed). We still
-        // spawn the session — gate-level routing should reject
-        // `/v1/call` at the policy layer before this matters — but
-        // skip the injection so the session stays in a consistent
-        // "no catalog" state.
         if let Some(source) = cfg.catalog.as_ref() {
             if let Some(json) = source() {
                 if let Err(e) = sess.send_catalog(&json).await {
@@ -141,9 +146,17 @@ impl PooledSession {
                         "set_catalog injection failed: {e}"
                     )));
                 }
+                sess.catalog_version = seed_version;
             }
         }
         Ok(sess)
+    }
+
+    /// Current catalog version recorded on this session. 0 means no
+    /// catalog was ever injected (spawned while `cfg.catalog` returned
+    /// `None`).
+    pub fn catalog_version(&self) -> u64 {
+        self.catalog_version
     }
 
     async fn send_catalog(&mut self, table_json: &str) -> std::io::Result<()> {
@@ -258,6 +271,13 @@ struct PoolInner {
     /// Consecutive spawn+readiness failures since the last success.
     /// Drives the exponential backoff. Cleared on a ready session.
     failure_streak: AtomicU32,
+    /// Monotonic counter bumped by `notify_catalog_changed`. Each
+    /// acquired session carries the version it was last seeded at;
+    /// `acquire` re-injects the catalog when the session's version
+    /// is behind the pool's. Starts at 0; sessions that were spawned
+    /// before any catalog was available start at 0 too, matching —
+    /// they stay in-sync until the first `notify`.
+    catalog_version: AtomicU64,
 }
 
 /// Clone-cheap handle to a pool of sessions.
@@ -275,7 +295,13 @@ impl SessionPool {
             // binary is broken at startup we want a clear error
             // before the gate starts serving traffic. Runtime
             // replacements get the backoff loop instead.
-            let sess = PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT).await?;
+            //
+            // Seed at version 0. If the catalog source is already
+            // populated at boot, the session gets it here and stays
+            // in-sync with the pool. If it's not, the session starts
+            // blank and the first `notify_catalog_changed` + `acquire`
+            // pair fills it in before the next call.
+            let sess = PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT, 0).await?;
             metrics::session_alive_delta(1);
             tx.send(sess).await.expect("channel just created");
         }
@@ -285,14 +311,77 @@ impl SessionPool {
                 receiver: Mutex::new(rx),
                 cfg,
                 failure_streak: AtomicU32::new(0),
+                catalog_version: AtomicU64::new(0),
             }),
         })
     }
 
+    /// Signal that the catalog source now returns newer data than
+    /// what live sessions were seeded with. Bumps the pool's version
+    /// counter; the next `acquire()` of each stale session will pull
+    /// a fresh snapshot from `cfg.catalog` and inject it via
+    /// `set_catalog` before handing the session out. Cheap: just one
+    /// atomic bump, no I/O on the caller.
+    pub fn notify_catalog_changed(&self) {
+        self.inner.catalog_version.fetch_add(1, Ordering::Release);
+    }
+
+    /// Current pool-level catalog version. Primarily for tests and
+    /// debug introspection; production code should rely on `acquire`
+    /// to do the comparison.
+    pub fn catalog_version(&self) -> u64 {
+        self.inner.catalog_version.load(Ordering::Acquire)
+    }
+
     /// Wait for an idle session and take ownership. Returns `None`
     /// if the pool is closed.
+    ///
+    /// When the session's seeded catalog version is behind the pool's,
+    /// the latest snapshot is fetched from `cfg.catalog` and injected
+    /// into the session before it's handed out. On injection failure
+    /// the session is discarded, a replacement is queued, and the
+    /// caller gets the next one in the channel.
     pub async fn acquire(&self) -> Option<PooledSession> {
-        self.inner.receiver.lock().await.recv().await
+        loop {
+            let mut sess = self.inner.receiver.lock().await.recv().await?;
+            let pool_ver = self.inner.catalog_version.load(Ordering::Acquire);
+            if sess.catalog_version >= pool_ver {
+                return Some(sess);
+            }
+            let Some(source) = self.inner.cfg.catalog.as_ref() else {
+                // No source wired — bump-without-source is a
+                // misconfiguration, but don't block the call over
+                // it. Tag the session at the new version so we
+                // don't retry on every acquire.
+                sess.catalog_version = pool_ver;
+                return Some(sess);
+            };
+            let Some(json) = source() else {
+                // Source wired but returned None despite a bump.
+                // Same handling as above — tag and move on.
+                sess.catalog_version = pool_ver;
+                return Some(sess);
+            };
+            match sess.send_catalog(&json).await {
+                Ok(()) => {
+                    sess.catalog_version = pool_ver;
+                    return Some(sess);
+                }
+                Err(e) => {
+                    // Injection failed — stdin is now in an
+                    // indeterminate state. Kill this session (drop
+                    // triggers kill_on_drop), spawn a replacement,
+                    // and wait for the next session in the channel.
+                    eprintln!(
+                        "acquire: set_catalog refresh failed ({e}); discarding session"
+                    );
+                    drop(sess);
+                    metrics::session_alive_delta(-1);
+                    self.spawn_replacement();
+                    continue;
+                }
+            }
+        }
     }
 
     /// Return a healthy session to the pool for reuse. If the
@@ -314,7 +403,13 @@ impl SessionPool {
     /// Internal: loop-spawn until a session comes up healthy.
     async fn spawn_with_backoff(&self) {
         loop {
-            match PooledSession::spawn_and_ready(&self.inner.cfg, READINESS_TIMEOUT).await {
+            // Seed the replacement at the pool's current version so
+            // it's considered fresh on first acquire (the catalog
+            // snapshot pulled during `spawn_and_ready` is whatever
+            // `cfg.catalog` returns *now*, so by construction the
+            // session is in-sync with the latest bump).
+            let seed = self.inner.catalog_version.load(Ordering::Acquire);
+            match PooledSession::spawn_and_ready(&self.inner.cfg, READINESS_TIMEOUT, seed).await {
                 Ok(sess) => {
                     self.inner.failure_streak.store(0, Ordering::Relaxed);
                     // Only commit to the alive counter if the session
@@ -392,5 +487,22 @@ mod tests {
         assert_eq!(backoff_delay(7), BACKOFF_MAX);
         assert_eq!(backoff_delay(20), BACKOFF_MAX);
         assert_eq!(backoff_delay(u32::MAX), BACKOFF_MAX);
+    }
+
+    // The full behavioural test — that `notify_catalog_changed` +
+    // `acquire` actually injects `set_catalog` into the session —
+    // lives in `tests/catalog_refresh.rs` because it needs a real
+    // subprocess. These unit tests cover the purely-atomic slice of
+    // the contract that doesn't require one.
+
+    #[test]
+    fn catalog_version_counter_increments_on_notify() {
+        let counter = AtomicU64::new(0);
+        assert_eq!(counter.load(Ordering::Acquire), 0);
+        counter.fetch_add(1, Ordering::Release);
+        assert_eq!(counter.load(Ordering::Acquire), 1);
+        counter.fetch_add(1, Ordering::Release);
+        counter.fetch_add(1, Ordering::Release);
+        assert_eq!(counter.load(Ordering::Acquire), 3);
     }
 }

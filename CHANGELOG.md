@@ -4,6 +4,48 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.91.0] — Session-pool catalog refresh
+
+### Fixed
+
+- **Session pool sessions stayed catalog-less after a late admin
+  push.** `SessionPool` pulled the `CatalogSource` snapshot exactly
+  once per session — at spawn. When the host application populated
+  its catalog *after* pool init (the normal order when catalog data
+  arrives over a separate admin channel), all pre-spawned sessions
+  kept running without one. Adapters then returned `cost: 0` on every
+  call because `costFor(model, usage)` had no spec to price against.
+  Sessions only picked up the catalog after a crash + respawn.
+
+### Added
+
+- **`SessionPool::notify_catalog_changed()`** — atomic version bump
+  the host calls when a fresh catalog snapshot becomes available.
+  O(1), no I/O on the caller.
+- **Acquire-time catalog refresh.** `SessionPool::acquire()` now
+  compares the pool's version to the session's seeded version; stale
+  sessions get a fresh `set_catalog` injected before hand-off. On
+  injection failure the session is discarded and a replacement is
+  queued; the caller gets the next idle one.
+- **`PooledSession::catalog_version()`** getter for introspection and
+  testing. Sessions spawned while `CatalogSource` returned `None`
+  start at version 0 and catch up on the first acquire after a bump.
+- **Breaking:** `PooledSession::spawn_and_ready` signature gained a
+  `seed_version: u64` parameter. Hosts that build their own pool
+  wrappers must pass the current pool version (0 for fresh pools).
+
+### Tests
+
+- `tests/catalog_refresh.rs` — 6 integration tests covering the
+  catalog-less-at-spawn case, notify-triggered injection, idempotent
+  repeat acquires, collapsed multi-notify snapshots, and replacement
+  version seeding.
+- `npm test` now runs both JS (`vitest run test/unit`) and Rust
+  (`cargo test` across `rust/thin-gate` and `rust/napi-addon`) so a
+  Rust-only regression blocks release via the `prerelease` hook.
+
+[0.91.0]: https://github.com/clbrge/mohdel/releases/tag/v0.91.0
+
 ## [0.90.0] — Initial public release
 
 First public release on npm.

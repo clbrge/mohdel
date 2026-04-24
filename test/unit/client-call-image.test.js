@@ -32,8 +32,7 @@ function envelope (overrides = {}) {
     callId: 'i1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'openai',
-    model: 'gpt-image-1',
+    model: 'openai/gpt-image-1',
     prompt: 'red sphere',
     ...overrides
   }

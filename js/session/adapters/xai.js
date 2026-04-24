@@ -1,7 +1,7 @@
 /**
  * xAI adapter — OpenAI Responses API over x.ai/v1. Delegates to the
  * `openai` adapter with a baseURL-configured client; the openai
- * adapter branches on `envelope.provider === 'openai'` for fields
+ * adapter branches on `providerOf(envelope.model) === 'openai'` for fields
  * that differ between vendors (reasoning param, safety_identifier).
  *
  * @module session/adapters/xai

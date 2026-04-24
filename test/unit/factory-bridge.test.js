@@ -3,7 +3,10 @@ import { describe, test, expect, beforeEach } from 'vitest'
 import { runAnswer, runAnswerImage } from '../../js/factory/bridge.js'
 import { createCooldownTracker } from '../../js/session/_cooldown.js'
 import { createRateLimiter } from '../../js/session/_rate_limiter.js'
+import { setCatalog } from '../../js/session/adapters/_catalog.js'
 import { MohdelError } from '../../src/lib/errors.js'
+
+beforeEach(() => setCatalog({ 'echo/m': {} }))
 
 function freshDeps () {
   return {

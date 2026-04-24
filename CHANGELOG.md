@@ -4,6 +4,58 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.94.0] — Model-id unification; catalog guard; adapter wire-string fix
+
+### Breaking
+
+- **`CallEnvelope` and `ImageEnvelope` drop the `provider` field.**
+  The `model` field is now the full mohdel id
+  `"<provider>/<bare>[:<effort>]"` — same shape on the wire and
+  in-process. PROTOCOL §3 already described this wire shape; the
+  in-process struct now matches it. `normalize_routing` is removed;
+  `split_model_id`, `provider_of`, `catalog_key` replace it as
+  per-call helpers on the string. Embedders that read
+  `envelope.provider` directly must switch to `provider_of(&env.model)`
+  (Rust) or `providerOf(envelope.model)` (JS).
+- **`RouteDecision` drops `provider`.** Only `model_id` remains for
+  routing; provider is derived from it downstream.
+- Mirror helpers exported on the JS side in a new `#core/model-id`
+  module: `providerOf`, `bareOf`, `catalogKey`, `effortOf`,
+  `parseModelId`. The `ModelId` branded string type keeps
+  validation honest at the boundary without runtime cost.
+
+### Fixed
+
+- **`cost=0` for models where the catalog id differs from the SDK
+  wire string.** The Anthropic / OpenAI / Gemini / chat-completions
+  / image adapters were building the provider HTTP body with
+  `envelope.model` *and* looking up pricing with the same value. For
+  models like `anthropic/claude-haiku-4-5` whose catalog entry
+  carries `spec.model: "claude-haiku-4-5-20251001"` (a dated provider
+  string), the HTTP body was right but the pricing key was wrong —
+  so `getSpec` missed and `costFor` returned 0 silently. Adapters
+  now read `spec.model` for the wire body and `catalogKey(envelope.model)`
+  for the spec lookup; the two concerns can diverge without drift.
+- **Silent fallback when the catalog has no entry for the requested
+  model.** `session/run.js` now hard-fails with
+  `SESSION_UNKNOWN_MODEL` before any provider call, instead of
+  proceeding with `spec?.rpmLimit` / `spec?.outputTokenLimit` /
+  `costFor(...)` all optional-chaining into defaults. This catches
+  upstream misconfiguration (catalog-push failure, rewritten
+  `env.model` that no longer matches the pushed table) at the first
+  call instead of leaking into production as wrong billing.
+
+### Changed
+
+- **Adapter `request.model` now uses `spec.model ?? bareOf(envelope.model)`.**
+  The catalog's `spec.model` is the SDK wire string, used for the
+  HTTP body only; it no longer double-serves as a catalog key.
+- **Route policies pass `env.model` through unchanged** instead of
+  rewriting it to `spec.model`. Aliasing, if still needed, must
+  happen by rewriting the catalog key (the mohdel model id), never
+  by swapping in a wire string — that conflation is what caused the
+  cost regression.
+
 ## [0.93.0] — ToolCall.thoughtSignature round-trip
 
 ### Fixed
@@ -27,6 +79,7 @@ All notable changes to this project are documented here. Format follows
   Non-Gemini providers ignore the field. Callers replaying tool
   results should pass the ToolCall back unchanged.
 
+[0.94.0]: https://github.com/clbrge/mohdel/releases/tag/v0.94.0
 [0.93.0]: https://github.com/clbrge/mohdel/releases/tag/v0.93.0
 
 ## [0.92.0] — Catalog CLI rebuild, streaming-health metric

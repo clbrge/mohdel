@@ -13,6 +13,7 @@
 
 import { STATUS_INCOMPLETE, WARNING_CANCELLED } from '#core/status.js'
 import { costFor } from './_pricing.js'
+import { catalogKey } from '#core/model-id.js'
 
 /**
  * @param {string} start       hrtime-bigint-as-string at call entry
@@ -34,7 +35,7 @@ export function cancelledDone (start, first, envelope, output, inputTokens, outp
       outputTokens,
       thinkingTokens: 0,
       cost: costFor(
-        `${envelope.provider}/${envelope.model}`,
+        catalogKey(envelope.model),
         { inputTokens, outputTokens, thinkingTokens: 0 }
       ),
       timestamps: { start, first: first ?? end, end },

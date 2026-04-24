@@ -279,13 +279,13 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
     };
 
     let mut envelope: CallEnvelope = match serde_json::from_slice::<CallEnvelope>(&body) {
-        Ok(mut e) => {
-            if let Err(detail) = crate::protocol::normalize_routing(&mut e.provider, &mut e.model) {
+        Ok(e) => {
+            if crate::protocol::split_model_id(&e.model).is_none() {
                 return typed_error_response(
                     StatusCode::BAD_REQUEST,
                     Severity::Error,
                     "invalid envelope",
-                    &detail,
+                    &format!("model must be '<provider>/<id>' (got: {})", e.model),
                     "PROTOCOL_INVALID_ENVELOPE",
                     false,
                 );
@@ -334,7 +334,6 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
     // RoutePolicy: rewrite or reject before we touch quota/enforcer.
     match state.route.resolve(&envelope).await {
         Ok(decision) => {
-            envelope.provider = decision.provider;
             envelope.model = decision.model_id;
         }
         Err(e) => {
@@ -386,9 +385,10 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
     };
 
     // Enforcer: cooldown check first (cheap fast-fail), then rpm/tpm.
-    let cd_key = cooldown_key(&envelope.auth_id, &envelope.provider);
+    let provider = crate::protocol::provider_of(&envelope.model);
+    let cd_key = cooldown_key(&envelope.auth_id, provider);
     if let Some(info) = state.enforcer.cooldown.cooling_down(&cd_key) {
-        metrics::cooldown_rejected(&envelope.provider);
+        metrics::cooldown_rejected(provider);
         return stream_error(
             "provider in cooldown",
             Severity::Warn,
@@ -396,7 +396,7 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
             true,
             Some(format!(
                 "{} is in cooldown for {}s after {} consecutive failures ({})",
-                envelope.provider, info.seconds_left, info.fail_count, info.reason
+                provider, info.seconds_left, info.fail_count, info.reason
             )),
         );
     }
@@ -487,7 +487,7 @@ async fn dispatch_via_pool(
         pool,
         call_id: envelope.call_id.clone(),
         auth_id: envelope.auth_id.clone(),
-        provider: envelope.provider.clone(),
+        provider: crate::protocol::provider_of(&envelope.model).to_string(),
         spec,
         enforcer,
         stopped: false,
@@ -842,13 +842,13 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
     };
 
     let envelope: ImageEnvelope = match serde_json::from_slice::<ImageEnvelope>(&body) {
-        Ok(mut e) => {
-            if let Err(detail) = crate::protocol::normalize_routing(&mut e.provider, &mut e.model) {
+        Ok(e) => {
+            if crate::protocol::split_model_id(&e.model).is_none() {
                 return typed_error_response(
                     StatusCode::BAD_REQUEST,
                     Severity::Error,
                     "invalid envelope",
-                    &detail,
+                    &format!("model must be '<provider>/<id>' (got: {})", e.model),
                     "PROTOCOL_INVALID_ENVELOPE",
                     false,
                 );
@@ -1089,7 +1089,8 @@ fn synthetic_response(
     // the enforcer so behavior matches the pool dispatch flow (reset
     // cooldown, record tokens).
     let started = Instant::now();
-    let cd_key = cooldown_key(&envelope.auth_id, &envelope.provider);
+    let provider = crate::protocol::provider_of(&envelope.model);
+    let cd_key = cooldown_key(&envelope.auth_id, provider);
     enforcer.cooldown.reset(&cd_key);
     enforcer.rate.record_tokens(&envelope.auth_id, 8);
 
@@ -1102,7 +1103,7 @@ fn synthetic_response(
     let body = StreamBody::new(stream::iter(frames)).boxed();
 
     let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
-    metrics::record_call(&envelope.provider, "completed", elapsed_ms);
+    metrics::record_call(provider, "completed", elapsed_ms);
 
     Response::builder()
         .status(StatusCode::OK)

@@ -19,6 +19,7 @@
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { costFor } from './_pricing.js'
+import { catalogKey, bareOf } from '#core/model-id.js'
 import {
   STATUS_COMPLETED,
   STATUS_INCOMPLETE,
@@ -78,7 +79,7 @@ const DSML_PARAM_RE = /<\uFF5CDSML\uFF5Cparameter\s+name="([^"]+)"(?:\s+string="
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
 export async function * runChatCompletions (envelope, client, config, deps = {}) {
-  const spec = getSpec(`${envelope.provider}/${envelope.model}`) || {}
+  const spec = getSpec(catalogKey(envelope.model)) || {}
   const start = String(process.hrtime.bigint())
 
   const args = buildRequest(envelope, spec, config)
@@ -263,7 +264,7 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
       outputTokens: visibleOutputTokens,
       thinkingTokens,
       cost: costFor(
-        `${envelope.provider}/${envelope.model}`,
+        catalogKey(envelope.model),
         { inputTokens, outputTokens: visibleOutputTokens, thinkingTokens }
       ),
       timestamps: { start, first: first ?? end, end }
@@ -284,7 +285,7 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
 function buildRequest (envelope, spec, config) {
   /** @type {Record<string, any>} */
   const args = {
-    model: envelope.model,
+    model: spec?.model ?? bareOf(envelope.model),
     temperature: 0,
     messages: toChatMessages(envelope.prompt)
   }
@@ -319,7 +320,7 @@ function buildRequest (envelope, spec, config) {
         args.max_tokens += headroom
       }
       delete args.temperature
-      if (config.reasoningField === 'cerebras_zai' && /zai/i.test(envelope.model)) {
+      if (config.reasoningField === 'cerebras_zai' && /zai/i.test(bareOf(envelope.model))) {
         args.disable_reasoning = false
       } else {
         args.reasoning_effort = effort

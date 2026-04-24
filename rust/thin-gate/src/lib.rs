@@ -35,8 +35,8 @@ pub mod prelude {
         RequireInlineAuth, RouteDecision, RouteError, RoutePolicy,
     };
     pub use crate::protocol::{
-        normalize_routing, AnswerResult, Auth, CallEnvelope, Event, ImageEnvelope, ImageResult,
-        Severity, Status, TypedError,
+        catalog_key, provider_of, split_model_id, AnswerResult, Auth, CallEnvelope, Event,
+        ImageEnvelope, ImageResult, Severity, Status, TypedError,
     };
     pub use crate::server::{
         bind, handle_call, handle_image, health_handler, not_found_response,

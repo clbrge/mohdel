@@ -1,8 +1,11 @@
-import { describe, test, expect, vi, afterEach } from 'vitest'
+import { describe, test, expect, vi, afterEach, beforeEach } from 'vitest'
 
 import { run } from '../../js/session/run.js'
 import { createCooldownTracker } from '../../js/session/_cooldown.js'
 import { createRateLimiter } from '../../js/session/_rate_limiter.js'
+import { setCatalog } from '../../js/session/adapters/_catalog.js'
+
+beforeEach(() => setCatalog({ 'acme/fast': {}, 'acme/slow': {}, 'echo/m': {} }))
 
 /** @returns {import('#core/envelope.js').CallEnvelope} */
 function envelope (overrides = {}) {
@@ -10,8 +13,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'acme',
-    model: 'fast',
+    model: 'acme/fast',
     prompt: 'hi',
     ...overrides
   }
@@ -43,7 +45,7 @@ function defaultResult () {
   }
 }
 
-function fixtures ({ spec, providerLimits } = {}) {
+function fixtures ({ spec = {}, providerLimits } = {}) {
   return {
     resolveSpec: () => spec,
     resolveProviderLimits: () => providerLimits,
@@ -248,10 +250,10 @@ describe('session/run — rate-limit enforcement', () => {
 
   test('rateLimitScope=model uses provider/model bucket key', async () => {
     const fx = fixtures({ spec: { rpmLimit: 1, rateLimitScope: 'model' } })
-    await collect(run(envelope({ model: 'fast' }), {
+    await collect(run(envelope({ model: 'acme/fast' }), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => doneAdapter()
     }))
-    await collect(run(envelope({ model: 'slow' }), {
+    await collect(run(envelope({ model: 'acme/slow' }), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => doneAdapter()
     }))
     expect(fx.sleeps).toEqual([])
@@ -259,10 +261,10 @@ describe('session/run — rate-limit enforcement', () => {
 
   test('rateLimitScope=provider (default) uses provider bucket — shared across models', async () => {
     const fx = fixtures({ spec: { rpmLimit: 1 } })
-    await collect(run(envelope({ model: 'fast' }), {
+    await collect(run(envelope({ model: 'acme/fast' }), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => doneAdapter()
     }))
-    await collect(run(envelope({ model: 'slow' }), {
+    await collect(run(envelope({ model: 'acme/slow' }), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => doneAdapter()
     }))
     expect(fx.sleeps.length).toBe(1)

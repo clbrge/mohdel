@@ -217,8 +217,7 @@ describe('unknown-field parity', () => {
       callId: 'c',
       authId: 'a',
       auth: { key: 'k' },
-      provider: 'echo',
-      model: 'm',
+      model: 'echo/m',
       prompt: 'hi',
       futureField: 42
     }

@@ -10,7 +10,11 @@ pub trait RoutePolicy: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub struct RouteDecision {
-    pub provider: String,
+    /// Full mohdel id `<provider>/<bare>[:<effort>]`. If the router
+    /// chooses to rewrite the caller's model (aliasing, failover),
+    /// this is the new id; otherwise it's the caller's `env.model`
+    /// unchanged. Must be a valid full id — the provider part is
+    /// read from it via `protocol::provider_of` downstream.
     pub model_id: String,
     pub session_pool: Option<String>,
 }

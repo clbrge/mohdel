@@ -11,8 +11,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'openai',
-    model: 'dall-e-3',
+    model: 'openai/dall-e-3',
     prompt: 'a red cube',
     ...overrides
   }
@@ -20,7 +19,7 @@ function envelope (overrides = {}) {
 
 describe('runImage dispatch', () => {
   test('unknown provider yields SESSION_UNKNOWN_PROVIDER', async () => {
-    const out = await runImage(envelope({ provider: 'nonesuch' }))
+    const out = await runImage(envelope({ model: 'nonesuch/dall-e-3' }))
     expect(out.ok).toBe(false)
     expect(out.error.type).toBe('SESSION_UNKNOWN_PROVIDER')
   })
@@ -128,7 +127,7 @@ describe('novita image adapter', () => {
   test('missing imageEndpoint throws PROVIDER_ERROR', async () => {
     setCatalog({})
     await expect(
-      novitaImage(envelope({ provider: 'novita', model: 'flux-dev' }), {
+      novitaImage(envelope({ model: 'novita/flux-dev' }), {
         fetch: async () => { throw new Error('unreachable') }
       })
     ).rejects.toMatchObject({ typed: { type: 'PROVIDER_ERROR' } })
@@ -158,7 +157,7 @@ describe('novita image adapter', () => {
       }
       throw new Error(`unexpected url: ${url}`)
     }
-    const out = await novitaImage(envelope({ provider: 'novita', model: 'flux-dev', size: '1024x1024' }), {
+    const out = await novitaImage(envelope({ model: 'novita/flux-dev', size: '1024x1024' }), {
       fetch: fetchFn,
       sleep: async () => {},
       now: () => 0
@@ -188,7 +187,7 @@ describe('novita image adapter', () => {
         })
       }
     }
-    await novitaImage(envelope({ provider: 'novita', model: 'flux-dev', seed: 123 }), {
+    await novitaImage(envelope({ model: 'novita/flux-dev', seed: 123 }), {
       fetch: fetchFn, sleep: async () => {}, now: () => 0
     })
     expect(submitted.seed).toBe(123)
@@ -206,7 +205,7 @@ describe('novita image adapter', () => {
       }
     }
     await expect(
-      novitaImage(envelope({ provider: 'novita', model: 'flux-dev' }), {
+      novitaImage(envelope({ model: 'novita/flux-dev' }), {
         fetch: fetchFn, sleep: async () => {}, now: () => 0
       })
     ).rejects.toMatchObject({ typed: { type: 'PROVIDER_ERROR' } })
@@ -219,7 +218,7 @@ describe('novita image adapter', () => {
       text: async () => 'unauthorized'
     })
     await expect(
-      novitaImage(envelope({ provider: 'novita', model: 'flux-dev' }), {
+      novitaImage(envelope({ model: 'novita/flux-dev' }), {
         fetch: fetchFn, sleep: async () => {}, now: () => 0
       })
     ).rejects.toMatchObject({ typed: { type: 'AUTH_INVALID' } })
@@ -234,7 +233,7 @@ describe('novita image adapter', () => {
       text: async () => '{"error":"bad key sk-xxxxx"}'
     })
     try {
-      await novitaImage(envelope({ provider: 'novita', model: 'flux-dev' }), {
+      await novitaImage(envelope({ model: 'novita/flux-dev' }), {
         fetch: fetchFn, sleep: async () => {}, now: () => 0
       })
       throw new Error('should have thrown')
@@ -259,7 +258,7 @@ describe('novita image adapter', () => {
       }
     }
     try {
-      await novitaImage(envelope({ provider: 'novita', model: 'flux-dev' }), {
+      await novitaImage(envelope({ model: 'novita/flux-dev' }), {
         fetch: fetchFn, sleep: async () => {}, now: () => 0
       })
       throw new Error('should have thrown')
@@ -285,7 +284,7 @@ describe('novita image adapter', () => {
       }
     }
     await expect(
-      novitaImage(envelope({ provider: 'novita', model: 'flux-dev' }), {
+      novitaImage(envelope({ model: 'novita/flux-dev' }), {
         fetch: fetchFn, sleep: async () => {}, now: () => timeCursor
       })
     ).rejects.toMatchObject({ typed: { type: 'PROVIDER_UNAVAILABLE' } })

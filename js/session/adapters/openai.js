@@ -29,6 +29,7 @@ import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
 import { costFor } from './_pricing.js'
+import { catalogKey, providerOf, bareOf } from '#core/model-id.js'
 import {
   toOpenAITools,
   fromOpenAIToolCalls,
@@ -181,7 +182,7 @@ export async function * openai (envelope, deps = {}) {
       outputTokens: messageOutputTokens,
       thinkingTokens,
       cost: costFor(
-        `${envelope.provider}/${envelope.model}`,
+        catalogKey(envelope.model),
         { inputTokens, outputTokens: messageOutputTokens, thinkingTokens }
       ),
       timestamps: { start, first: first ?? end, end }
@@ -200,11 +201,12 @@ export async function * openai (envelope, deps = {}) {
  * @param {string} instructions
  */
 function buildRequest (envelope, input, instructions) {
-  const spec = getSpec(`${envelope.provider}/${envelope.model}`)
+  const spec = getSpec(catalogKey(envelope.model))
+  const provider = providerOf(envelope.model)
 
   /** @type {Record<string, any>} */
   const request = {
-    model: envelope.model,
+    model: spec?.model ?? bareOf(envelope.model),
     input
   }
   if (instructions) request.instructions = instructions
@@ -231,7 +233,7 @@ function buildRequest (envelope, input, instructions) {
       if (request.max_output_tokens && typeof headroom === 'number') {
         request.max_output_tokens += headroom
       }
-      if (envelope.provider === 'openai') {
+      if (provider === 'openai') {
         request.reasoning = { effort }
       }
     }
@@ -253,7 +255,7 @@ function buildRequest (envelope, input, instructions) {
   // Per-user identifier — openai uses `safety_identifier`; other
   // Responses-API providers (xai) use the legacy `user` field.
   if (envelope.identifier) {
-    if (envelope.provider === 'openai') {
+    if (provider === 'openai') {
       request.safety_identifier = envelope.identifier
     } else {
       request.user = envelope.identifier

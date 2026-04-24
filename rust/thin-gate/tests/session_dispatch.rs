@@ -97,10 +97,15 @@ async fn read_event_stream(res: Response<Incoming>) -> (StatusCode, Vec<Event>) 
 fn node_session_cfg() -> SessionConfig {
     let bin = session_bin();
     assert!(bin.exists(), "session bin not found at {}", bin.display());
+    // Minimal catalog so run.js's catalog guard doesn't reject
+    // `echo/m` as unknown. `echo` adapter reads no fields off the
+    // spec, so an empty entry is enough.
+    let catalog_source: mohdel_thin_gate::CatalogSource =
+        std::sync::Arc::new(|| Some(r#"{"echo/m":{}}"#.to_string()));
     SessionConfig {
         command: "node".to_string(),
         args: vec![bin.to_string_lossy().into_owned()],
-        catalog: None,
+        catalog: Some(catalog_source),
     }
 }
 

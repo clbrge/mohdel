@@ -1,6 +1,9 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 import { echo } from '../../js/session/adapters/echo.js'
 import { run } from '../../js/session/run.js'
+import { setCatalog } from '../../js/session/adapters/_catalog.js'
+
+beforeEach(() => setCatalog({ 'echo/m': {} }))
 
 /** @returns {import('#core/envelope.js').CallEnvelope} */
 function envelope (overrides = {}) {
@@ -8,8 +11,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'echo',
-    model: 'm',
+    model: 'echo/m',
     prompt: 'hi',
     ...overrides
   }

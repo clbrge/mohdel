@@ -13,8 +13,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'sk-test' },
-    provider: 'openai',
-    model: 'gpt-5',
+    model: 'openai/gpt-5',
     prompt: 'hi',
     ...overrides
   }
@@ -120,14 +119,14 @@ describe('session/adapters/openai', () => {
       const { client } = makeClient({
         events: [{ type: 'response.completed', response: { usage: { input_tokens: 100, output_tokens: 50 } } }]
       })
-      const done = (await collect(openai(envelope({ model: 'gpt-5' }), { client }))).at(-1)
+      const done = (await collect(openai(envelope({ model: 'openai/gpt-5' }), { client }))).at(-1)
       expect(done.result.cost).toBeGreaterThan(0)
     }
     {
       const { client } = makeClient({
         events: [{ type: 'response.completed', response: { usage: { input_tokens: 10, output_tokens: 10 } } }]
       })
-      const done = (await collect(openai(envelope({ model: 'unknown-xyz' }), { client }))).at(-1)
+      const done = (await collect(openai(envelope({ model: 'openai/unknown-xyz' }), { client }))).at(-1)
       expect(done.result.cost).toBe(0)
     }
   })

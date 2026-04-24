@@ -113,4 +113,24 @@ describe('setCatalog / getSpec / setPricing / costFor', () => {
   test('costFor returns 0 for unknown model', () => {
     expect(costFor('unknown', { inputTokens: 100, outputTokens: 200 })).toBe(0)
   })
+
+  // Regression for the model-id unification: when the cs-core/mohdel
+  // catalog id ("anthropic/claude-haiku-4-5") differs from the SDK
+  // wire string stored in spec.model ("claude-haiku-4-5-20251001"),
+  // costFor must look up by the catalog key (the id), not by
+  // provider/spec.model. A prior bug conflated the two and produced
+  // cost=0 silently for every versioned Anthropic model.
+  test('costFor resolves pricing via the catalog key even when spec.model is a versioned wire string', () => {
+    setCatalog({
+      'anthropic/claude-haiku-4-5': {
+        provider: 'anthropic',
+        model: 'claude-haiku-4-5-20251001',
+        inputPrice: 1,
+        outputPrice: 5
+      }
+    })
+    const cost = costFor('anthropic/claude-haiku-4-5', { inputTokens: 1_000_000, outputTokens: 100_000 })
+    expect(cost).toBeCloseTo(1.5, 6)
+    expect(costFor('anthropic/claude-haiku-4-5-20251001', { inputTokens: 1_000_000, outputTokens: 100_000 })).toBe(0)
+  })
 })

@@ -13,8 +13,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'AI-test' },
-    provider: 'gemini',
-    model: 'gemini-2.5-flash',
+    model: 'gemini/gemini-2.5-flash',
     prompt: 'hi',
     ...overrides
   }

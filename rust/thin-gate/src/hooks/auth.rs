@@ -18,7 +18,7 @@ use crate::protocol::{Auth, CallEnvelope};
 pub trait AuthPolicy: Send + Sync {
     /// Resolve an `Auth` for this envelope. Called only when
     /// `envelope.auth` is `None`. Implementations typically look up
-    /// keyed by `envelope.provider` and/or `envelope.auth_id`.
+    /// keyed by `provider_of(&envelope.model)` and/or `envelope.auth_id`.
     async fn resolve(&self, env: &CallEnvelope) -> Result<Auth, AuthError>;
 }
 

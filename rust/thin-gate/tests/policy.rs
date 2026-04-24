@@ -113,8 +113,7 @@ struct RewritingRoute;
 impl RoutePolicy for RewritingRoute {
     async fn resolve(&self, _env: &CallEnvelope) -> Result<RouteDecision, RouteError> {
         Ok(RouteDecision {
-            provider: "openai".into(),
-            model_id: "gpt-5-mini".into(),
+            model_id: "openai/gpt-5-mini".into(),
             session_pool: None,
         })
     }
@@ -125,7 +124,6 @@ struct PermissiveRoute;
 impl RoutePolicy for PermissiveRoute {
     async fn resolve(&self, env: &CallEnvelope) -> Result<RouteDecision, RouteError> {
         Ok(RouteDecision {
-            provider: env.provider.clone(),
             model_id: env.model.clone(),
             session_pool: None,
         })

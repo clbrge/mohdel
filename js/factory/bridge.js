@@ -137,8 +137,7 @@ export async function runAnswerImage ({ provider, model, configuration, prompt, 
     callId: options.callId || newCallId(),
     authId: options.authId || 'local',
     auth: configToAuth(configuration),
-    provider,
-    model,
+    model: `${provider}/${model}`,
     prompt
   }
   if (options.size) envelope.size = options.size
@@ -164,8 +163,7 @@ function toEnvelope ({ provider, model, configuration, prompt, options }) {
     callId: options.callId || newCallId(),
     authId: options.authId || 'local',
     auth: configToAuth(configuration),
-    provider,
-    model,
+    model: /** @type {import('#core/model-id.js').ModelId} */ (`${provider}/${model}`),
     prompt: toEnvelopePrompt(prompt)
   }
 

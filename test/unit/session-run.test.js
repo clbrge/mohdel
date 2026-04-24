@@ -1,5 +1,8 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 import { run } from '../../js/session/run.js'
+import { setCatalog } from '../../js/session/adapters/_catalog.js'
+
+beforeEach(() => setCatalog({ 'echo/m': {} }))
 
 /** @returns {import('#core/envelope.js').CallEnvelope} */
 function envelope (overrides = {}) {
@@ -7,8 +10,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'echo',
-    model: 'm',
+    model: 'echo/m',
     prompt: 'hi',
     ...overrides
   }
@@ -27,7 +29,7 @@ describe('session/run', () => {
   })
 
   test('unknown provider yields a single error event', async () => {
-    const events = await collect(run(envelope({ provider: 'nonesuch' })))
+    const events = await collect(run(envelope({ model: 'nonesuch/m' })))
     expect(events.length).toBe(1)
     expect(events[0].type).toBe('error')
     expect(events[0].error.type).toBe('SESSION_UNKNOWN_PROVIDER')

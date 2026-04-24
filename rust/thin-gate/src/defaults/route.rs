@@ -23,7 +23,6 @@ impl Default for FileRoutePolicy {
 impl RoutePolicy for FileRoutePolicy {
     async fn resolve(&self, env: &CallEnvelope) -> Result<RouteDecision, RouteError> {
         Ok(RouteDecision {
-            provider: env.provider.clone(),
             model_id: env.model.clone(),
             session_pool: None,
         })

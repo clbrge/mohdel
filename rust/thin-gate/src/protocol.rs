@@ -31,18 +31,11 @@ pub struct CallEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub baggage: Option<String>,
 
-    // Routing.
-    // Wire contract: callers send only `model` as the full mohdel id
-    // `"<provider>/<bare>[:<effort>]"` — same shape as `mo model list`
-    // and cs-core. `provider` is a server-internal cache populated by
-    // `normalize_routing` after the envelope is deserialized; never
-    // read from the wire (callers passing it get rejected via
-    // `deny_unknown_fields`). Only serialized when non-empty so the
-    // post-normalization envelope reaches the session subprocess with
-    // the split shape the JS session runtime expects, while pre-
-    // normalization / round-trip fixtures stay clean.
-    #[serde(skip_deserializing, default, skip_serializing_if = "String::is_empty")]
-    pub provider: String,
+    // Routing. Full mohdel id — `"<provider>/<bare>[:<effort>]"`.
+    // Same shape on the wire and in-process: no separate `provider`
+    // field at any layer. Helpers in `split_model_id` read the parts
+    // locally where needed (auth, cooldown bucket, adapter dispatch).
+    // See PROTOCOL §3 and `mohdel/js/core/model-id.js`.
     pub model: String,
 
     // answer() first arg
@@ -95,20 +88,23 @@ pub fn split_model_id(model: &str) -> Option<(&str, &str)> {
     model.split_once('/')
 }
 
-/// Split `model`'s provider prefix into `provider`, leaving `model`
-/// as the bare id. Called once per envelope right after deserialize.
-/// Downstream code (cooldown keys, session dispatch, JS adapters)
-/// reads both fields in their split form.
-pub fn normalize_routing(provider: &mut String, model: &mut String) -> Result<(), String> {
-    match split_model_id(model) {
-        Some((p, rest)) => {
-            *provider = p.to_string();
-            *model = rest.to_string();
-            Ok(())
-        }
-        None => Err(format!(
-            "model must be '<provider>/<id>' (got: {model})"
-        )),
+/// Return the provider part of a model id. Empty string if malformed
+/// (no `/`). Callers that need to reject malformed ids should check
+/// `split_model_id` directly.
+pub fn provider_of(model: &str) -> &str {
+    split_model_id(model).map(|(p, _)| p).unwrap_or("")
+}
+
+/// Return the catalog key — `<provider>/<bare>` with any `:effort`
+/// suffix removed. Mirrors the JS `catalogKey` helper.
+pub fn catalog_key(model: &str) -> &str {
+    let slash = match model.find('/') {
+        Some(i) => i,
+        None => return model,
+    };
+    match model.rfind(':') {
+        Some(colon) if colon > slash => &model[..colon],
+        _ => model,
     }
 }
 
@@ -355,9 +351,7 @@ pub struct ImageEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub baggage: Option<String>,
 
-    // See CallEnvelope — same rules.
-    #[serde(skip_deserializing, default, skip_serializing_if = "String::is_empty")]
-    pub provider: String,
+    // See CallEnvelope — same rules. Full mohdel id.
     pub model: String,
     pub prompt: String,
 

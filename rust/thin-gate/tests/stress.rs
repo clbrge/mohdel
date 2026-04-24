@@ -58,10 +58,12 @@ fn session_bin() -> PathBuf {
 fn node_session_cfg() -> SessionConfig {
     let bin = session_bin();
     assert!(bin.exists(), "session bin missing: {}", bin.display());
+    let catalog_source: mohdel_thin_gate::CatalogSource =
+        std::sync::Arc::new(|| Some(r#"{"echo/m":{}}"#.to_string()));
     SessionConfig {
         command: "node".to_string(),
         args: vec![bin.to_string_lossy().into_owned()],
-        catalog: None,
+        catalog: Some(catalog_source),
     }
 }
 
@@ -72,7 +74,6 @@ struct PassthroughRoute;
 impl RoutePolicy for PassthroughRoute {
     async fn resolve(&self, env: &CallEnvelope) -> Result<RouteDecision, RouteError> {
         Ok(RouteDecision {
-            provider: env.provider.clone(),
             model_id: env.model.clone(),
             session_pool: None,
         })

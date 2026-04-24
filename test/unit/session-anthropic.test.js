@@ -13,8 +13,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'sk-ant-test' },
-    provider: 'anthropic',
-    model: 'claude-sonnet-4-5',
+    model: 'anthropic/claude-sonnet-4-5',
     prompt: 'hi',
     ...overrides
   }
@@ -122,7 +121,7 @@ describe('session/adapters/anthropic', () => {
         { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 50 } }
       ]
     })
-    const events = await collect(anthropic(envelope({ model: 'claude-sonnet-4-5' }), { client }))
+    const events = await collect(anthropic(envelope({ model: 'anthropic/claude-sonnet-4-5' }), { client }))
     const done = events.at(-1)
     expect(done.result.cost).toBeGreaterThan(0)
   })
@@ -131,7 +130,7 @@ describe('session/adapters/anthropic', () => {
     const { client } = makeClient({
       events: [{ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 10 } }]
     })
-    const events = await collect(anthropic(envelope({ model: 'unknown-xyz' }), { client }))
+    const events = await collect(anthropic(envelope({ model: 'anthropic/unknown-xyz' }), { client }))
     expect(events.at(-1).result.cost).toBe(0)
   })
 })

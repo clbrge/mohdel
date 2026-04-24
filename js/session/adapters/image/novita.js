@@ -12,6 +12,7 @@
 
 import { getSpec } from '../_catalog.js'
 import { classifyProviderError } from '../_errors.js'
+import { catalogKey } from '#core/model-id.js'
 
 const BASE_URL = 'https://api.novita.ai'
 const NOVITA_TASK_POLL_INTERVAL_MS = 1000
@@ -32,7 +33,7 @@ export async function novitaImage (envelope, deps = {}) {
   const sleep = deps.sleep ?? defaultSleep
   const now = deps.now ?? Date.now
 
-  const spec = deps.spec ?? getSpec(`${envelope.provider}/${envelope.model}`) ?? {}
+  const spec = deps.spec ?? getSpec(catalogKey(envelope.model)) ?? {}
   const endpoint = spec.imageEndpoint
   if (!endpoint) {
     throw typedError('image endpoint not configured', 'PROVIDER_ERROR', false)

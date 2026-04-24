@@ -1,6 +1,9 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 import { Readable, Writable } from 'node:stream'
 import { drive } from '../../js/session/driver.js'
+import { setCatalog } from '../../js/session/adapters/_catalog.js'
+
+beforeEach(() => setCatalog({ 'echo/m': {}, 'fake/m': {}, 'fake/test': {} }))
 
 /** @returns {import('#core/envelope.js').CallEnvelope} */
 function envelope (overrides = {}) {
@@ -8,8 +11,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'echo',
-    model: 'm',
+    model: 'echo/m',
     prompt: 'hi',
     ...overrides
   }
@@ -68,7 +70,7 @@ describe('session/driver', () => {
   })
 
   test('unknown provider produces an error event', async () => {
-    const stdin = inputStream(JSON.stringify(envelope({ provider: 'nonesuch' })))
+    const stdin = inputStream(JSON.stringify(envelope({ model: 'nonesuch/m' })))
     const { stream: stdout, output } = capturingStdout()
 
     await drive(stdin, stdout)
@@ -118,8 +120,7 @@ describe('session/driver', () => {
       callId: 'slow-1',
       authId: 'a1',
       auth: { key: 'k' },
-      provider: 'fake',
-      model: 'm',
+      model: 'fake/m',
       prompt: JSON.stringify({ mode: 'slow', tokens: 6, delayMs: 20 })
     }
     stdin.write(JSON.stringify(slow) + '\n')
@@ -249,8 +250,7 @@ describe('session/driver', () => {
       callId: 'img-1',
       authId: 'a1',
       auth: { key: 'k' },
-      provider: 'fake',
-      model: 'test',
+      model: 'fake/test',
       prompt: JSON.stringify({ mode: 'ok', count: 1 })
     }
     const stdin = inputStream(JSON.stringify(imgEnv))
@@ -270,8 +270,7 @@ describe('session/driver', () => {
       callId: 'img-2',
       authId: 'a1',
       auth: { key: 'k' },
-      provider: 'nonesuch',
-      model: 'test',
+      model: 'nonesuch/test',
       prompt: 'red sphere'
     }
     const stdin = inputStream(JSON.stringify(imgEnv))

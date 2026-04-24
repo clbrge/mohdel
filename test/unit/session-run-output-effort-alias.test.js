@@ -13,8 +13,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'anthropic',
-    model: 'claude-opus-4',
+    model: 'anthropic/claude-opus-4',
     prompt: 'hi',
     ...overrides
   }
@@ -64,37 +63,37 @@ function capturingAdapter () {
 describe('session/run `:effort` alias on the wire', () => {
   test('accepts a per-spec level not in the old hardcoded list (`:max`)', async () => {
     const { adapter, seen } = capturingAdapter()
-    const events = await collect(run(envelope({ model: 'claude-opus-4:max' }), {
+    const events = await collect(run(envelope({ model: 'anthropic/claude-opus-4:max' }), {
       resolveAdapter: () => adapter,
       resolveSpec: specs()
     }))
     expect(events.at(-1).type).toBe('done')
-    expect(seen.envelope.model).toBe('claude-opus-4')
+    expect(seen.envelope.model).toBe('anthropic/claude-opus-4')
     expect(seen.envelope.outputEffort).toBe('max')
   })
 
   test('accepts `:minimal` level', async () => {
     const { adapter, seen } = capturingAdapter()
-    await collect(run(envelope({ model: 'claude-opus-4:minimal' }), {
+    await collect(run(envelope({ model: 'anthropic/claude-opus-4:minimal' }), {
       resolveAdapter: () => adapter,
       resolveSpec: specs()
     }))
-    expect(seen.envelope.model).toBe('claude-opus-4')
+    expect(seen.envelope.model).toBe('anthropic/claude-opus-4')
     expect(seen.envelope.outputEffort).toBe('minimal')
   })
 
   test('accepts `:none` when spec has thinkingEffortLevels', async () => {
     const { adapter, seen } = capturingAdapter()
-    await collect(run(envelope({ model: 'claude-opus-4:none' }), {
+    await collect(run(envelope({ model: 'anthropic/claude-opus-4:none' }), {
       resolveAdapter: () => adapter,
       resolveSpec: specs()
     }))
-    expect(seen.envelope.model).toBe('claude-opus-4')
+    expect(seen.envelope.model).toBe('anthropic/claude-opus-4')
     expect(seen.envelope.outputEffort).toBe('none')
   })
 
   test('rejects an unsupported level with spec-aware error', async () => {
-    const events = await collect(run(envelope({ model: 'claude-opus-4:max' }), {
+    const events = await collect(run(envelope({ model: 'anthropic/claude-opus-4:max' }), {
       resolveSpec: specs({ levels: { low: 100, high: 200 } })
     }))
     expect(events).toHaveLength(1)
@@ -105,7 +104,7 @@ describe('session/run `:effort` alias on the wire', () => {
   })
 
   test('model with null thinkingEffortLevels rejects any `:effort` alias', async () => {
-    const events = await collect(run(envelope({ model: 'claude-no-thinking:low' }), {
+    const events = await collect(run(envelope({ model: 'anthropic/claude-no-thinking:low' }), {
       resolveSpec: specs()
     }))
     expect(events).toHaveLength(1)
@@ -114,39 +113,38 @@ describe('session/run `:effort` alias on the wire', () => {
     expect(events[0].error.message).toMatch(/no thinkingEffortLevels/)
   })
 
-  test('unknown base (no colon split applies) leaves envelope untouched', async () => {
-    const { adapter, seen } = capturingAdapter()
-    await collect(run(envelope({ model: 'claude-hypothetical:low' }), {
-      resolveAdapter: () => adapter,
+  test('unknown base is rejected by the catalog guard', async () => {
+    // Base `anthropic/claude-hypothetical` doesn't resolve, so
+    // normalizeModelEffort leaves the envelope alone — and the
+    // downstream catalog guard then rejects it as unknown.
+    const events = await collect(run(envelope({ model: 'anthropic/claude-hypothetical:low' }), {
       resolveSpec: specs()
     }))
-    // Base `anthropic/claude-hypothetical` doesn't resolve, so we
-    // leave the model alone. Downstream lookup will emit its own
-    // not-found — here we just assert we didn't split.
-    expect(seen.envelope.model).toBe('claude-hypothetical:low')
-    expect(seen.envelope.outputEffort).toBeUndefined()
+    expect(events).toHaveLength(1)
+    expect(events[0].type).toBe('error')
+    expect(events[0].error.type).toBe('SESSION_UNKNOWN_MODEL')
   })
 
   test('explicit outputEffort on envelope wins over suffix', async () => {
     const { adapter, seen } = capturingAdapter()
-    await collect(run(envelope({ model: 'claude-opus-4:high', outputEffort: 'low' }), {
+    await collect(run(envelope({ model: 'anthropic/claude-opus-4:high', outputEffort: 'low' }), {
       resolveAdapter: () => adapter,
       resolveSpec: specs()
     }))
     // Suffix stays embedded in model, outputEffort unchanged.
     // (The effort already being set signals the caller made a deliberate choice;
     // the shortcut is meant as a convenience, not an override.)
-    expect(seen.envelope.model).toBe('claude-opus-4:high')
+    expect(seen.envelope.model).toBe('anthropic/claude-opus-4:high')
     expect(seen.envelope.outputEffort).toBe('low')
   })
 
   test('model without any `:` is unchanged', async () => {
     const { adapter, seen } = capturingAdapter()
-    await collect(run(envelope({ model: 'claude-opus-4' }), {
+    await collect(run(envelope({ model: 'anthropic/claude-opus-4' }), {
       resolveAdapter: () => adapter,
       resolveSpec: specs()
     }))
-    expect(seen.envelope.model).toBe('claude-opus-4')
+    expect(seen.envelope.model).toBe('anthropic/claude-opus-4')
     expect(seen.envelope.outputEffort).toBeUndefined()
   })
 })

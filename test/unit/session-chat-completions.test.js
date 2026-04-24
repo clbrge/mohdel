@@ -10,13 +10,12 @@ import { xai } from '../../js/session/adapters/xai.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
 
 /** @returns {import('#core/envelope.js').CallEnvelope} */
-function envelope (provider, model, overrides = {}) {
+function envelope (provider, bare, overrides = {}) {
   return {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider,
-    model,
+    model: `${provider}/${bare}`,
     prompt: 'hi',
     ...overrides
   }

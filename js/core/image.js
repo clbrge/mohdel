@@ -17,8 +17,10 @@
  * @property {string} [traceparent]
  * @property {string} [baggage]
  *
- * @property {string} provider
- * @property {string} model
+ * @property {import('./model-id.js').ModelId} model
+ *   Full mohdel id — `"<provider>/<bare>"`. Same shape as
+ *   `CallEnvelope.model` (see `envelope.js`). No separate `provider`
+ *   field.
  * @property {string} prompt
  *
  * @property {string} [size]       e.g. "1024x1024". Provider-specific.
@@ -50,7 +52,6 @@ export const IMAGE_ENVELOPE_FIELDS = Object.freeze([
   'auth',
   'traceparent',
   'baggage',
-  'provider',
   'model',
   'prompt',
   'size',

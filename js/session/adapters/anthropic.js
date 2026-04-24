@@ -28,6 +28,7 @@ import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
 import { costFor } from './_pricing.js'
+import { catalogKey, bareOf } from '#core/model-id.js'
 import {
   toAnthropicTools,
   fromAnthropicToolCalls,
@@ -216,7 +217,7 @@ export async function * anthropic (envelope, deps = {}) {
       outputTokens: messageOutputTokens,
       thinkingTokens: estimatedThinkingTokens,
       cost: costFor(
-        `${envelope.provider}/${envelope.model}`,
+        catalogKey(envelope.model),
         { inputTokens, outputTokens: messageOutputTokens, thinkingTokens: estimatedThinkingTokens }
       ),
       timestamps: { start, first: first ?? end, end }
@@ -253,12 +254,12 @@ function safeParseJson (s) {
  * @param {string} system
  */
 function buildRequest (envelope, conversation, system) {
-  const spec = getSpec(`${envelope.provider}/${envelope.model}`)
+  const spec = getSpec(catalogKey(envelope.model))
   const outputTokenLimit = spec?.outputTokenLimit
 
   /** @type {Record<string, any>} */
   const request = {
-    model: envelope.model,
+    model: spec?.model ?? bareOf(envelope.model),
     max_tokens: envelope.outputBudget ?? outputTokenLimit ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
     messages: conversation
   }

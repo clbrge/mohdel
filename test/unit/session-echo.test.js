@@ -8,8 +8,7 @@ function envelope (overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'echo',
-    model: 'm',
+    model: 'echo/m',
     prompt: 'hi',
     ...overrides
   }

@@ -30,6 +30,7 @@ import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
 import { loadVideos } from './_videos.js'
 import { costFor } from './_pricing.js'
+import { catalogKey, bareOf } from '#core/model-id.js'
 import {
   toGeminiTools,
   fromGeminiToolCalls,
@@ -195,7 +196,7 @@ export async function * gemini (envelope, deps = {}) {
       outputTokens,
       thinkingTokens,
       cost: costFor(
-        `${envelope.provider}/${envelope.model}`,
+        catalogKey(envelope.model),
         { inputTokens, outputTokens, thinkingTokens }
       ),
       timestamps: { start, first: first ?? end, end }
@@ -214,7 +215,7 @@ export async function * gemini (envelope, deps = {}) {
  * @param {string} systemInstruction
  */
 function buildRequest (envelope, contents, systemInstruction) {
-  const spec = getSpec(`${envelope.provider}/${envelope.model}`)
+  const spec = getSpec(catalogKey(envelope.model))
 
   /** @type {Record<string, any>} */
   const config = {}
@@ -235,9 +236,10 @@ function buildRequest (envelope, contents, systemInstruction) {
   const effort = envelope.outputEffort ?? spec?.defaultThinkingEffort
   if (spec?.thinkingEffortLevels && effort && effort !== 'none') {
     const budget = spec.thinkingEffortLevels[effort]
-    if (/^gemini-3/.test(envelope.model)) {
+    const bare = bareOf(envelope.model)
+    if (/^gemini-3/.test(bare)) {
       config.thinkingConfig = { includeThoughts: true, thinkingLevel: effort }
-    } else if (/gemini-2/.test(envelope.model)) {
+    } else if (/gemini-2/.test(bare)) {
       if (typeof budget === 'number') {
         config.thinkingConfig = { thinkingBudget: budget }
       }
@@ -253,7 +255,7 @@ function buildRequest (envelope, contents, systemInstruction) {
 
   /** @type {Record<string, any>} */
   const request = {
-    model: envelope.model,
+    model: spec?.model ?? bareOf(envelope.model),
     contents
   }
   if (Object.keys(config).length > 0) request.config = config

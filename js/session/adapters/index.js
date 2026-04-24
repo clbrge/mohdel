@@ -1,5 +1,5 @@
 /**
- * Adapter registry. Maps `envelope.provider` to an adapter function.
+ * Adapter registry. Maps `providerOf(envelope.model)` to an adapter function.
  *
  * Each adapter has the shape:
  *   async function* adapter(envelope) => AsyncGenerator<Event>

@@ -138,8 +138,7 @@ describe('anthropic tool round-trip', () => {
       callId: 'c1',
       authId: 'a1',
       auth: { key: 'k' },
-      provider: 'anthropic',
-      model: 'claude-sonnet-4-5',
+      model: 'anthropic/claude-sonnet-4-5',
       prompt: [
         { role: 'user', content: 'weather in Paris?' },
         { role: 'assistant', content: '' },
@@ -243,8 +242,7 @@ describe('openai tool round-trip', () => {
       callId: 'c1',
       authId: 'a1',
       auth: { key: 'k' },
-      provider: 'openai',
-      model: 'gpt-5',
+      model: 'openai/gpt-5',
       prompt: [
         { role: 'user', content: 'weather?' },
         { role: 'tool', toolCallId: 'call_1', content: 'sunny, 22C' }
@@ -341,8 +339,7 @@ describe('gemini tool round-trip', () => {
       callId: 'c1',
       authId: 'a1',
       auth: { key: 'k' },
-      provider: 'gemini',
-      model: 'gemini-2.5-flash',
+      model: 'gemini/gemini-2.5-flash',
       prompt: [
         { role: 'user', content: 'weather?' },
         { role: 'tool', toolName: 'get_weather', content: '{"temp":22,"condition":"sunny"}' }

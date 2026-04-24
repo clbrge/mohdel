@@ -10,8 +10,8 @@ describe('core/envelope', () => {
     expect(ENVELOPE_FIELDS).toEqual([
       // transport metadata
       'callId', 'authId', 'auth', 'traceparent', 'baggage',
-      // routing
-      'provider', 'model',
+      // routing — one full id, no separate provider
+      'model',
       // prompt (first arg)
       'prompt',
       // answer options (flat)

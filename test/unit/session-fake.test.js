@@ -8,8 +8,7 @@ function envelope (prompt, overrides = {}) {
     callId: 'c1',
     authId: 'a1',
     auth: { key: 'k' },
-    provider: 'fake',
-    model: 'm',
+    model: 'fake/m',
     prompt,
     ...overrides
   }

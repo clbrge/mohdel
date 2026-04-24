@@ -23,8 +23,11 @@
  * @property {string} [traceparent]  W3C tracecontext header.
  * @property {string} [baggage]      W3C baggage header.
  *
- * @property {string} provider       Adapter discriminator.
- * @property {string} model          Provider-native model id.
+ * @property {import('./model-id.js').ModelId} model
+ *   Full mohdel id — `"<provider>/<bare>[:<effort>]"`. Same shape
+ *   on the wire and in-process. See PROTOCOL §3. No separate
+ *   `provider` field exists at any layer; callers that need the
+ *   provider or bare part use the helpers in `core/model-id.js`.
  *
  * @property {(string|Message[])} prompt
  *   Either a plain string or a structured array of messages.
@@ -123,7 +126,6 @@ export const ENVELOPE_FIELDS = Object.freeze([
   'auth',
   'traceparent',
   'baggage',
-  'provider',
   'model',
   'prompt',
   'outputBudget',

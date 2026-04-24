@@ -15,6 +15,7 @@
 
 import { getImageAdapter } from './adapters/image/index.js'
 import { classifyProviderError } from './adapters/_errors.js'
+import { providerOf } from '#core/model-id.js'
 
 /**
  * @param {import('#core/image.js').ImageEnvelope} envelope
@@ -33,7 +34,7 @@ import { classifyProviderError } from './adapters/_errors.js'
 export async function runImage (envelope, { resolveAdapter = getImageAdapter, spec } = {}) {
   let adapter
   try {
-    adapter = resolveAdapter(envelope.provider)
+    adapter = resolveAdapter(providerOf(envelope.model))
   } catch (e) {
     return {
       ok: false,

@@ -10,6 +10,7 @@ import OpenAI from 'openai'
 
 import { getSpec } from '../_catalog.js'
 import { classifyProviderError } from '../_errors.js'
+import { catalogKey, bareOf } from '#core/model-id.js'
 
 /**
  * @param {import('#core/image.js').ImageEnvelope} envelope
@@ -18,10 +19,10 @@ import { classifyProviderError } from '../_errors.js'
  */
 export async function openaiImage (envelope, deps = {}) {
   const client = deps.client ?? new OpenAI({ apiKey: envelope.auth.key })
-  const spec = deps.spec ?? getSpec(`${envelope.provider}/${envelope.model}`) ?? {}
+  const spec = deps.spec ?? getSpec(catalogKey(envelope.model)) ?? {}
   const start = String(process.hrtime.bigint())
 
-  const args = { model: envelope.model, prompt: envelope.prompt }
+  const args = { model: spec.model ?? bareOf(envelope.model), prompt: envelope.prompt }
   const size = envelope.size || spec.imageDefaultSize
   if (size) args.size = size
 

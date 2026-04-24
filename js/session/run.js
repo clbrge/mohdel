@@ -26,6 +26,7 @@ import { getAdapter } from './adapters/index.js'
 import { isImageProvider } from './adapters/image/index.js'
 import { getSpec } from './adapters/_catalog.js'
 import { getProviderLimits } from './adapters/_providers.js'
+import { providerOf, catalogKey, effortOf } from '#core/model-id.js'
 import * as defaultCooldown from './_cooldown.js'
 import * as defaultLimiter from './_rate_limiter.js'
 import { logger as defaultLogger } from './_logger.js'
@@ -74,12 +75,13 @@ export async function * run (envelope, {
   if (effortNorm.error) { yield effortNorm.error; return }
   envelope = effortNorm.envelope
 
+  const provider = providerOf(envelope.model)
   const span = openSpan(envelope)
   const log = scopedLogger(logger, envelope, span)
   const startedAt = Date.now()
 
   log.debug({
-    provider: envelope.provider,
+    provider,
     model: envelope.model,
     effort: envelope.outputEffort ?? 'default',
     outputBudget: envelope.outputBudget ?? null,
@@ -89,43 +91,57 @@ export async function * run (envelope, {
 
   let adapter
   try {
-    adapter = resolveAdapter(envelope.provider)
+    adapter = resolveAdapter(provider)
   } catch (e) {
     // Distinguish "image-only provider invoked via answer" from
     // truly-unknown. Novita-and-friends have no text adapter but a
     // caller using `mohdel.use('novita/...').answer(...)` otherwise
     // gets a bare "unknown provider" with no hint.
-    if (isImageProvider(envelope.provider)) {
-      const detail = `provider '${envelope.provider}' supports image generation only; use mohdel.image(...) instead`
+    if (isImageProvider(provider)) {
+      const detail = `provider '${provider}' supports image generation only; use mohdel.image(...) instead`
       const err = errorEvent(detail, 'PROVIDER_TEXT_NOT_SUPPORTED')
-      log.warn({ provider: envelope.provider }, '[mohdel:answer] image-only provider via answer')
+      log.warn({ provider }, '[mohdel:answer] image-only provider via answer')
       endSpanError(span, new Error(detail))
       yield err
       return
     }
     const err = errorEvent(messageOf(e), 'SESSION_UNKNOWN_PROVIDER')
-    log.warn({ err: e, provider: envelope.provider }, '[mohdel:answer] unknown provider')
+    log.warn({ err: e, provider }, '[mohdel:answer] unknown provider')
     endSpanError(span, e)
     yield err
     return
   }
 
-  const coolErr = cooldown.coolingDownError(envelope.provider)
+  // Catalog is authoritative: every callable model must have a
+  // spec. Without one we'd silently run the provider call with
+  // defaults (no rate-limits, no budget clamps, cost=0), masking
+  // misconfiguration in the layer that pushed the catalog. Effort
+  // suffix is stripped for the lookup — catalog entries are keyed
+  // by the bare `<provider>/<bare>` id, not per-effort variants.
+  const key = catalogKey(envelope.model)
+  const spec = resolveSpec(key)
+  if (!spec) {
+    const detail = `Unknown model '${key}' — not in catalog`
+    const err = errorEvent(detail, 'SESSION_UNKNOWN_MODEL')
+    log.warn({ provider, model: envelope.model }, '[mohdel:answer] unknown model')
+    endSpanError(span, new Error(detail))
+    yield err
+    return
+  }
+
+  const coolErr = cooldown.coolingDownError(provider)
   if (coolErr) {
-    log.debug({ provider: envelope.provider, detail: coolErr.detail }, '[mohdel:cooldown] fast-fail')
+    log.debug({ provider, detail: coolErr.detail }, '[mohdel:cooldown] fast-fail')
     span.setAttribute('mohdel.cooldown', true)
     endSpanOk(span, { 'mohdel.status': 'cooldown' })
     yield { type: 'error', error: coolErr }
     return
   }
 
-  const spec = resolveSpec(`${envelope.provider}/${envelope.model}`)
-  const providerCfg = resolveProviderLimits(envelope.provider) || {}
+  const providerCfg = resolveProviderLimits(provider) || {}
   const rpmLimit = spec?.rpmLimit ?? providerCfg.rpmLimit
   const tpmLimit = spec?.tpmLimit ?? providerCfg.tpmLimit
-  const bucketKey = (spec?.rateLimitScope === 'model')
-    ? `${envelope.provider}/${envelope.model}`
-    : envelope.provider
+  const bucketKey = (spec?.rateLimitScope === 'model') ? key : provider
 
   // `0` is a killswitch ("deny all"), not "unset"; `undefined`/`null`
   // means no limit configured for that dimension. Gate on nullability
@@ -175,7 +191,7 @@ export async function * run (envelope, {
         // incomplete-budget / tool_use) IS a genuine provider-side
         // success and resets the streak.
         if (ev.result?.warning !== WARNING_CANCELLED) {
-          cooldown.reset(envelope.provider)
+          cooldown.reset(provider)
         }
         if (tpmLimit != null && ev.result) {
           const total =
@@ -192,10 +208,10 @@ export async function * run (envelope, {
         log.debug(summarizeDone(ev.result, startedAt), '[mohdel:answer] done')
       } else if (ev.type === 'error') {
         sawTerminal = true
-        recordFailureFromError(cooldown, envelope.provider, ev.error)
+        recordFailureFromError(cooldown, provider, ev.error)
         log.warn({
           err: ev.error,
-          provider: envelope.provider,
+          provider,
           totalMs: Date.now() - startedAt,
           maxInterFrameMs
         }, '[mohdel:answer] failed')
@@ -211,7 +227,7 @@ export async function * run (envelope, {
       yield fallback
       return
     }
-    log.warn({ err: e, provider: envelope.provider, maxInterFrameMs }, '[mohdel:answer] adapter threw')
+    log.warn({ err: e, provider, maxInterFrameMs }, '[mohdel:answer] adapter threw')
     endSpanError(span, e)
     yield errorEvent(messageOf(e), 'SESSION_ADAPTER_THREW')
     return
@@ -225,7 +241,7 @@ export async function * run (envelope, {
       yield fallback
     } else {
       const err = 'adapter returned without a terminal event'
-      log.error({ provider: envelope.provider, maxInterFrameMs }, '[mohdel:answer] no terminal event')
+      log.error({ provider, maxInterFrameMs }, '[mohdel:answer] no terminal event')
       endSpanError(span, new Error(err))
       yield errorEvent(err, 'SESSION_ADAPTER_NO_TERMINAL')
     }
@@ -246,21 +262,19 @@ export async function * run (envelope, {
  * }}
  */
 function normalizeModelEffort (envelope, resolveSpec) {
-  const modelStr = envelope.model || ''
-  const colonIdx = modelStr.lastIndexOf(':')
-  if (colonIdx <= 0) return { envelope }
+  const candidate = effortOf(envelope.model)
+  if (!candidate) return { envelope }
   if (envelope.outputEffort) return { envelope } // explicit wins
 
-  const candidate = modelStr.slice(colonIdx + 1)
-  const base = modelStr.slice(0, colonIdx)
-  const baseSpec = resolveSpec(`${envelope.provider}/${base}`)
+  const base = catalogKey(envelope.model)
+  const baseSpec = resolveSpec(base)
   if (!baseSpec) return { envelope } // base not known — let full string fall through to not-found
 
   if (!baseSpec.thinkingEffortLevels) {
     return {
       envelope,
       error: errorEvent(
-        `Model '${envelope.provider}/${base}' does not support output effort (no thinkingEffortLevels). Cannot use ':${candidate}' suffix.`,
+        `Model '${base}' does not support output effort (no thinkingEffortLevels). Cannot use ':${candidate}' suffix.`,
         'SESSION_INVALID_OUTPUT_EFFORT'
       )
     }
@@ -269,7 +283,7 @@ function normalizeModelEffort (envelope, resolveSpec) {
     return {
       envelope,
       error: errorEvent(
-        `Model '${envelope.provider}/${base}' does not support output effort level '${candidate}'. Available: ${Object.keys(baseSpec.thinkingEffortLevels).join(', ')}`,
+        `Model '${base}' does not support output effort level '${candidate}'. Available: ${Object.keys(baseSpec.thinkingEffortLevels).join(', ')}`,
         'SESSION_INVALID_OUTPUT_EFFORT'
       )
     }
@@ -290,7 +304,7 @@ function openSpan (envelope) {
   /** @type {Record<string, any>} */
   const attrs = {
     'gen_ai.request.model': envelope.model,
-    'gen_ai.system': envelope.provider,
+    'gen_ai.system': providerOf(envelope.model),
     'mohdel.call_id': envelope.callId,
     'mohdel.auth_id': envelope.authId
   }
@@ -309,7 +323,7 @@ function scopedLogger (logger, envelope, span) {
   return logger.withContext({
     callId: envelope.callId,
     authId: envelope.authId,
-    provider: envelope.provider,
+    provider: providerOf(envelope.model),
     model: envelope.model,
     traceId: ctx.traceId,
     spanId: ctx.spanId

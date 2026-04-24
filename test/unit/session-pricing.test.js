@@ -37,6 +37,114 @@ describe('computeCost', () => {
   test('missing usage fields default to 0', () => {
     expect(computeCost({ inputPrice: 1, outputPrice: 5 }, {})).toBe(0)
   })
+
+  // Tiered pricing (OpenAI gpt-5.4, xAI grok-4-1-fast, etc.) expresses
+  // prices as `{">THRESHOLD": rate, "default": rate}` where the active
+  // rate depends on the call's input-token count.
+  describe('tiered pricing', () => {
+    test('below threshold uses default rate', () => {
+      const spec = {
+        inputPrice: { '>272000': 5, default: 2.5 },
+        outputPrice: { '>272000': 22.5, default: 15 }
+      }
+      const cost = computeCost(spec, { inputTokens: 100_000, outputTokens: 1000 })
+      // 100k * 2.5 + 1k * 15 → 0.265
+      expect(cost).toBeCloseTo(0.265, 6)
+    })
+
+    test('above threshold uses surcharge rate', () => {
+      const spec = {
+        inputPrice: { '>272000': 5, default: 2.5 },
+        outputPrice: { '>272000': 22.5, default: 15 }
+      }
+      const cost = computeCost(spec, { inputTokens: 500_000, outputTokens: 1000 })
+      // 500k * 5 + 1k * 22.5 → 2.5225
+      expect(cost).toBeCloseTo(2.5225, 6)
+    })
+
+    test('at-threshold stays on default (strictly >)', () => {
+      const spec = { inputPrice: { '>100': 10, default: 1 }, outputPrice: 0 }
+      expect(computeCost(spec, { inputTokens: 100, outputTokens: 0 })).toBeCloseTo(0.0001, 8)
+      expect(computeCost(spec, { inputTokens: 101, outputTokens: 0 })).toBeCloseTo(0.00101, 8)
+    })
+
+    test('multi-tier picks highest threshold that inputTokens exceeds', () => {
+      const spec = {
+        inputPrice: { '>100000': 2, '>500000': 4, default: 1 },
+        outputPrice: 0
+      }
+      expect(computeCost(spec, { inputTokens: 50_000, outputTokens: 0 })).toBeCloseTo(0.05, 6)
+      expect(computeCost(spec, { inputTokens: 200_000, outputTokens: 0 })).toBeCloseTo(0.4, 6)
+      expect(computeCost(spec, { inputTokens: 600_000, outputTokens: 0 })).toBeCloseTo(2.4, 6)
+    })
+
+    test('mixed shape: scalar input, tiered output', () => {
+      const spec = {
+        inputPrice: 1,
+        outputPrice: { '>100000': 20, default: 10 }
+      }
+      expect(computeCost(spec, { inputTokens: 50_000, outputTokens: 1000 }))
+        .toBeCloseTo(0.06, 6) // 50k*1 + 1k*10 → 0.06
+      expect(computeCost(spec, { inputTokens: 200_000, outputTokens: 1000 }))
+        .toBeCloseTo(0.22, 6) // 200k*1 + 1k*20 → 0.22
+    })
+
+    test('thinkingPrice falls back to (resolved) outputPrice', () => {
+      const spec = {
+        inputPrice: 0,
+        outputPrice: { '>272000': 22.5, default: 15 }
+      }
+      // thinking tokens billed at outputPrice's active tier
+      expect(computeCost(spec, { inputTokens: 0, outputTokens: 0, thinkingTokens: 1_000_000 }))
+        .toBe(15)
+      expect(computeCost(spec, { inputTokens: 500_000, outputTokens: 0, thinkingTokens: 1_000_000 }))
+        .toBe(22.5)
+    })
+
+    test('explicit tiered thinkingPrice wins over outputPrice', () => {
+      const spec = {
+        inputPrice: 0,
+        outputPrice: 15,
+        thinkingPrice: { '>100000': 30, default: 20 }
+      }
+      expect(computeCost(spec, { inputTokens: 50_000, outputTokens: 0, thinkingTokens: 1_000_000 }))
+        .toBe(20)
+      expect(computeCost(spec, { inputTokens: 200_000, outputTokens: 0, thinkingTokens: 1_000_000 }))
+        .toBe(30)
+    })
+
+    test('malformed tiered map without numeric default returns 0', () => {
+      const spec = { inputPrice: { '>100': 'bogus' }, outputPrice: 5 }
+      expect(computeCost(spec, { inputTokens: 1000, outputTokens: 100 })).toBe(0)
+    })
+
+    test('tier keys that are not ">N" are ignored', () => {
+      const spec = {
+        inputPrice: { foo: 99, '>100': 2, default: 1 },
+        outputPrice: 0
+      }
+      expect(computeCost(spec, { inputTokens: 50, outputTokens: 0 })).toBeCloseTo(0.00005, 8)
+      expect(computeCost(spec, { inputTokens: 500, outputTokens: 0 })).toBeCloseTo(0.001, 8)
+    })
+
+    test('full-spec shape: scalar sdk/model fields alongside tiered prices', () => {
+      // Catalog entries frequently carry non-pricing fields
+      // (`sdk`, `model`, `provider`, `thinkingEffortLevels`, ...).
+      // `computeCost` reads only the three price fields and ignores
+      // the rest.
+      const spec = {
+        sdk: 'openai',
+        model: 'some-model',
+        inputPrice: { '>272000': 5, default: 2.5 },
+        outputPrice: { '>272000': 22.5, default: 15 }
+      }
+      const cost = computeCost(spec, {
+        inputTokens: 10_000, outputTokens: 500, thinkingTokens: 200
+      })
+      // 10000*2.5 + 500*15 + 200*15 → 0.03550  (input below threshold)
+      expect(cost).toBeCloseTo(0.0355, 6)
+    })
+  })
 })
 
 describe('loadCatalog from curated.json', () => {

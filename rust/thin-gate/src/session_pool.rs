@@ -290,21 +290,31 @@ impl SessionPool {
     pub async fn new(cfg: SessionConfig, size: usize) -> Result<Self, PoolError> {
         assert!(size > 0, "pool size must be > 0");
         let (tx, rx) = mpsc::channel(size);
-        for _ in 0..size {
-            // Initial pool population fails fast — if the session
-            // binary is broken at startup we want a clear error
-            // before the gate starts serving traffic. Runtime
-            // replacements get the backoff loop instead.
-            //
-            // Seed at version 0. If the catalog source is already
-            // populated at boot, the session gets it here and stays
-            // in-sync with the pool. If it's not, the session starts
-            // blank and the first `notify_catalog_changed` + `acquire`
-            // pair fills it in before the next call.
-            let sess = PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT, 0).await?;
+
+        // Spawn all sessions in parallel. Each session spawn does a
+        // node subprocess fork + stdin/stdout ready handshake; done
+        // sequentially, cost is linear in pool size and makes a
+        // 32-slot pool take ~10 s. Done concurrently, cost is flat
+        // (dominated by the single slowest spawn). Any failure during
+        // initial population is still fatal — we want a clear error
+        // before the gate starts serving traffic.
+        let spawns = (0..size).map(|_| {
+            let cfg = cfg.clone();
+            async move {
+                // Seed at version 0. If the catalog source is already
+                // populated at boot, the session gets it here and stays
+                // in-sync with the pool. If not, the session starts
+                // blank and the first `notify_catalog_changed` +
+                // `acquire` pair fills it in before the next call.
+                PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT, 0).await
+            }
+        });
+        let sessions = futures::future::try_join_all(spawns).await?;
+        for sess in sessions {
             metrics::session_alive_delta(1);
             tx.send(sess).await.expect("channel just created");
         }
+
         Ok(Self {
             inner: Arc::new(PoolInner {
                 sender: tx,

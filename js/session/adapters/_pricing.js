@@ -14,6 +14,19 @@ import { getSpec, setCatalog } from './_catalog.js'
 /**
  * Pure cost computation from spec + usage.
  *
+ * Each price field (`inputPrice` / `outputPrice` / `thinkingPrice`) is
+ * one of:
+ *
+ *   - a `number` — flat per-million rate; or
+ *   - an object `{">N": number, ..., "default": number}` — tiered.
+ *     The active rate is the one under the highest `>N` key that the
+ *     call's `inputTokens` exceeds; falls back to `"default"` when
+ *     nothing matches. Keys that aren't `">N"` or `"default"` are
+ *     ignored. `>` is strict — at exactly N, the default is used.
+ *
+ * `thinkingPrice` is optional and falls back to the resolved
+ * `outputPrice` when absent.
+ *
  * @param {any} spec  Catalog entry (with `inputPrice`/`outputPrice`/`thinkingPrice`),
  *                    or `undefined`.
  * @param {{inputTokens?: number, outputTokens?: number, thinkingTokens?: number}} usage
@@ -21,15 +34,48 @@ import { getSpec, setCatalog } from './_catalog.js'
  */
 export function computeCost (spec, usage) {
   if (!spec) return 0
-  const ip = spec.inputPrice
-  const op = spec.outputPrice
-  if (typeof ip !== 'number' || typeof op !== 'number') return 0
   const i = usage.inputTokens ?? 0
   const o = usage.outputTokens ?? 0
   const t = usage.thinkingTokens ?? 0
-  const tp = typeof spec.thinkingPrice === 'number' ? spec.thinkingPrice : op
-  const total = (i * ip + o * op + t * tp) / 1_000_000
+  const ip = resolveTier(spec.inputPrice, i)
+  const op = resolveTier(spec.outputPrice, i)
+  if (typeof ip !== 'number' || typeof op !== 'number') return 0
+  const tp = resolveTier(spec.thinkingPrice, i)
+  const tpFinal = typeof tp === 'number' ? tp : op
+  const total = (i * ip + o * op + t * tpFinal) / 1_000_000
   return round(total)
+}
+
+/**
+ * Resolve a price field against a token count. Scalars pass through;
+ * tiered maps return the rate of the highest `>N` key that
+ * `tokens` exceeds, falling back to `default`. Returns `null` when
+ * the field is absent or malformed — callers decide whether to treat
+ * that as "no price" (cost=0) or fall back (thinkingPrice→outputPrice).
+ *
+ * @param {unknown} price
+ * @param {number} tokens
+ * @returns {number | null}
+ */
+function resolveTier (price, tokens) {
+  if (typeof price === 'number') return price
+  if (!price || typeof price !== 'object') return null
+  let best = null
+  let bestThreshold = -1
+  for (const key of Object.keys(price)) {
+    if (key === 'default') continue
+    const m = /^>(\d+)$/.exec(key)
+    if (!m) continue
+    const threshold = Number(m[1])
+    if (tokens > threshold && threshold > bestThreshold) {
+      bestThreshold = threshold
+      const v = /** @type {Record<string, unknown>} */ (price)[key]
+      if (typeof v === 'number') best = v
+    }
+  }
+  if (best != null) return best
+  const d = /** @type {Record<string, unknown>} */ (price).default
+  return typeof d === 'number' ? d : null
 }
 
 /**

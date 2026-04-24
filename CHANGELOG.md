@@ -4,6 +4,31 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.95.0] — Tiered pricing in `computeCost`; parallel pool spawn
+
+### Added
+
+- **Tiered pricing support in `computeCost`.** Each of
+  `inputPrice` / `outputPrice` / `thinkingPrice` may now be either
+  a scalar number (flat per-million rate) or an object
+  `{">N": number, ..., "default": number}` that switches rate by
+  the call's `inputTokens`. The active rate is the one under the
+  highest `>N` key the input strictly exceeds; falls back to
+  `"default"` when nothing matches. Keys that aren't `">N"` or
+  `"default"` are ignored. Scalar prices behave as before; mixed
+  shapes (one field scalar, another tiered) work. `thinkingPrice`
+  falls back to the *resolved* `outputPrice` tier when absent.
+
+### Changed
+
+- **`SessionPool::new` spawns sessions concurrently via
+  `futures::try_join_all`** instead of a sequential loop. Cold-boot
+  cost is now dominated by the single slowest spawn (~300–500 ms)
+  instead of scaling linearly with pool size. A 32-slot pool that
+  used to take ~10 s to come up now comes up in under a second.
+  Failure semantics unchanged — any spawn failure during init still
+  aborts pool creation fail-fast.
+
 ## [0.94.0] — Model-id unification; catalog guard; adapter wire-string fix
 
 ### Breaking
@@ -79,6 +104,7 @@ All notable changes to this project are documented here. Format follows
   Non-Gemini providers ignore the field. Callers replaying tool
   results should pass the ToolCall back unchanged.
 
+[0.95.0]: https://github.com/clbrge/mohdel/releases/tag/v0.95.0
 [0.94.0]: https://github.com/clbrge/mohdel/releases/tag/v0.94.0
 [0.93.0]: https://github.com/clbrge/mohdel/releases/tag/v0.93.0
 

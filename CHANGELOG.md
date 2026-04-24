@@ -4,6 +4,31 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.93.0] — ToolCall.thoughtSignature round-trip
+
+### Fixed
+
+- **Gemini tool-use calls failed thin-gate parsing** with
+  `"session emitted non-Event line: unknown field thoughtSignature,
+  expected one of id, name, arguments"`. The Gemini adapter emits
+  `thoughtSignature` alongside every function call — an opaque blob
+  the model needs preserved across tool rounds to maintain thinking
+  state continuity. The Rust `ToolCall` struct had
+  `deny_unknown_fields` and no such field, so thin-gate rejected the
+  session's terminal `done` event and the whole call failed.
+
+  Added `thoughtSignature` as an optional field on `ToolCall`
+  (`rust/thin-gate/src/protocol.rs`) and documented it on the JS
+  `ToolCall` typedef (`js/core/events.js`). Flows through both the
+  outbound `AnswerResult.toolCalls` path (session → client) and the
+  inbound `Message.toolCalls` path (client replaying history), so
+  one fix covers both directions of the tool-use round-trip.
+
+  Non-Gemini providers ignore the field. Callers replaying tool
+  results should pass the ToolCall back unchanged.
+
+[0.93.0]: https://github.com/clbrge/mohdel/releases/tag/v0.93.0
+
 ## [0.92.0] — Catalog CLI rebuild, streaming-health metric
 
 ### Fixed

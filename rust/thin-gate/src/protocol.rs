@@ -285,6 +285,18 @@ pub struct ToolCall {
     pub name: String,
     /// Parsed object. Not a JSON string.
     pub arguments: Value,
+    /// Provider-specific opaque blob carried through for tool-call
+    /// round-trips. Gemini emits `thoughtSignature` alongside each
+    /// function call — its absence on the replay envelope breaks
+    /// thinking state continuity across tool rounds. Other providers
+    /// ignore this field; the session-side adapters read it only for
+    /// providers that set it.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "thoughtSignature"
+    )]
+    pub thought_signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

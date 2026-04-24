@@ -90,6 +90,12 @@
  * @property {string} id
  * @property {string} name
  * @property {object} arguments
+ * @property {string} [thoughtSignature]
+ *   Provider-specific opaque blob carried through tool-call
+ *   round-trips to preserve thinking state continuity. Set by the
+ *   Gemini adapter when the model emits one; absent for other
+ *   providers. Callers replaying tool results should pass the
+ *   ToolCall back unchanged so the adapter can re-attach it.
  */
 
 export const EVENT_TYPES = Object.freeze(['delta', 'done', 'error'])

@@ -24,7 +24,7 @@
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -36,7 +36,15 @@ use crate::protocol::Event;
 use crate::server::SessionConfig;
 
 /// Timeout for the startup ping/pong readiness handshake.
-pub const READINESS_TIMEOUT: Duration = Duration::from_secs(3);
+pub const READINESS_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Concurrency cap for the initial pool population. Spawning all N
+/// sessions at once creates a fork-storm (N node subprocesses
+/// competing for CPU, disk, and memory during their boot) that can
+/// push individual-session readiness past `READINESS_TIMEOUT` on a
+/// loaded host. Capping keeps wall-time close to `N / cap * spawn_time`
+/// without starving any single spawn.
+const INITIAL_SPAWN_CONCURRENCY: usize = 8;
 
 /// Baseline delay for exponential respawn backoff. Actual delay is
 /// `min(BACKOFF_BASE * 2^streak, BACKOFF_MAX)`.
@@ -291,28 +299,37 @@ impl SessionPool {
         assert!(size > 0, "pool size must be > 0");
         let (tx, rx) = mpsc::channel(size);
 
-        // Spawn all sessions in parallel. Each session spawn does a
-        // node subprocess fork + stdin/stdout ready handshake; done
-        // sequentially, cost is linear in pool size and makes a
-        // 32-slot pool take ~10 s. Done concurrently, cost is flat
-        // (dominated by the single slowest spawn). Any failure during
-        // initial population is still fatal — we want a clear error
-        // before the gate starts serving traffic.
-        let spawns = (0..size).map(|_| {
-            let cfg = cfg.clone();
-            async move {
-                // Seed at version 0. If the catalog source is already
-                // populated at boot, the session gets it here and stays
-                // in-sync with the pool. If not, the session starts
-                // blank and the first `notify_catalog_changed` +
-                // `acquire` pair fills it in before the next call.
-                PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT, 0).await
+        // Spawn sessions with bounded concurrency. Done sequentially,
+        // pool startup is linear in pool size — a 32-slot pool takes
+        // ~10 s. Done with no cap, 32 simultaneous node forks compete
+        // for CPU/disk/memory during their boot and individual
+        // sessions trip `READINESS_TIMEOUT`. `buffer_unordered` keeps
+        // a fixed number of spawns in flight at any time — wall-time
+        // becomes ~ceil(N / cap) × spawn_time, each spawn gets the
+        // full readiness budget without contention. Any failure in
+        // the initial population is still fatal.
+        // Scoped so `stream` drops (and releases its borrow of `cfg`)
+        // before we move `cfg` into `PoolInner` below.
+        {
+            use futures::StreamExt;
+            let mut stream = futures::stream::iter((0..size).map(|_| {
+                let cfg = cfg.clone();
+                async move {
+                    // Seed at version 0. If the catalog source is already
+                    // populated at boot, the session gets it here and stays
+                    // in-sync with the pool. If not, the session starts
+                    // blank and the first `notify_catalog_changed` +
+                    // `acquire` pair fills it in before the next call.
+                    PooledSession::spawn_and_ready(&cfg, READINESS_TIMEOUT, 0).await
+                }
+            }))
+            .buffer_unordered(INITIAL_SPAWN_CONCURRENCY);
+
+            while let Some(result) = stream.next().await {
+                let sess = result?;
+                metrics::session_alive_delta(1);
+                tx.send(sess).await.expect("channel just created");
             }
-        });
-        let sessions = futures::future::try_join_all(spawns).await?;
-        for sess in sessions {
-            metrics::session_alive_delta(1);
-            tx.send(sess).await.expect("channel just created");
         }
 
         Ok(Self {
@@ -352,6 +369,20 @@ impl SessionPool {
     /// the session is discarded, a replacement is queued, and the
     /// caller gets the next one in the channel.
     pub async fn acquire(&self) -> Option<PooledSession> {
+        // Full wait time from caller's perspective — includes any
+        // internal loop iterations that discard a session and retry
+        // (e.g. catalog injection failure).
+        let waited_since = Instant::now();
+        let sess = self.acquire_inner().await;
+        let waited_ms = waited_since.elapsed().as_secs_f64() * 1000.0;
+        metrics::pool_acquire_wait(waited_ms);
+        if sess.is_some() {
+            metrics::pool_in_use_delta(1);
+        }
+        sess
+    }
+
+    async fn acquire_inner(&self) -> Option<PooledSession> {
         loop {
             let mut sess = self.inner.receiver.lock().await.recv().await?;
             let pool_ver = self.inner.catalog_version.load(Ordering::Acquire);
@@ -396,9 +427,25 @@ impl SessionPool {
 
     /// Return a healthy session to the pool for reuse. If the
     /// channel is full (shouldn't happen under normal flow), the
-    /// session is dropped.
+    /// session is dropped. Balances the `pool_in_use_delta(+1)`
+    /// that `acquire` emitted.
     pub fn release(&self, sess: PooledSession) {
         let _ = self.inner.sender.try_send(sess);
+        metrics::pool_in_use_delta(-1);
+    }
+
+    /// Drop an acquired session that's no longer healthy (died
+    /// mid-call, stdin wedged, protocol violation) and queue a
+    /// replacement. Balances the `pool_in_use_delta(+1)` from
+    /// `acquire` AND the `session_alive_delta(+1)` that this session
+    /// originally contributed when it was first spawned — use this
+    /// instead of bare `drop(sess) + spawn_replacement()` so the
+    /// pool gauges stay consistent.
+    pub fn discard(&self, sess: PooledSession) {
+        drop(sess);
+        metrics::pool_in_use_delta(-1);
+        metrics::session_alive_delta(-1);
+        self.spawn_replacement();
     }
 
     /// Queue a replacement spawn. Returns immediately; the actual

@@ -16,11 +16,20 @@
 //! | `mohdel.sessions.alive`                | UpDownCounter| –                  |
 //! | `mohdel.sessions.respawned`            | Counter      | –                  |
 //! | `mohdel.sessions.spawn_failures`       | Counter      | –                  |
+//! | `mohdel.pool.in_use`                   | UpDownCounter| –                  |
+//! | `mohdel.pool.acquire_wait_ms`          | Histogram    | –                  |
 //! | `mohdel.calls`                         | Counter      | `provider`,`status`|
 //! | `mohdel.call.duration_ms`              | Histogram    | `provider`,`status`|
 //! | `mohdel.cooldown.rejections`           | Counter      | `provider`         |
 //! | `mohdel.quota.rejections`              | Counter      | –                  |
 //! | `mohdel.policy.errors`                 | Counter      | `kind`             |
+//!
+//! Pool saturation — idle = `alive - in_use`. When `in_use == alive`
+//! every slot is busy and any new acquire has to wait for a release.
+//! `acquire_wait_ms.p95` is the single most direct signal that a
+//! host is undersized for its concurrency; a p95 above the typical
+//! call `duration_ms.p50` means callers are routinely sitting in
+//! the queue longer than calls actually take.
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -37,6 +46,8 @@ struct Metrics {
     sessions_alive: UpDownCounter<i64>,
     sessions_respawned: Counter<u64>,
     sessions_spawn_failures: Counter<u64>,
+    pool_in_use: UpDownCounter<i64>,
+    pool_acquire_wait_ms: Histogram<f64>,
     calls: Counter<u64>,
     call_duration_ms: Histogram<f64>,
     cooldown_rejections: Counter<u64>,
@@ -105,6 +116,15 @@ pub fn init() {
         sessions_spawn_failures: meter
             .u64_counter("mohdel.sessions.spawn_failures")
             .with_description("Session spawn attempts that failed (readiness or exec)")
+            .build(),
+        pool_in_use: meter
+            .i64_up_down_counter("mohdel.pool.in_use")
+            .with_description("Sessions currently checked out of the pool (handling a call)")
+            .build(),
+        pool_acquire_wait_ms: meter
+            .f64_histogram("mohdel.pool.acquire_wait_ms")
+            .with_description("Wall time a caller waited for a free session slot")
+            .with_unit("ms")
             .build(),
         calls: meter
             .u64_counter("mohdel.calls")
@@ -228,6 +248,18 @@ pub fn session_respawned() {
 pub fn session_spawn_failed() {
     if let Some(m) = METRICS.get() {
         m.sessions_spawn_failures.add(1, &[]);
+    }
+}
+
+pub fn pool_in_use_delta(delta: i64) {
+    if let Some(m) = METRICS.get() {
+        m.pool_in_use.add(delta, &[]);
+    }
+}
+
+pub fn pool_acquire_wait(ms: f64) {
+    if let Some(m) = METRICS.get() {
+        m.pool_acquire_wait_ms.record(ms, &[]);
     }
 }
 

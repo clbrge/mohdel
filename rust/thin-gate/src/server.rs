@@ -469,9 +469,7 @@ async fn dispatch_via_pool(
     .await;
 
     if let Err(e) = write_result {
-        drop(session);
-        metrics::session_alive_delta(-1);
-        pool.spawn_replacement();
+        pool.discard(session);
         return typed_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             Severity::Error,
@@ -528,6 +526,11 @@ impl Drop for PoolStreamState {
                 match sess.cancel_and_drain(&call_id, CANCEL_DRAIN_TIMEOUT).await {
                     Ok(clean_sess) => pool.release(clean_sess),
                     Err(()) => {
+                        // cancel_and_drain already consumed/dropped the
+                        // session, so we can't route through `discard`
+                        // — just balance the bookkeeping that `acquire`
+                        // set up and queue a replacement.
+                        metrics::pool_in_use_delta(-1);
                         metrics::session_alive_delta(-1);
                         pool.spawn_replacement();
                     }
@@ -757,9 +760,7 @@ fn record_call_metric(state: &mut PoolStreamState, status: &str) {
 
 fn kill_and_replace(state: &mut PoolStreamState) {
     if let Some(sess) = state.session.take() {
-        drop(sess);
-        metrics::session_alive_delta(-1);
-        state.pool.spawn_replacement();
+        state.pool.discard(sess);
     }
 }
 
@@ -947,9 +948,7 @@ async fn dispatch_image_via_pool(
     .await;
 
     if let Err(e) = write_result {
-        drop(session);
-        metrics::session_alive_delta(-1);
-        pool.spawn_replacement();
+        pool.discard(session);
         return typed_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             Severity::Error,
@@ -967,9 +966,7 @@ async fn dispatch_image_via_pool(
 
     let line = match read {
         Ok(0) => {
-            drop(session);
-            metrics::session_alive_delta(-1);
-            pool.spawn_replacement();
+            pool.discard(session);
             return typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Error,
@@ -980,9 +977,7 @@ async fn dispatch_image_via_pool(
             );
         }
         Err(e) => {
-            drop(session);
-            metrics::session_alive_delta(-1);
-            pool.spawn_replacement();
+            pool.discard(session);
             return typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Error,
@@ -999,9 +994,7 @@ async fn dispatch_image_via_pool(
     let parsed: ImageSessionLine = match serde_json::from_str(trimmed) {
         Ok(p) => p,
         Err(e) => {
-            drop(session);
-            metrics::session_alive_delta(-1);
-            pool.spawn_replacement();
+            pool.discard(session);
             return typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Error,

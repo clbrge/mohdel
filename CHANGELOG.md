@@ -4,6 +4,50 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.96.0] — Pool observability; bounded-concurrency spawn
+
+### Added
+
+- **Pool observability.** Two new OTLP instruments on the
+  `mohdel_thin_gate` meter:
+  - `mohdel.pool.in_use` (UpDownCounter) — sessions currently
+    checked out. Combined with existing `mohdel.sessions.alive`,
+    gives live saturation (`in_use == alive` → every slot busy).
+  - `mohdel.pool.acquire_wait_ms` (Histogram) — wall time from
+    acquire request to session handed out. Includes any internal
+    retry (catalog-injection failure path). `p95` above the typical
+    call `duration_ms.p50` is a direct signal that the host is
+    undersized for its concurrency.
+
+### Changed
+
+- **`SessionPool::discard` helper** consolidates the "drop an
+  acquired session + queue a replacement" flow into one call, so
+  the `pool.in_use` and `sessions.alive` gauges stay balanced
+  across every failure path (stdin wedge, mid-call EOF,
+  invalid-event, cleanup failure). Callers that previously did
+  `drop(sess) + session_alive_delta(-1) + spawn_replacement()`
+  now use `pool.discard(sess)`.
+
+### Fixed
+
+- **`SessionPool::new` fork-storm on large pools.** The 0.95
+  parallel-spawn change started N sessions simultaneously via
+  `try_join_all`; on pools of ~16+ this produces a fork storm
+  (many node subprocesses booting at once, competing for CPU and
+  disk) that pushes individual-session readiness past the 3 s
+  `READINESS_TIMEOUT`, so pool creation fails with
+  `ReadinessTimeout` even on generously-provisioned hosts. Two
+  changes:
+  - Spawn concurrency is now bounded via `buffer_unordered` at
+    `INITIAL_SPAWN_CONCURRENCY = 8`. Wall-time stays close to
+    `ceil(N / 8) × spawn_time`; no single spawn competes with
+    more than 7 others. Sequential behavior is preserved within
+    each batch so individual readiness timeouts don't stack.
+  - `READINESS_TIMEOUT` raised from 3 s to 15 s. Reasonable
+    headroom on loaded hosts without masking real hangs — a
+    session that still isn't ready in 15 s is broken, not slow.
+
 ## [0.95.0] — Tiered pricing in `computeCost`; parallel pool spawn
 
 ### Added
@@ -104,6 +148,7 @@ All notable changes to this project are documented here. Format follows
   Non-Gemini providers ignore the field. Callers replaying tool
   results should pass the ToolCall back unchanged.
 
+[0.96.0]: https://github.com/clbrge/mohdel/releases/tag/v0.96.0
 [0.95.0]: https://github.com/clbrge/mohdel/releases/tag/v0.95.0
 [0.94.0]: https://github.com/clbrge/mohdel/releases/tag/v0.94.0
 [0.93.0]: https://github.com/clbrge/mohdel/releases/tag/v0.93.0

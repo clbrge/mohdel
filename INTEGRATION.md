@@ -560,7 +560,9 @@ try {
 }
 ```
 
-Common error types: `AUTH_INVALID`, `RATE_LIMIT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_ERROR`, `NET_ERROR`, `PROVIDER_COOLDOWN`, `CONTEXT_OVERFLOW`.
+Common error types: `AUTH_INVALID`, `RATE_LIMIT`, `QUOTA_EXHAUSTED`, `PROVIDER_UNAVAILABLE`, `PROVIDER_ERROR`, `CONTEXT_OVERFLOW`, `CONTENT_BLOCKED`, `NET_ERROR`, `PROVIDER_COOLDOWN`.
+
+`CONTEXT_OVERFLOW`, `QUOTA_EXHAUSTED`, and `CONTENT_BLOCKED` are non-retryable: same input → same failure. Recover at a higher layer (compact prompt, swap model, surface to user).
 
 See [LOGGING.md](LOGGING.md#what-mohdel-logs-at-each-level) for the severity mapping.
 

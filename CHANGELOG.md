@@ -4,6 +4,58 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.97.0] — Provider error classification by code
+
+### Added
+
+- **`classifyProviderError` inspects provider error codes and
+  message text before falling back to HTTP-status buckets.** Three
+  new `TypedError.type` tags surface from the unified adapter
+  classifier:
+  - `CONTEXT_OVERFLOW` (non-retryable, severity `warn`) — input
+    exceeds the model's context window. Triggered by OpenAI
+    `code: 'context_length_exceeded'`, Anthropic
+    `error.type: 'context_length_exceeded'`, and a message-based
+    fallback for providers that don't expose a dedicated code
+    (Gemini, some compat gateways: "prompt is too long", "maximum
+    context length", "too many tokens", etc.).
+  - `QUOTA_EXHAUSTED` (non-retryable, severity `error`) — the org
+    is out of credits/quota. Triggered by `insufficient_quota`,
+    `billing_hard_limit_reached`, `account_deactivated`,
+    `credit_balance_too_low`. Most commonly arrives as 429, where
+    the previous status-only bucketing wrongly returned
+    `RATE_LIMIT, retryable: true` and would burn retries on a
+    permanent failure.
+  - `CONTENT_BLOCKED` (non-retryable, severity `warn`) —
+    triggered by `content_filter`, `content_policy_violation`,
+    `safety`, `blocked`, `prohibited_content`.
+- **`extractCode(err)` helper** in `js/session/adapters/_errors.js`
+  reads provider error codes out of any of the four shapes the
+  SDKs use (`err.code`, `err.error.code`, `err.error.error.type`,
+  `err.response.data.error.code`), so the classifier picks up
+  OpenAI-, Anthropic-, and OpenAI-compat-style codes uniformly.
+
+### Changed
+
+- **`INTEGRATION.md` error-types list** updated with
+  `QUOTA_EXHAUSTED` and `CONTENT_BLOCKED`, with an explicit note
+  that `CONTEXT_OVERFLOW`, `QUOTA_EXHAUSTED`, and `CONTENT_BLOCKED`
+  are non-retryable (same input → same failure; recover at a
+  higher layer by compacting the prompt, swapping models, or
+  surfacing to the user).
+
+### Removed
+
+- **Dead helpers in `src/lib/errors.js`** that no live code path
+  imported: `APIError`, `toTransportError`, `retryableWarn`,
+  `reportRetryable`, `reportDefault`, `reportContextOverflow`,
+  `isContextOverflowMessage`, and the private `isConnectionError`.
+  These were the per-adapter classifier shape from before
+  `js/session/adapters/_errors.js::classifyProviderError` became
+  the single source of truth; only their own `errors.test.js`
+  cases referenced them. The live surface — `MohdelError`,
+  `Severity`, `getSeverityNumber` — is unchanged.
+
 ## [0.96.0] — Pool observability; bounded-concurrency spawn
 
 ### Added

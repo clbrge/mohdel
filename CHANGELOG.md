@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.97.1] — Dependency updates
+
+### Changed
+
+- Dependencies refreshed to current versions in `package.json` and
+  `Cargo.toml`. No runtime or API behavior change.
+
 ## [0.97.0] — Provider error classification by code
 
 ### Added

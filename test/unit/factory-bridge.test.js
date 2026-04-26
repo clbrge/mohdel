@@ -53,7 +53,7 @@ describe('factory bridge — runAnswer', () => {
   })
 
   test('unknown provider throws MohdelError carrying the error type', async () => {
-    await expect(runAnswer({ ...baseArgs, provider: 'nonesuch' }, deps))
+    await expect(runAnswer({ ...baseArgs, modelKey: 'nonesuch/m' }, deps))
       .rejects.toMatchObject({
         name: 'MohdelError',
         message: 'SESSION_UNKNOWN_PROVIDER',

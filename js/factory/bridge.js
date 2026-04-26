@@ -71,7 +71,7 @@ import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
  * @returns {Promise<any>}            AnswerResult (matches the factory's return shape).
  */
 export async function runAnswer ({ provider, model, modelKey, configuration, prompt, options = {} }, deps = {}) {
-  const envelope = toEnvelope({ provider, model, configuration, prompt, options })
+  const envelope = toEnvelope({ modelKey, configuration, prompt, options })
 
   // If the caller passed a `realtimeHandler`, feed every `delta`
   // event into a buffer that invokes the handler on batches matching
@@ -150,20 +150,23 @@ export async function runAnswerImage ({ provider, model, configuration, prompt, 
 
 /**
  * @param {object} args
- * @param {string} args.provider
- * @param {string} args.model
+ * @param {string} args.modelKey      Mohdel catalog key `<provider>/<bare>`. The
+ *                                    envelope carries the mohdel key, not the
+ *                                    upstream provider model name — adapters
+ *                                    look up `spec.model` via `catalogKey()`
+ *                                    and use that for the actual API call.
  * @param {any} args.configuration
  * @param {string | any[] | {system?: any, messages: any[]}} args.prompt
  * @param {any} args.options
  * @returns {import('#core/envelope.js').CallEnvelope}
  */
-function toEnvelope ({ provider, model, configuration, prompt, options }) {
+function toEnvelope ({ modelKey, configuration, prompt, options }) {
   /** @type {import('#core/envelope.js').CallEnvelope} */
   const envelope = {
     callId: options.callId || newCallId(),
     authId: options.authId || 'local',
     auth: configToAuth(configuration),
-    model: /** @type {import('#core/model-id.js').ModelId} */ (`${provider}/${model}`),
+    model: /** @type {import('#core/model-id.js').ModelId} */ (modelKey),
     prompt: toEnvelopePrompt(prompt)
   }
 

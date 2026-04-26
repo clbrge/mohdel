@@ -3,6 +3,17 @@ export const sanitizeOutput = str => {
   return str.replace(/\0/g, '\uFFFD').trim()
 }
 
+// Practical input ceiling for a model spec: catalog `contextTokenLimit`
+// minus any empirically-derived `inputCeilingMargin` reserve the API
+// silently steals (reasoning floor, structural overhead, pricing-tier
+// cliffs). Reduces to `contextTokenLimit` when the margin field is
+// unset. Consumers computing safe input budgets should call this in
+// place of `spec.contextTokenLimit`.
+export const effectiveContextLimit = spec => {
+  if (!spec || spec.contextTokenLimit == null) return 0
+  return Math.max(0, spec.contextTokenLimit - (spec.inputCeilingMargin ?? 0))
+}
+
 export const translateModelInfo = (model, infoTranslate = {}) => {
   if (!model || typeof model !== 'object') return model
 

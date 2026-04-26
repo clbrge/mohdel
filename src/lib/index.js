@@ -723,4 +723,5 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
 
 export { silent } from './logger.js'
 export { loadCuratedCache, getCuratedCacheSnapshot } from './curated-cache.js'
+export { effectiveContextLimit } from './utils.js'
 export default mohdel

@@ -102,6 +102,7 @@
     "*.{js,cjs}": "standard"
   },
   "devDependencies": {
+    "gpt-tokenizer": "^3.4.0",
     "lint-staged": "^16.4.0",
     "release-it": "^20.0.1",
     "standard": "^17.1.2",

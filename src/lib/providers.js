@@ -3,26 +3,34 @@ const providers = {
     sdk: 'anthropic',
     apiKeyEnv: 'ANTHROPIC_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
-    creators: ['anthropic']
+    creators: ['anthropic'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'error'
   },
   cerebras: {
     sdk: 'cerebras',
     apiKeyEnv: 'CEREBRAS_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
-    creators: ['openai', 'zai']
+    creators: ['openai', 'zai'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
   },
   deepseek: {
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'DEEPSEEK_API_SK',
     createConfiguration: apiKey => ({ baseURL: 'https://api.deepseek.com', apiKey }),
-    creators: ['deepseek']
+    creators: ['deepseek'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
   },
   gemini: {
     sdk: 'gemini',
     apiKeyEnv: 'GEMINI_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
-    creators: ['google']
+    creators: ['google'],
+    contextSemantics: 'separate',
+    outputCapStrategy: 'accept'
   },
   groq: {
     sdk: 'groq',
@@ -41,7 +49,9 @@ const providers = {
     sdk: 'fireworks',
     apiKeyEnv: 'FIREWORKS_API_SK',
     createConfiguration: apiKey => ({ apiKey, baseURL: 'https://api.fireworks.ai/inference/v1' }),
-    creators: ['meta', 'alibaba']
+    creators: ['meta', 'alibaba'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
   },
   novita: {
     sdk: 'openai',
@@ -49,13 +59,17 @@ const providers = {
     imageHandler: 'novita',
     apiKeyEnv: 'NOVITA_API_SK',
     createConfiguration: apiKey => ({ apiKey, baseURL: 'https://api.novita.ai/openai' }),
-    creators: ['deepseek', 'openai', 'bfl']
+    creators: ['deepseek', 'openai', 'bfl'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'error'
   },
   openai: {
     sdk: 'openai',
     apiKeyEnv: 'OPENAI_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
-    creators: ['openai']
+    creators: ['openai'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
   },
   openrouter: {
     sdk: 'openrouter',
@@ -78,7 +92,9 @@ const providers = {
     sdk: 'openai',
     apiKeyEnv: 'XAI_API_SK',
     createConfiguration: apiKey => ({ baseURL: 'https://api.x.ai/v1', apiKey }),
-    creators: ['xai']
+    creators: ['xai'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
   }
 }
 

@@ -4,6 +4,67 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.98.0] — Catalog primitives + envelope fixes
+
+### Added
+
+- **`effectiveContextLimit(spec)`** public utility (in `src/lib/utils.js`,
+  re-exported from package root). Returns
+  `spec.contextTokenLimit − (spec.inputCeilingMargin ?? 0)` — the
+  practical input ceiling once any empirically-derived reserve is
+  subtracted. Reduces to `contextTokenLimit` unchanged when the margin
+  field is unset, so existing catalog entries are unaffected.
+- **Provider records gained two informational fields** in
+  `src/lib/providers.js`:
+  - `contextSemantics: 'shared' | 'separate'` — `separate` for `gemini`
+    (distinct input/output budgets), `shared` for everyone else
+    (`input + max_output ≤ context`).
+  - `outputCapStrategy: 'error' | 'accept'` — `error` for `anthropic`
+    and `novita` (reject when `max_tokens > outputTokenLimit`),
+    `accept` for everyone else (silent cap or permissive). Per-model
+    overrides live on the catalog spec when needed.
+- **`gpt-tokenizer`** (`^3.4.0`) declared as a devDependency for
+  maintainer tooling that needs exact tiktoken o200k/cl100k builds.
+  Not loaded by runtime code.
+
+### Fixed
+
+- **`runAnswer` envelope now carries the mohdel catalog key**
+  (`<provider>/<bare>`) instead of `${provider}/${spec.model}`.
+  Previously, models whose bare segment differs from `spec.model`
+  (e.g. `anthropic/claude-haiku-4-5` with `model:
+  "claude-haiku-4-5-20251001"`) raised `SESSION_UNKNOWN_MODEL`
+  because downstream `catalogKey(envelope.model)` couldn't resolve
+  the spec. Adapters were already doing the right thing
+  (`spec?.model ?? bareOf(envelope.model)`), so the upstream API
+  call still uses the correct upstream id; only the envelope's
+  catalog-lookup key is corrected.
+- **TTFT now fires on `delta.reasoning_content`** in the chat
+  completions adapter (`_chat_completions.js`). DeepSeek V4,
+  `deepseek-reasoner`, and Cerebras reasoning models stream
+  reasoning chunks before visible content; the first-token
+  timestamp now reflects when the model actually starts producing
+  output, not just when visible text begins.
+
+### Changed
+
+- **Fireworks model id convention.** `spec.model` now carries the
+  full upstream id (`accounts/fireworks/models/<bare>`); the
+  catalog key remains the short `fireworks/<bare>`. The runtime
+  adapter forwards `spec.model` verbatim — no auto-prefixing — so
+  what the catalog says is what the API receives.
+- **`openai`** dependency bumped to `^6.35.0`.
+
+### Breaking
+
+- **Fireworks catalogs synced before this release contain stripped
+  `model` values** (e.g. `"model": "kimi-k2p5"`). Re-run model
+  discovery (`mo onboard fireworks` or equivalent) to repopulate
+  the entries with full upstream ids
+  (`"model": "accounts/fireworks/models/kimi-k2p5"`). Without that,
+  Fireworks calls will fail because the adapter no longer
+  re-attaches the prefix.
+
 ## [0.97.1] — Dependency updates
 
 ### Changed

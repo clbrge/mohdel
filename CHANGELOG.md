@@ -4,6 +4,48 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.98.1] — Reasoning content roundtrip
+
+### Added
+
+- **`result.reasoning` (string, optional) on `AnswerResult`** — captures
+  `reasoning_content` from chat-completions providers that return it
+  (DeepSeek V4, deepseek-reasoner, Cerebras reasoning models). Surfaces
+  in both streaming and non-streaming paths. Token count remains in
+  `thinkingTokens` from `usage.completion_tokens_details.reasoning_tokens`.
+  The Rust `AnswerResult` (in `mohdel-thin-gate`) gains the matching
+  `reasoning: Option<String>` field for HTTP-over-unix-socket consumers.
+- **Reasoning roundtrip on the wire.** When an assistant `Message` is
+  sent back with `content` as a `MessagePart[]` containing
+  `{type:'reasoning', text}`, the chat-completions adapter extracts it
+  and emits `reasoning_content` alongside `content` and `tool_calls`.
+  Multi-turn DeepSeek V4 calls now succeed: V4 hard-rejects assistant
+  history that lacks `reasoning_content` when thinking is enabled
+  (default).
+
+### Changed
+
+- **Multi-turn integration test (`test:multiturn`)** now skips two
+  cases on DeepSeek that reflect upstream limitations rather than
+  bugs:
+  - `constructed tool history` (synthetic assistant turn cannot
+    supply real `reasoning_content`); same skip as gemini's
+    `thoughtSignature` exemption.
+  - `tool round-trip` (DeepSeek V4 inherits the deepseek-reasoner
+    restriction against `tool_choice: 'required'`).
+
+- **Six new unit tests** in `test/unit/session-chat-completions.test.js`
+  cover the reasoning capture + roundtrip without requiring a live
+  provider or an external consumer (mocked SDK):
+  - non-streaming `message.reasoning_content` → `result.reasoning`
+  - missing reasoning_content → `result.reasoning` omitted
+  - streaming `delta.reasoning_content` chunks accumulate into
+    `result.reasoning`
+  - assistant `MessagePart{type:'reasoning'}` content emits
+    `reasoning_content` on the wire
+  - roundtrip works alongside `toolCalls` on the same assistant turn
+  - plain-string assistant content does not emit `reasoning_content`
+
 ## [0.98.0] — Catalog primitives + envelope fixes
 
 ### Added

@@ -208,6 +208,123 @@ describe('deepseek adapter', () => {
   })
 })
 
+// ---------- reasoning_content (shared chat-completions behavior) ----------
+//
+// Models like DeepSeek V4, deepseek-reasoner, and some Cerebras
+// reasoning models return reasoning text on a separate `reasoning_content`
+// field (non-streaming) or `delta.reasoning_content` (streaming). Multi-
+// turn callers must roundtrip it; DeepSeek V4 hard-rejects assistant
+// history that lacks it. These tests exercise the shared
+// `_chat_completions.js` capture + roundtrip via the deepseek (non-
+// streaming) and fireworks (streaming) adapters.
+
+describe('reasoning_content capture + roundtrip', () => {
+  test('non-streaming: message.reasoning_content → result.reasoning', async () => {
+    const { client } = mockChat({
+      choices: [{
+        message: {
+          content: 'visible answer',
+          reasoning_content: 'thought process here',
+          tool_calls: null
+        },
+        finish_reason: 'stop'
+      }],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        completion_tokens_details: { reasoning_tokens: 15 }
+      }
+    })
+    const events = await collect(deepseek(envelope('deepseek', 'deepseek-v4-flash'), { client }))
+    const done = events.at(-1)
+    expect(done.result.reasoning).toBe('thought process here')
+    expect(done.result.output).toBe('visible answer')
+    expect(done.result.thinkingTokens).toBe(15)
+  })
+
+  test('non-streaming: missing reasoning_content → result.reasoning omitted', async () => {
+    const { client } = mockChat(basicResponse())
+    const events = await collect(deepseek(envelope('deepseek', 'deepseek-chat'), { client }))
+    expect(events.at(-1).result.reasoning).toBeUndefined()
+  })
+
+  test('streaming: delta.reasoning_content chunks accumulate into result.reasoning', async () => {
+    const { client } = mockChatStream([
+      { choices: [{ delta: { reasoning_content: 'thinking ' } }] },
+      { choices: [{ delta: { reasoning_content: 'more...' } }] },
+      { choices: [{ delta: { content: 'visible' } }] },
+      {
+        choices: [{ finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          completion_tokens_details: { reasoning_tokens: 3 }
+        }
+      }
+    ])
+    const events = await collect(fireworks(envelope('fireworks', 'accounts/fireworks/models/k2p6'), { client }))
+    const done = events.at(-1)
+    expect(done.result.reasoning).toBe('thinking more...')
+    expect(done.result.output).toBe('visible')
+  })
+
+  test('roundtrip: assistant MessagePart{type:reasoning} → wire reasoning_content', async () => {
+    const { client, captured } = mockChat(basicResponse())
+    await collect(deepseek(envelope('deepseek', 'deepseek-v4-flash', {
+      prompt: [
+        { role: 'user', content: 'first question' },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'I considered the options' },
+            { type: 'text', text: 'final answer' }
+          ]
+        },
+        { role: 'user', content: 'follow-up' }
+      ]
+    }), { client }))
+    const assistantMsg = captured.args.messages.find(m => m.role === 'assistant')
+    expect(assistantMsg.reasoning_content).toBe('I considered the options')
+    expect(assistantMsg.content).toBe('final answer')
+  })
+
+  test('roundtrip: assistant with toolCalls + reasoning emits both on wire', async () => {
+    const { client, captured } = mockChat(basicResponse())
+    await collect(deepseek(envelope('deepseek', 'deepseek-v4-flash', {
+      prompt: [
+        { role: 'user', content: 'q' },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'planning the call' },
+            { type: 'text', text: '' }
+          ],
+          toolCalls: [{ id: 'c1', name: 'lookup', arguments: { q: 'x' } }]
+        },
+        { role: 'tool', toolCallId: 'c1', content: 'result' }
+      ]
+    }), { client }))
+    const assistantMsg = captured.args.messages.find(m => m.role === 'assistant')
+    expect(assistantMsg.reasoning_content).toBe('planning the call')
+    expect(assistantMsg.tool_calls).toHaveLength(1)
+    expect(assistantMsg.tool_calls[0].function.name).toBe('lookup')
+  })
+
+  test('roundtrip: plain string assistant content → no reasoning_content on wire', async () => {
+    const { client, captured } = mockChat(basicResponse())
+    await collect(deepseek(envelope('deepseek', 'deepseek-chat', {
+      prompt: [
+        { role: 'user', content: 'q' },
+        { role: 'assistant', content: 'plain reply' },
+        { role: 'user', content: 'follow-up' }
+      ]
+    }), { client }))
+    const assistantMsg = captured.args.messages.find(m => m.role === 'assistant')
+    expect(assistantMsg.reasoning_content).toBeUndefined()
+    expect(assistantMsg.content).toBe('plain reply')
+  })
+})
+
 // ---------- Mistral ----------
 
 describe('mistral adapter', () => {

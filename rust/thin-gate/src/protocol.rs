@@ -264,6 +264,12 @@ pub struct AnswerResult {
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_inter_frame_ms: Option<u32>,
+    /// `reasoning_content` from chat-completions providers (DeepSeek V4,
+    /// deepseek-reasoner, Cerebras reasoning models). Multi-turn callers
+    /// must roundtrip this back into the assistant message; DeepSeek V4
+    /// 400s otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

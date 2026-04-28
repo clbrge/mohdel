@@ -7,9 +7,19 @@ import { getCuratedCacheSnapshot } from '../../src/lib/curated-cache.js'
 
 loadDefaultEnv()
 
-// Gemini requires model-generated thoughtSignature on functionCall parts,
-// so manually constructed tool histories are rejected with 400.
-const NO_SYNTHETIC_HISTORY = new Set(['gemini'])
+// Providers whose multi-turn protocol requires per-message metadata
+// that only the model itself can produce, so manually constructed tool
+// histories are rejected with 400.
+//   - gemini: each functionCall part must carry the original
+//     `thoughtSignature` returned by the model.
+//   - deepseek: any assistant turn must include `reasoning_content`
+//     when thinking is enabled (default on V4); synthetic assistants
+//     can't supply it.
+const NO_SYNTHETIC_HISTORY = new Set(['gemini', 'deepseek'])
+
+// Providers that reject `tool_choice: 'required'`. DeepSeek V4
+// inherits the `deepseek-reasoner` restriction.
+const NO_REQUIRED_TOOL_CHOICE = new Set(['deepseek'])
 
 const IMAGE_TYPES = new Set(['image'])
 
@@ -87,7 +97,7 @@ describe('multi-turn messages integration', async () => {
         // ── pre-built history with every message type ────────────────
         // Exercises: system, user, assistant with content + toolCalls,
         //            consecutive tool_result with toolCallId + toolName
-        test.skipIf(NO_SYNTHETIC_HISTORY.has(sdk))('constructed tool history', async () => {
+        test.skipIf(NO_SYNTHETIC_HISTORY.has(provider) || NO_SYNTHETIC_HISTORY.has(sdk))('constructed tool history', async () => {
           const llm = m.use(modelId)
           const result = await llm.answer({
             system: 'Summarize the tool results. Include the exact values returned.',
@@ -115,7 +125,7 @@ describe('multi-turn messages integration', async () => {
         // Exercises: structured input with toolChoice, live provider IDs,
         //            assistant with toolCalls from real response,
         //            tool_result fed back in follow-up structured call
-        test('tool round-trip', async () => {
+        test.skipIf(NO_REQUIRED_TOOL_CHOICE.has(provider))('tool round-trip', async () => {
           const llm = m.use(modelId)
 
           // Step 1: ask the model to call a tool
@@ -134,12 +144,21 @@ describe('multi-turn messages integration', async () => {
           expect(step1.toolCalls.length).toBeGreaterThan(0)
           expect(step1.toolCalls[0].name).toBe('get_hostname')
 
-          // Step 2: feed back the deterministic tool result
+          // Step 2: feed back the deterministic tool result.
+          // When step1 produced reasoning_content (thinking models like
+          // DeepSeek V4), the assistant turn must roundtrip it as a
+          // reasoning MessagePart or the provider will reject step2.
+          const assistantContent = step1.reasoning
+            ? [
+                { type: 'reasoning', text: step1.reasoning },
+                { type: 'text', text: step1.output || '' }
+              ]
+            : (step1.output || '')
           const step2 = await llm.answer({
             system: 'Use the get_hostname tool when asked about the hostname.',
             messages: [
               { role: 'user', content: 'What is the hostname of this machine?' },
-              { role: 'assistant', content: step1.output, toolCalls: step1.toolCalls },
+              { role: 'assistant', content: assistantContent, toolCalls: step1.toolCalls },
               {
                 role: 'tool_result',
                 toolCallId: step1.toolCalls[0].id,

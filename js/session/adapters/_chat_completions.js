@@ -107,6 +107,7 @@ export async function * runChatCompletions (envelope, client, config, deps = {})
 
   let content = message.content || ''
   let toolCalls = message.tool_calls
+  const reasoning = message.reasoning_content || null
 
   if (config.parseDsml && content && (!toolCalls || !toolCalls.length)) {
     const dsml = parseDsmlToolCalls(content)
@@ -121,7 +122,7 @@ export async function * runChatCompletions (envelope, client, config, deps = {})
   }
 
   yield finalize({
-    envelope, content, toolCalls, usage, finishReason, start, first
+    envelope, content, toolCalls, usage, finishReason, start, first, reasoning
   })
 }
 
@@ -140,6 +141,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
   // F53: accumulate via array + join to avoid per-delta V8 cons-string
   // churn on long streams.
   const contentParts = []
+  const reasoningParts = []
   let first = null
   let finishReason = null
   let usage = {}
@@ -164,12 +166,13 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     for await (const chunk of stream) {
       const choice = chunk.choices?.[0]
       // DeepSeek V4 / deepseek-reasoner / Cerebras reasoning models emit
-      // `delta.reasoning_content` chunks before visible content. Don't
-      // accumulate (token count comes from `usage.completion_tokens_details.
-      // reasoning_tokens`), but do mark TTFT so the first-token timestamp
-      // reflects actual model start, not just first visible token.
-      if (choice?.delta?.reasoning_content && first === null) {
-        first = String(process.hrtime.bigint())
+      // `delta.reasoning_content` chunks before visible content. Capture
+      // them so multi-turn callers can roundtrip reasoning back to the
+      // API (DeepSeek V4 hard-rejects assistant messages without it).
+      // Token count comes from `usage.completion_tokens_details.reasoning_tokens`.
+      if (choice?.delta?.reasoning_content) {
+        if (first === null) first = String(process.hrtime.bigint())
+        reasoningParts.push(choice.delta.reasoning_content)
       }
       if (choice?.delta?.content) {
         if (first === null) first = String(process.hrtime.bigint())
@@ -235,7 +238,8 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     usage,
     finishReason,
     start,
-    first
+    first,
+    reasoning: reasoningParts.length ? reasoningParts.join('') : null
   })
 }
 
@@ -247,11 +251,12 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
  *   usage: any,
  *   finishReason: string | null,
  *   start: string,
- *   first: string | null
+ *   first: string | null,
+ *   reasoning?: string | null
  * }} p
  * @returns {import('#core/events.js').DoneEvent}
  */
-function finalize ({ envelope, content, toolCalls, usage, finishReason, start, first }) {
+function finalize ({ envelope, content, toolCalls, usage, finishReason, start, first, reasoning = null }) {
   const end = String(process.hrtime.bigint())
   const inputTokens = usage.prompt_tokens || 0
   const totalOutputTokens = usage.completion_tokens || 0
@@ -282,6 +287,7 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
   if (toolCalls && toolCalls.length > 0) {
     done.result.toolCalls = fromCerebrasToolCalls(toolCalls)
   }
+  if (reasoning) done.result.reasoning = reasoning
   return done
 }
 
@@ -357,11 +363,12 @@ function toChatMessages (prompt) {
         content: flattenText(m.content)
       }
     }
+    const reasoning = m.role === 'assistant' ? extractReasoning(m.content) : null
     if (m.role === 'assistant' && m.toolCalls?.length) {
       // Chat Completions assistant turn: optional `content` + the
       // `tool_calls` array. `arguments` must be a JSON string on
       // the wire.
-      return {
+      const msg = {
         role: 'assistant',
         content: flattenText(m.content) || '',
         tool_calls: m.toolCalls.map(tc => ({
@@ -373,8 +380,12 @@ function toChatMessages (prompt) {
           }
         }))
       }
+      if (reasoning) msg.reasoning_content = reasoning
+      return msg
     }
-    return { role: m.role, content: flattenText(m.content) }
+    const msg = { role: m.role, content: flattenText(m.content) }
+    if (reasoning) msg.reasoning_content = reasoning
+    return msg
   })
 }
 
@@ -389,6 +400,13 @@ function flattenText (content) {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return ''
   return content.filter(p => p.type === 'text' && p.text).map(p => p.text).join('\n')
+}
+
+/** @param {string | import('#core/envelope.js').MessagePart[]} content */
+function extractReasoning (content) {
+  if (typeof content === 'string' || !Array.isArray(content)) return null
+  const parts = content.filter(p => p.type === 'reasoning' && p.text).map(p => p.text)
+  return parts.length ? parts.join('\n') : null
 }
 
 /**

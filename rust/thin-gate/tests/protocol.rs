@@ -63,6 +63,7 @@ fn done_event_carries_answer_result_in_camel_case() {
             warning: None,
             tool_calls: None,
             max_inter_frame_ms: None,
+            reasoning: None,
         },
     };
     let v = serde_json::to_value(&e).unwrap();

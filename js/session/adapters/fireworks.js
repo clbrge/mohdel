@@ -2,9 +2,9 @@
  * Fireworks adapter — OpenAI-compatible chat completions with
  * streaming, over api.fireworks.ai/inference/v1.
  *
- * Fireworks model IDs carry an `accounts/fireworks/models/` prefix;
- * envelopes can supply either form. The `mutateArgs` hook normalizes
- * `args.model` before the request leaves the adapter.
+ * Catalog `spec.model` carries the full upstream id (with the
+ * `accounts/fireworks/models/` prefix). The adapter forwards it
+ * verbatim — no normalization needed.
  *
  * Implementation uses the OpenAI SDK with a custom baseURL — the
  * wire shape is identical and the SDK's streaming iterator matches
@@ -18,7 +18,6 @@ import OpenAI from 'openai'
 import { runChatCompletions } from './_chat_completions.js'
 
 const BASE_URL = 'https://api.fireworks.ai/inference/v1'
-const MODEL_PREFIX = 'accounts/fireworks/models/'
 
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
@@ -32,12 +31,7 @@ export async function * fireworks (envelope, deps = {}) {
   })
   yield * runChatCompletions(envelope, client, {
     provider: 'fireworks',
-    stream: true,
-    mutateArgs: (env, args) => {
-      if (!args.model.includes('/')) {
-        args.model = `${MODEL_PREFIX}${args.model}`
-      }
-    }
+    stream: true
   }, {
     signal: deps.signal,
     log: deps.log,

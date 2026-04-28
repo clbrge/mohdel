@@ -352,15 +352,7 @@ describe('openrouter adapter', () => {
 // ---------- Fireworks ----------
 
 describe('fireworks adapter', () => {
-  test('prefixes bare model ids with accounts/fireworks/models/', async () => {
-    const { client, captured } = mockChatStream([
-      { choices: [{ finish_reason: 'stop' }], usage: {} }
-    ])
-    await collect(fireworks(envelope('fireworks', 'llama-3-70b'), { client }))
-    expect(captured.args.model).toBe('accounts/fireworks/models/llama-3-70b')
-  })
-
-  test('leaves prefixed model ids untouched', async () => {
+  test('forwards spec.model verbatim (full upstream id)', async () => {
     const { client, captured } = mockChatStream([
       { choices: [{ finish_reason: 'stop' }], usage: {} }
     ])

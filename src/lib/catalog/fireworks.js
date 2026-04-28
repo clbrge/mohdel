@@ -1,7 +1,7 @@
 // Fireworks' /inference/v1/models is openai-compatible for listing.
-// Upstream IDs carry a `accounts/fireworks/models/` prefix that the
-// runtime adapter adds back automatically — strip it here so curated
-// entries stay short.
+// Upstream IDs carry an `accounts/fireworks/models/` prefix. The mohdel
+// catalog key uses the bare suffix (`fireworks/<bare>`), but `spec.model`
+// preserves the full upstream id so the adapter sends it verbatim.
 const DEFAULT_BASE_URL = 'https://api.fireworks.ai/inference/v1'
 const FW_PREFIX = 'accounts/fireworks/models/'
 
@@ -29,7 +29,7 @@ export default (sdkConfig) => {
     getModelInfo: async (id) => {
       const m = (await load()).find(x => shortId(x.id) === id)
       if (!m) return null
-      const info = { model: shortId(m.id) }
+      const info = { model: m.id }
       if (typeof m.context_length === 'number') info.contextTokenLimit = m.context_length
       if (typeof m.created === 'number') info.created = m.created
       return info

@@ -163,6 +163,14 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
   try {
     for await (const chunk of stream) {
       const choice = chunk.choices?.[0]
+      // DeepSeek V4 / deepseek-reasoner / Cerebras reasoning models emit
+      // `delta.reasoning_content` chunks before visible content. Don't
+      // accumulate (token count comes from `usage.completion_tokens_details.
+      // reasoning_tokens`), but do mark TTFT so the first-token timestamp
+      // reflects actual model start, not just first visible token.
+      if (choice?.delta?.reasoning_content && first === null) {
+        first = String(process.hrtime.bigint())
+      }
       if (choice?.delta?.content) {
         if (first === null) first = String(process.hrtime.bigint())
         contentParts.push(choice.delta.content)

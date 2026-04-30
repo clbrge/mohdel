@@ -83,7 +83,7 @@ async function post (fetchFn, url, body, apiKey) {
       body: JSON.stringify(body)
     })
   } catch (e) {
-    throw typedError(classifyProviderError(e).message, 'NET_ERROR', true)
+    throw typedError(classifyProviderError(e, apiKey).message, 'NET_ERROR', true)
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '')

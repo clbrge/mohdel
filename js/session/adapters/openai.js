@@ -60,7 +60,7 @@ export async function * openai (envelope, deps = {}) {
       if (parts.length) injectImageParts(input, parts)
     } catch (e) {
       log?.warn({ err: e }, '[mohdel:openai] image load failed')
-      yield { type: 'error', error: classifyProviderError(e) }
+      yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
       return
     }
   }
@@ -156,7 +156,7 @@ export async function * openai (envelope, deps = {}) {
       return
     }
     log?.warn({ err: e }, '[mohdel:openai] stream failed')
-    yield { type: 'error', error: classifyProviderError(e) }
+    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
     return
   }
 

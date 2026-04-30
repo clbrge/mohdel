@@ -4,10 +4,14 @@
  * Maps SDK errors to a canonical `TypedError`. Inspects provider
  * error codes / messages first (so semantically meaningful tags like
  * `CONTEXT_OVERFLOW` and `QUOTA_EXHAUSTED` aren't lost in generic
- * status buckets), then falls back to HTTP status. 401/403 messages
- * stay generic to avoid echoing provider bodies that may contain the
- * API key back on the wire; for other statuses the provider's own
- * detail is preserved on `.detail` so callers can debug 400s.
+ * status buckets), then falls back to HTTP status. The provider's own
+ * detail is preserved on `.detail` for every classification —
+ * including 401/403. When the caller supplies the API key it was
+ * using, `classifyProviderError` masks any verbatim occurrence of
+ * that key in the detail before returning, so an echoed-key provider
+ * body never reaches downstream consumers as plaintext. Whatever the
+ * caller does with `detail` after that — surface it, log it, redact
+ * it further — is the caller's policy.
  *
  * Type tags: `AUTH_INVALID`, `RATE_LIMIT`, `QUOTA_EXHAUSTED`,
  * `CONTEXT_OVERFLOW`, `CONTENT_BLOCKED`, `PROVIDER_UNAVAILABLE`,
@@ -25,6 +29,27 @@ const DETAIL_CAP = 500
  * @param {any} err
  * @returns {string | undefined}
  */
+/**
+ * Replace verbatim occurrences of `key` in `detail` with a masked
+ * form. Long keys (≥ 16 chars) become `<first4>…<last4>` so a caller
+ * with multiple keys can still tell them apart from the masked
+ * substring; shorter keys fall back to `<redacted>` since revealing
+ * 8 chars would leak too much. Keys under 8 chars are treated as
+ * not-a-key (no scrub) — guards against pathological replacements
+ * on empty or fixture values.
+ * @param {string | undefined} detail
+ * @param {string | undefined} key
+ * @returns {string | undefined}
+ */
+function scrubKey (detail, key) {
+  if (!detail || !key || typeof key !== 'string' || key.length < 8) return detail
+  if (!detail.includes(key)) return detail
+  const mask = key.length >= 16
+    ? `${key.slice(0, 4)}…${key.slice(-4)}`
+    : '<redacted>'
+  return detail.split(key).join(mask)
+}
+
 function extractDetail (err) {
   if (!err) return undefined
   const nested = err.error?.message || err.response?.data?.error?.message
@@ -79,14 +104,20 @@ function matchesContextOverflow (msg) {
 
 /**
  * @param {unknown} e
+ * @param {string} [key]   Optional API key the call was made with. When
+ *                         provided, any verbatim occurrence is replaced
+ *                         with `<redacted>` in the returned detail —
+ *                         providers occasionally echo the rejected key
+ *                         in error bodies (notably 401/403) and that
+ *                         must not leak.
  * @returns {import('#core/errors.js').TypedError}
  */
-export function classifyProviderError (e) {
+export function classifyProviderError (e, key) {
   const err = /** @type {any} */(e)
   const status = err?.status
   const code = extractCode(err)
   const message = err?.message || ''
-  const detail = extractDetail(err)
+  const detail = scrubKey(extractDetail(err), key)
 
   // --- Code-driven classification (runs before status buckets so
   //     specific tags survive even when the upstream HTTP status is
@@ -142,12 +173,12 @@ export function classifyProviderError (e) {
   // --- Status-driven fallback. ---
 
   if (status === 401 || status === 403) {
-    // Deliberately no detail — 401/403 bodies can echo the key.
     return {
       message: 'authentication failed',
       severity: 'error',
       retryable: false,
-      type: 'AUTH_INVALID'
+      type: 'AUTH_INVALID',
+      detail
     }
   }
   if (status === 429) {

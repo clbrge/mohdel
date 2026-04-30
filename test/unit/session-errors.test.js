@@ -49,16 +49,38 @@ describe('classifyProviderError — code-driven', () => {
 })
 
 describe('classifyProviderError — status-driven fallback', () => {
-  test('401 → AUTH_INVALID, no detail (avoids leaking key)', () => {
+  test('401 → AUTH_INVALID, preserves provider detail (consumer redacts if needed)', () => {
     const err = { status: 401, message: 'Bearer xyz invalid' }
     const out = classifyProviderError(err)
     expect(out.type).toBe('AUTH_INVALID')
     expect(out.retryable).toBe(false)
-    expect(out.detail).toBeUndefined()
+    expect(out.detail).toBe('Bearer xyz invalid')
   })
 
   test('403 → AUTH_INVALID', () => {
     expect(classifyProviderError({ status: 403 }).type).toBe('AUTH_INVALID')
+  })
+
+  test('AUTH_INVALID detail masks long key as <first4>…<last4>', () => {
+    const key = 'sk-ant-api03-very-long-secret-value-12345'
+    const err = { status: 401, message: `Invalid API key: ${key} not recognized` }
+    const out = classifyProviderError(err, key)
+    expect(out.type).toBe('AUTH_INVALID')
+    expect(out.detail).toBe('Invalid API key: sk-a…2345 not recognized')
+    expect(out.detail).not.toContain(key)
+  })
+
+  test('mid-length key (8–15 chars) falls back to <redacted>', () => {
+    const key = 'midkey1234' // 10 chars
+    const err = { status: 401, message: `bad: ${key}` }
+    expect(classifyProviderError(err, key).detail).toBe('bad: <redacted>')
+  })
+
+  test('scrubber is a no-op when key is too short or missing', () => {
+    const err = { status: 401, message: 'plain message' }
+    expect(classifyProviderError(err).detail).toBe('plain message')
+    expect(classifyProviderError(err, '').detail).toBe('plain message')
+    expect(classifyProviderError(err, 'short').detail).toBe('plain message')
   })
 
   test('plain 429 (no code) → RATE_LIMIT, retryable', () => {

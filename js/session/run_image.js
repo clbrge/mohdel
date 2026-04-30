@@ -51,7 +51,7 @@ export async function runImage (envelope, { resolveAdapter = getImageAdapter, sp
     const result = await adapter(envelope, spec ? { spec } : {})
     return { ok: true, result }
   } catch (e) {
-    const typed = /** @type {any} */(e).typed || classifyProviderError(e)
+    const typed = /** @type {any} */(e).typed || classifyProviderError(e, envelope.auth?.key)
     return { ok: false, error: typed }
   }
 }

@@ -30,8 +30,8 @@ export async function openaiImage (envelope, deps = {}) {
   try {
     response = await client.images.generate(args)
   } catch (e) {
-    throw Object.assign(new Error(classifyProviderError(e).message), {
-      typed: classifyProviderError(e)
+    throw Object.assign(new Error(classifyProviderError(e, envelope.auth?.key).message), {
+      typed: classifyProviderError(e, envelope.auth?.key)
     })
   }
 

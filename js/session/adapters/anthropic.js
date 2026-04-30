@@ -96,7 +96,7 @@ export async function * anthropic (envelope, deps = {}) {
       if (blocks.length) injectImageBlocks(conversation, blocks)
     } catch (e) {
       log?.warn({ err: e }, '[mohdel:anthropic] image load failed')
-      yield { type: 'error', error: classifyProviderError(e) }
+      yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
       return
     }
   }
@@ -189,7 +189,7 @@ export async function * anthropic (envelope, deps = {}) {
       return
     }
     log?.warn({ err: e }, '[mohdel:anthropic] stream failed')
-    yield { type: 'error', error: classifyProviderError(e) }
+    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
     return
   }
 

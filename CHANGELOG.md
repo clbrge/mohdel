@@ -4,6 +4,53 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.99.0] — AUTH_INVALID detail + verbatim-key masking
+
+### Added
+
+- **`classifyProviderError(e, key?)`** accepts an optional second
+  argument: the API key the call was made with. When supplied, every
+  verbatim occurrence of that key in the resulting `TypedError.detail`
+  is replaced with a masked form before it returns:
+  - **Length ≥ 16:** `<first4>…<last4>` (the dashboard idiom used by
+    OpenAI, Anthropic, Stripe, AWS — keeps a recognizable prefix and
+    suffix so a caller can distinguish which key the request used
+    without exposing the secret).
+  - **Length 8–15:** `<redacted>` (too short to safely show 8 chars).
+  - **Length < 8:** treated as not-a-key, no scrub — guards against
+    pathological replacements on empty or fixture values.
+  All built-in adapters (`anthropic`, `openai`, `gemini`,
+  `_chat_completions`, `image/openai`, `image/novita`, `run_image`)
+  now thread `envelope.auth?.key` through, so any provider body that
+  echoes the rejected key never reaches downstream consumers as
+  plaintext.
+
+### Changed
+
+- **`AUTH_INVALID` now carries the provider's `detail`.** Previously
+  `classifyProviderError` deliberately omitted detail for 401/403 to
+  avoid echoing keys that provider bodies sometimes include in their
+  error messages. That defense moved one layer inward: the SDK now
+  masks the key bytes verbatim (it has the context to do that
+  deterministically), so consumers receive a detail that is safe to
+  log and that callers are free to display, redact further, or drop
+  according to their own policy.
+- **Module documentation on `js/session/adapters/_errors.js`**
+  rewritten to spell out the new layering: the SDK masks the key
+  value; what to do with the already-masked detail is the caller's
+  policy.
+
+### Breaking
+
+- **`AUTH_INVALID` consumers that asserted `out.detail === undefined`
+  will see a string.** Existing callers should already have been
+  treating `detail` as an optional, length-capped field
+  (`DETAIL_CAP = 500`); this release just makes the field reliably
+  populated when the provider returned anything. The
+  `session-errors` unit test that pinned the no-detail behavior has
+  been flipped to assert preservation and verbatim-key masking. No
+  public API rename.
+
 ## [0.98.2] — Dependency refresh
 
 ### Changed

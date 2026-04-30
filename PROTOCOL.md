@@ -18,8 +18,9 @@ Key words **MUST**, **MUST NOT**, **SHOULD**, **MAY** follow
 transport metadata.** The envelope is the answer options flat; the
 terminal `done` event carries the full `AnswerResult`. Transport
 metadata is limited to what a subprocess boundary actually needs:
-`callId` (correlate), `authId` (quota-scope), `auth.key` (BYOK),
-`traceparent` (W3C trace context), and a cancel control message.
+`callId` (correlate), `authId` (quota-scope), `auth.key` (provider
+API key), `traceparent` (W3C trace context), and a cancel control
+message.
 
 ## 2. Transport
 
@@ -45,7 +46,7 @@ interface CallEnvelope {
   // --- Transport metadata ---
   callId:       string            // unique per call
   authId:       string            // quota-scoping key for thin-gate
-  auth:         { key: string }   // provider API key (BYOK)
+  auth:         { key: string }   // provider API key
   traceparent?: string            // W3C trace context
   baggage?:     string            // W3C baggage
 

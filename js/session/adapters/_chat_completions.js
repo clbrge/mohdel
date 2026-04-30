@@ -95,7 +95,7 @@ export async function * runChatCompletions (envelope, client, config, deps = {})
     response = await client.chat.completions.create(args, { signal: deps.signal })
   } catch (e) {
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] request failed`)
-    yield { type: 'error', error: classifyProviderError(e) }
+    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
     return
   }
 
@@ -158,7 +158,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     stream = await client.chat.completions.create(args, { signal: deps.signal })
   } catch (e) {
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] request failed`)
-    yield { type: 'error', error: classifyProviderError(e) }
+    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
     return
   }
 
@@ -222,7 +222,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     }
   } catch (e) {
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] stream failed`)
-    yield { type: 'error', error: classifyProviderError(e) }
+    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
     return
   }
 

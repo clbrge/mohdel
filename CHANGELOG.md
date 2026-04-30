@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.98.2] — Dependency refresh
+
+### Changed
+
+- **`@google/genai`** bumped to `^1.51.0` (was `^1.50.1`).
+- **OpenTelemetry Node tooling** bumped to `^0.216.0` (was `^0.215.0`)
+  for both `@opentelemetry/sdk-node` and
+  `@opentelemetry/exporter-trace-otlp-grpc`. Optional dependencies —
+  consumers that don't ship OTel exporters in the runtime image are
+  unaffected.
+- **`@clack/prompts`** bumped to `^1.3.0` (was `^1.2.0`). The new
+  release requires Node ≥ 20.12; mohdel itself already requires
+  Node ≥ 22, so no runtime impact. CLI-only optional dep.
+- **`mohdel-thin-gate-linux-x64-gnu`** lockfile pin advanced from
+  `0.97.1` to `0.98.1` to match the thin-gate release that ships
+  the reasoning-content additions from `0.98.1`.
+
+No source changes. No behavior changes for consumers.
+
 ## [0.98.1] — Reasoning content roundtrip
 
 ### Added

@@ -4,6 +4,36 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.100.0] — `reasoningContentPlaceholder` for resumed thinking-mode sessions
+
+### Added
+
+- **`reasoningContentPlaceholder` model-spec field (chat-completions
+  adapter family).** When a model spec carries a string value
+  (including `''`), every assistant message in the request that has
+  no extractable `reasoning_content` gets the placeholder string
+  attached as `reasoning_content`. This unblocks resuming a
+  multi-turn session on a thinking model when the prior assistant
+  turns came from a non-thinking model (or from a storage path that
+  didn't preserve thinking metadata) and the provider's API rejects
+  the request with *"reasoning_content in thinking mode must be
+  passed back"*.
+  - Verified: `deepseek/deepseek-v4-pro` and
+    `deepseek/deepseek-v4-flash` accept `''` and the resumed
+    transcript goes through.
+  - Default behaviour unchanged when the field is absent: no
+    `reasoning_content` is synthesized, matching pre-0.100.0 wire
+    output.
+
+### Scope
+
+- **Chat-completions adapter only** (`_chat_completions.js`,
+  i.e. providers using the OpenAI Chat Completions wire format:
+  Groq, Cerebras, DeepSeek, Mistral, OpenRouter, Fireworks). The
+  field is silently ignored on Gemini and Anthropic specs — those
+  adapters have their own thinking-mode roundtrip rules
+  (`thoughtSignature` and `thinking` content blocks respectively).
+
 ## [0.99.0] — AUTH_INVALID detail + verbatim-key masking
 
 ### Added

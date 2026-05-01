@@ -301,7 +301,9 @@ function buildRequest (envelope, spec, config) {
   const args = {
     model: spec?.model ?? bareOf(envelope.model),
     temperature: 0,
-    messages: toChatMessages(envelope.prompt)
+    messages: toChatMessages(envelope.prompt, {
+      reasoningPad: typeof spec?.reasoningContentPlaceholder === 'string' ? spec.reasoningContentPlaceholder : null
+    })
   }
 
   if (envelope.outputBudget !== undefined) {
@@ -351,9 +353,20 @@ function buildRequest (envelope, spec, config) {
 
 /**
  * @param {string | import('#core/envelope.js').Message[]} prompt
+ * @param {{ reasoningPad?: string | null }} [opts]
+ *   `reasoningPad`: when a string (including `''`), assistant messages without
+ *   extractable reasoning get `reasoning_content: <pad>` so providers that
+ *   require the field on every assistant turn (e.g. deepseek-v4-pro) accept
+ *   the resumed transcript. `null` / unset disables padding (default — most
+ *   chat-completions providers don't require it).
+ *
+ *   Scope: this is a chat-completions wire-format quirk. Gemini's
+ *   `thoughtSignature` and Anthropic's `thinking` blocks live in their
+ *   own adapters and have their own roundtrip rules.
  * @returns {Array<any>}
  */
-function toChatMessages (prompt) {
+function toChatMessages (prompt, opts = {}) {
+  const pad = typeof opts.reasoningPad === 'string' ? opts.reasoningPad : null
   if (typeof prompt === 'string') return [{ role: 'user', content: prompt }]
   return prompt.map(m => {
     if (m.role === 'tool') {
@@ -364,6 +377,7 @@ function toChatMessages (prompt) {
       }
     }
     const reasoning = m.role === 'assistant' ? extractReasoning(m.content) : null
+    const reasoningField = reasoning ?? (pad !== null && m.role === 'assistant' ? pad : null)
     if (m.role === 'assistant' && m.toolCalls?.length) {
       // Chat Completions assistant turn: optional `content` + the
       // `tool_calls` array. `arguments` must be a JSON string on
@@ -380,11 +394,11 @@ function toChatMessages (prompt) {
           }
         }))
       }
-      if (reasoning) msg.reasoning_content = reasoning
+      if (reasoningField !== null) msg.reasoning_content = reasoningField
       return msg
     }
     const msg = { role: m.role, content: flattenText(m.content) }
-    if (reasoning) msg.reasoning_content = reasoning
+    if (reasoningField !== null) msg.reasoning_content = reasoningField
     return msg
   })
 }

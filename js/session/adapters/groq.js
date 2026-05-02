@@ -7,6 +7,7 @@
 import Groq from 'groq-sdk'
 
 import { runChatCompletions } from './_chat_completions.js'
+import { streamingDispatcher } from './_dispatcher.js'
 
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
@@ -14,7 +15,10 @@ import { runChatCompletions } from './_chat_completions.js'
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
 export async function * groq (envelope, deps = {}) {
-  const client = deps.client ?? new Groq({ apiKey: envelope.auth.key })
+  const client = deps.client ?? new Groq({
+    apiKey: envelope.auth.key,
+    fetchOptions: { dispatcher: streamingDispatcher() }
+  })
   yield * runChatCompletions(envelope, client, { provider: 'groq' }, {
     signal: deps.signal,
     log: deps.log,

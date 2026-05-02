@@ -80,7 +80,11 @@ describe('provider integration', async () => {
                     }
                   }
                 ],
-                toolChoice: 'required'
+                // 'auto' rather than 'required': DeepSeek's reasoner-backed
+                // models accept the tool list but reject toolChoice='required'.
+                // The prompt explicitly tells the model to call the tool, so
+                // every frontier model picks it up under 'auto' anyway.
+                toolChoice: 'auto'
               }
             )
 

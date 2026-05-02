@@ -34,6 +34,7 @@ import {
   fromAnthropicToolCalls,
   toToolChoice
 } from './_tools.js'
+import { streamingDispatcher } from './_dispatcher.js'
 
 /**
  * Approximate chars-per-token used to estimate Anthropic thinking
@@ -80,7 +81,10 @@ const ANTHROPIC_DEFAULT_MAX_TOKENS = 4096
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
 export async function * anthropic (envelope, deps = {}) {
-  const client = deps.client ?? new Anthropic({ apiKey: envelope.auth.key })
+  const client = deps.client ?? new Anthropic({
+    apiKey: envelope.auth.key,
+    fetchOptions: { dispatcher: streamingDispatcher() }
+  })
   const signal = deps.signal
   const log = deps.log
   const start = String(process.hrtime.bigint())

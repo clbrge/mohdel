@@ -4,6 +4,73 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.101.0] — Disable undici body-idle timeout on streaming adapters
+
+### Fixed
+
+- **Long thinking-only streams no longer fail with
+  `NET_ERROR / "terminated"` at ~5 minutes.** Node's global `fetch`
+  (undici) closes a streaming response when no body chunk has
+  arrived for `bodyTimeout` ms — 300 000 ms (5 min) by default.
+  Reasoning models stream zero bytes during their thinking phase,
+  so any non-trivial task on a thinking-capable provider tripped
+  the limit mid-run and surfaced as a retryable upstream error
+  with `detail: "terminated"`. Adapters now opt out via a shared
+  undici `Agent` with `bodyTimeout: 0`, so the inter-chunk idle
+  timeout no longer applies to streaming inference. Cancellation
+  still comes from the caller's `AbortSignal`, the SDK's
+  request-level timeout, and provider-side stream limits.
+  Headers timeout stays bounded at 60 000 ms — connect plus first
+  response must still be fast.
+
+### Added
+
+- **`js/session/adapters/_dispatcher.js`** — exports
+  `streamingDispatcher()`, a lazy singleton undici `Agent`
+  (`bodyTimeout: 0`, `headersTimeout: 60_000`) shared across all
+  adapters that go through `globalThis.fetch`. One Agent per
+  process keeps a single connection pool with the default
+  per-origin keep-alive semantics.
+- **`undici` declared as a direct dependency** (`^7.24.5`).
+  Previously pulled in transitively; now an explicit dep because
+  mohdel imports `undici.Agent` directly.
+
+### Changed
+
+- **All chat-completions adapters thread the dispatcher into
+  `fetchOptions`.** `openai`, `fireworks`, `deepseek`, `mistral`,
+  `openrouter`, `xai`, `anthropic`, `groq` — each adds
+  `fetchOptions: { dispatcher: streamingDispatcher() }` to its
+  no-DI client construction. SDKs spread `fetchOptions` into the
+  underlying `fetch(url, opts)` call (verified in
+  `openai/client.js:159`, `@anthropic-ai/sdk/client.js:74` + `:446`,
+  and `groq-sdk/client.js:82` + `:388`), so the dispatcher reaches
+  the wire without replacing the SDK's `fetch` or touching its
+  internals. Tests passing an explicit `deps.client` are
+  unaffected.
+
+### Scope
+
+- **`cerebras` adapter unaffected.** `@cerebras/cerebras_cloud_sdk`
+  uses `node-fetch@^2`, a separate HTTP stack with no inter-chunk
+  body timeout — the bug was undici-specific.
+- **`gemini` adapter not yet patched.** `@google/genai` ships both
+  `node-fetch@^3` and `undici@^7` and selects at runtime; its
+  injection surface is `httpOptions`, not `fetchOptions`. Deferred
+  to a follow-up release.
+
+### Tests
+
+- New `test/unit/dispatcher.test.js` — singleton identity and
+  `Agent` instance check.
+- `test/integration/provider.test.js` — switched the tool-use smoke
+  test from `toolChoice: 'required'` to `'auto'`. DeepSeek's
+  reasoner-backed models reject `'required'` (`'deepseek-reasoner
+  does not support this tool_choice'`) even when the spec says
+  `supportsTools`; the prompt itself forces the tool call, so the
+  assertions still verify a real tool invocation under `'auto'`
+  without fighting one provider's API surface.
+
 ## [0.100.0] — `reasoningContentPlaceholder` for resumed thinking-mode sessions
 
 ### Added

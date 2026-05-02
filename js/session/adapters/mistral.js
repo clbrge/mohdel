@@ -10,6 +10,7 @@
 import OpenAI from 'openai'
 
 import { runChatCompletions } from './_chat_completions.js'
+import { streamingDispatcher } from './_dispatcher.js'
 
 const BASE_URL = 'https://api.mistral.ai/v1'
 
@@ -19,7 +20,11 @@ const BASE_URL = 'https://api.mistral.ai/v1'
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
 export async function * mistral (envelope, deps = {}) {
-  const client = deps.client ?? new OpenAI({ apiKey: envelope.auth.key, baseURL: envelope.auth.baseURL || BASE_URL })
+  const client = deps.client ?? new OpenAI({
+    apiKey: envelope.auth.key,
+    baseURL: envelope.auth.baseURL || BASE_URL,
+    fetchOptions: { dispatcher: streamingDispatcher() }
+  })
   yield * runChatCompletions(envelope, client, {
     provider: 'mistral',
     toolChoiceFlavor: 'mistral'

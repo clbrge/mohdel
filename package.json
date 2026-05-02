@@ -96,7 +96,8 @@
     "@opentelemetry/api": "^1.9.1",
     "env-paths": "^4.0.0",
     "groq-sdk": "^1.1.2",
-    "openai": "^6.35.0"
+    "openai": "^6.35.0",
+    "undici": "^7.24.5"
   },
   "lint-staged": {
     "*.{js,cjs}": "standard"

@@ -35,6 +35,7 @@ import {
   fromOpenAIToolCalls,
   toToolChoice
 } from './_tools.js'
+import { streamingDispatcher } from './_dispatcher.js'
 
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
@@ -44,7 +45,8 @@ import {
 export async function * openai (envelope, deps = {}) {
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,
-    ...(envelope.auth.baseURL ? { baseURL: envelope.auth.baseURL } : {})
+    ...(envelope.auth.baseURL ? { baseURL: envelope.auth.baseURL } : {}),
+    fetchOptions: { dispatcher: streamingDispatcher() }
   })
   const signal = deps.signal
   const log = deps.log

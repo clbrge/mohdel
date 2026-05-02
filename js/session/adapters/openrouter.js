@@ -12,6 +12,7 @@
 import OpenAI from 'openai'
 
 import { runChatCompletions } from './_chat_completions.js'
+import { streamingDispatcher } from './_dispatcher.js'
 
 const BASE_URL = 'https://openrouter.ai/api/v1'
 
@@ -47,7 +48,8 @@ export async function * openrouter (envelope, deps = {}) {
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,
     baseURL: envelope.auth.baseURL || BASE_URL,
-    defaultHeaders
+    defaultHeaders,
+    fetchOptions: { dispatcher: streamingDispatcher() }
   })
 
   yield * runChatCompletions(envelope, client, {

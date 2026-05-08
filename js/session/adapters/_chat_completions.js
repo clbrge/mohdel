@@ -330,14 +330,16 @@ function buildRequest (envelope, spec, config) {
 
   if (spec.thinkingEffortLevels) {
     const effort = envelope.outputEffort ?? spec.defaultThinkingEffort ?? 'low'
-    if (effort && effort !== 'none') {
+    if (effort && spec.thinkingEffortLevels[effort] != null) {
       const headroom = spec.thinkingEffortLevels[effort]
       if (args.max_tokens && typeof headroom === 'number') {
         args.max_tokens += headroom
       }
-      delete args.temperature
+      // When reasoning is disabled ('none') the model accepts
+      // temperature again — only strip it when reasoning is on.
+      if (effort !== 'none') delete args.temperature
       if (config.reasoningField === 'cerebras_zai' && /zai/i.test(bareOf(envelope.model))) {
-        args.disable_reasoning = false
+        args.disable_reasoning = (effort === 'none')
       } else {
         args.reasoning_effort = effort
       }

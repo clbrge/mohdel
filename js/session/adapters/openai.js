@@ -225,19 +225,18 @@ function buildRequest (envelope, input, instructions) {
 
   // Thinking: when the spec has `thinkingEffortLevels`, set
   // `reasoning.effort` and add the thinking-budget headroom on top
-  // of the user's `outputBudget`. `reasoning` is an OpenAI-only
-  // parameter — xAI reasoning is automatic, so add the headroom
-  // but skip the request field on xAI.
+  // of the user's `outputBudget`. Both OpenAI (gpt-5.x) and xAI
+  // (grok-4.3+) accept the same `reasoning: { effort }` shape on
+  // the Responses API, including the literal value 'none' to
+  // disable reasoning entirely.
   if (spec?.thinkingEffortLevels) {
     const effort = envelope.outputEffort ?? spec.defaultThinkingEffort ?? 'low'
-    if (effort && effort !== 'none') {
+    if (effort && spec.thinkingEffortLevels[effort] != null) {
       const headroom = spec.thinkingEffortLevels[effort]
       if (request.max_output_tokens && typeof headroom === 'number') {
         request.max_output_tokens += headroom
       }
-      if (provider === 'openai') {
-        request.reasoning = { effort }
-      }
+      request.reasoning = { effort }
     }
   }
 

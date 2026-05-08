@@ -161,6 +161,35 @@ describe('cerebras adapter', () => {
     expect(captured.args.disable_reasoning).toBeUndefined()
   })
 
+  test('outputEffort=none on zai sets disable_reasoning=true and keeps temperature', async () => {
+    setCatalog({ 'cerebras/zai-glm-4.7': { thinkingEffortLevels: { none: 0, medium: 400 } } })
+    const { client, captured } = mockChat(basicResponse())
+    await collect(cerebras(envelope('cerebras', 'zai-glm-4.7', {
+      outputEffort: 'none',
+      outputBudget: 100
+    }), { client }))
+    expect(captured.args.disable_reasoning).toBe(true)
+    expect(captured.args.reasoning_effort).toBeUndefined()
+    // temperature is preserved (not stripped) when reasoning is disabled
+    expect(captured.args.temperature).toBe(0)
+    expect(captured.args.max_tokens).toBe(100)
+  })
+
+  test('outputEffort=none on fireworks zai sends reasoning_effort=none and keeps temperature', async () => {
+    setCatalog({ 'fireworks/zai-glm-5': { thinkingEffortLevels: { none: 0, medium: 400 } } })
+    const { client, captured } = mockChatStream([
+      { choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }
+    ])
+    await collect(fireworks(envelope('fireworks', 'zai-glm-5', {
+      outputEffort: 'none',
+      outputBudget: 100
+    }), { client }))
+    expect(captured.args.reasoning_effort).toBe('none')
+    expect(captured.args.disable_reasoning).toBeUndefined()
+    expect(captured.args.temperature).toBe(0)
+    expect(captured.args.max_tokens).toBe(100)
+  })
+
   test('tool_choice flavor cerebras leaves required as-is', async () => {
     const { client, captured } = mockChat(basicResponse())
     await collect(cerebras(envelope('cerebras', 'llama-3', {
@@ -520,8 +549,8 @@ describe('xai adapter', () => {
     expect(captured.req.safety_identifier).toBeUndefined()
   })
 
-  test('reasoning param is omitted for xai even when spec has thinkingEffortLevels', async () => {
-    setCatalog({ 'xai/grok-thinker': { thinkingEffortLevels: { low: 500 } } })
+  test('reasoning.effort is forwarded to xai (grok-4.3+) and headroom added', async () => {
+    setCatalog({ 'xai/grok-thinker': { thinkingEffortLevels: { none: 0, low: 500 } } })
     const captured = {}
     const client = {
       responses: {
@@ -536,9 +565,28 @@ describe('xai adapter', () => {
       }
     }
     await collect(xai(envelope('xai', 'grok-thinker', { outputEffort: 'low', outputBudget: 100 }), { client }))
-    expect(captured.req.reasoning).toBeUndefined()
-    // Headroom is still added to the budget
+    expect(captured.req.reasoning).toEqual({ effort: 'low' })
     expect(captured.req.max_output_tokens).toBe(600)
+  })
+
+  test('reasoning.effort=none is forwarded to xai to disable reasoning', async () => {
+    setCatalog({ 'xai/grok-thinker': { thinkingEffortLevels: { none: 0, low: 500 } } })
+    const captured = {}
+    const client = {
+      responses: {
+        stream: (req) => {
+          captured.req = req
+          return {
+            async * [Symbol.asyncIterator] () {
+              yield { type: 'response.completed', response: { usage: {} } }
+            }
+          }
+        }
+      }
+    }
+    await collect(xai(envelope('xai', 'grok-thinker', { outputEffort: 'none', outputBudget: 100 }), { client }))
+    expect(captured.req.reasoning).toEqual({ effort: 'none' })
+    expect(captured.req.max_output_tokens).toBe(100)
   })
 })
 

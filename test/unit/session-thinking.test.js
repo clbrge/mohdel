@@ -200,7 +200,7 @@ describe('openai thinking config', () => {
     expect(captured.request.max_output_tokens).toBe(2024)
   })
 
-  test('outputEffort=none disables thinking', async () => {
+  test('outputEffort=none disables thinking when catalog does not declare none', async () => {
     const { client, captured } = mockOpenAI([
       { type: 'response.completed', response: { usage: {} } }
     ])
@@ -209,6 +209,26 @@ describe('openai thinking config', () => {
       outputBudget: 1000
     }), { client }))
     expect(captured.request.reasoning).toBeUndefined()
+    expect(captured.request.max_output_tokens).toBe(1000)
+  })
+
+  test('outputEffort=none forwards reasoning.effort=none when catalog declares it (gpt-5.4)', async () => {
+    setCatalog({
+      'openai/gpt-5.4': {
+        inputPrice: 2.5,
+        outputPrice: 20,
+        thinkingEffortLevels: { none: 0, low: 300, medium: 600, high: 1000 },
+        defaultThinkingEffort: 'low'
+      }
+    })
+    const { client, captured } = mockOpenAI([
+      { type: 'response.completed', response: { usage: {} } }
+    ])
+    await collect(openai(envelope('openai', 'gpt-5.4', {
+      outputEffort: 'none',
+      outputBudget: 1000
+    }), { client }))
+    expect(captured.request.reasoning).toEqual({ effort: 'none' })
     expect(captured.request.max_output_tokens).toBe(1000)
   })
 

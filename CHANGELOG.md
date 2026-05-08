@@ -4,6 +4,53 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.102.0] — `reasoning.effort` for xAI grok-4.3+ and per-provider `'none'` semantics
+
+### Added
+
+- **xAI `reasoning.effort` support (grok-4.3+).** xAI introduced a
+  parametric `reasoning.effort` parameter on the Responses API
+  (`none` / `low` / `medium` / `high`) — earlier xAI reasoning
+  models had no such control, which is why mohdel previously
+  skipped the field on xAI. The adapter now forwards `reasoning:
+  { effort }` to xAI on the same path used for OpenAI gpt-5.x,
+  including the literal `'none'` to disable reasoning per xAI's
+  documented contract.
+- **`outputEffort: 'none'` now reaches the wire.** When a model
+  spec declares `'none'` in `thinkingEffortLevels`, the adapter
+  emits the upstream-appropriate disable signal: OpenAI/xAI →
+  `reasoning: { effort: 'none' }`; Cerebras zai →
+  `disable_reasoning: true` (deprecated toggle, sunset
+  2026-07-21); Fireworks zai → `reasoning_effort: 'none'`.
+  Gated on `spec.thinkingEffortLevels[effort] != null` — models
+  without `'none'` in their catalog skip the block as before.
+
+### Changed
+
+- **`temperature` preserved when reasoning is disabled** in the
+  chat-completions builder (was unconditionally deleted inside the
+  effort block).
+- Deps: `@anthropic-ai/sdk ^0.91.1 → ^0.95.1`, `@google/genai
+  ^1.51.0 → ^2.0.0`, `openai ^6.35.0 → ^6.37.0`,
+  `@opentelemetry/{exporter-trace-otlp-grpc,sdk-node} ^0.216.0 →
+  ^0.217.0`, `lint-staged ^16.4.0 → ^17.0.3` (dev).
+  `@google/genai` 2.0 breaking changes are scoped to the new
+  Interactions API; the `gemini` adapter is unaffected.
+
+### Scope
+
+- `gemini` and `anthropic` adapters still guard on `effort !==
+  'none'`; their upstream-specific disable shapes are deferred to
+  keep this release tight to the four models declaring `'none'`.
+
+### Tests
+
+- New `'none'` unit tests for openai/gpt-5.4, xai/grok-4.3+,
+  cerebras/zai-glm-4.7, fireworks/zai-glm-5. The xAI test
+  asserting the prior omit-`reasoning` behavior is updated to
+  assert forwarding (now that grok-4.3 accepts the field). Full
+  unit suite green.
+
 ## [0.101.0] — Disable undici body-idle timeout on streaming adapters
 
 ### Fixed

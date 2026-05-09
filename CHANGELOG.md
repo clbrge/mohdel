@@ -4,6 +4,30 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.104.2] — Schema cohesion: cancelledDone cache passthrough, Default impls, contributor checklist
+
+### Fixed
+
+- **`cancelledDone` now threads `cacheWriteInputTokens` /
+  `cacheReadInputTokens`** captured pre-cancellation. Previously a
+  mid-stream abort produced a terminal `done.result` with cache
+  fields dropped, under-counting cost on cancelled calls.
+- **`[mohdel:answer] done` debug log** surfaces `cacheW` / `cacheR`
+  when present, so per-call cache activity is visible without
+  attaching to the OTel span.
+
+### Changed
+
+- **`AnswerResult` / `Status` / `Timestamps` derive `Default`.**
+  Test fixtures and stub-construction sites can now use
+  `..Default::default()` instead of listing every field. New optional
+  fields no longer break literal-construction sites at compile time.
+- **Wire-field-add checklist** documented in `CONTRIBUTING.md`.
+  Eight sites a new field touches (JS type, adapter, pricing, Rust
+  struct, conformance fixture, JS allowlist, log summarizer,
+  CHANGELOG framing) — captured so future field additions land in one
+  PR rather than three.
+
 ## [0.104.1] — Rust gate accepts cache token fields
 
 ### Fixed

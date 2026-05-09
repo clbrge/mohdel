@@ -376,16 +376,19 @@ function finalizeSpanOk (span, result, sawDelta = false, maxInterFrameMs = 0) {
  * @param {number} startedAt
  */
 function summarizeDone (result, startedAt) {
-  return {
+  const summary = {
     status: result?.status,
     in: result?.inputTokens || 0,
     out: result?.outputTokens || 0,
-    think: result?.thinkingTokens || 0,
-    cost: result?.cost,
-    warning: result?.warning,
-    totalMs: Date.now() - startedAt,
-    maxInterFrameMs: result?.maxInterFrameMs
+    think: result?.thinkingTokens || 0
   }
+  if (result?.cacheWriteInputTokens) summary.cacheW = result.cacheWriteInputTokens
+  if (result?.cacheReadInputTokens) summary.cacheR = result.cacheReadInputTokens
+  summary.cost = result?.cost
+  if (result?.warning) summary.warning = result.warning
+  summary.totalMs = Date.now() - startedAt
+  if (result?.maxInterFrameMs != null) summary.maxInterFrameMs = result.maxInterFrameMs
+  return summary
 }
 
 /**

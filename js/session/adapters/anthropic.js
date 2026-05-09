@@ -129,7 +129,7 @@ export async function * anthropic (envelope, deps = {}) {
 
     for await (const event of stream) {
       if (signal?.aborted) {
-        yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+        yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
         return
       }
       switch (event.type) {
@@ -197,7 +197,7 @@ export async function * anthropic (envelope, deps = {}) {
     }
   } catch (e) {
     if (signal?.aborted) {
-      yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+      yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
       return
     }
     log?.warn({ err: e }, '[mohdel:anthropic] stream failed')
@@ -206,7 +206,7 @@ export async function * anthropic (envelope, deps = {}) {
   }
 
   if (signal?.aborted) {
-    yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+    yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
     return
   }
 

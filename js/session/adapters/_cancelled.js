@@ -22,10 +22,16 @@ import { catalogKey } from '#core/model-id.js'
  * @param {string} output
  * @param {number} inputTokens
  * @param {number} outputTokens
+ * @param {{cacheWriteInputTokens?: number, cacheReadInputTokens?: number}} [extra]
+ *   Optional cache token counts captured before cancellation. Threaded through
+ *   so the cancellation-cost calculation prices any cache writes/reads that
+ *   already happened before the abort.
  * @returns {import('#core/events.js').DoneEvent}
  */
-export function cancelledDone (start, first, envelope, output, inputTokens, outputTokens) {
+export function cancelledDone (start, first, envelope, output, inputTokens, outputTokens, extra = {}) {
   const end = String(process.hrtime.bigint())
+  const cacheWriteInputTokens = extra.cacheWriteInputTokens || 0
+  const cacheReadInputTokens = extra.cacheReadInputTokens || 0
   return {
     type: 'done',
     result: {
@@ -34,9 +40,11 @@ export function cancelledDone (start, first, envelope, output, inputTokens, outp
       inputTokens,
       outputTokens,
       thinkingTokens: 0,
+      ...(cacheWriteInputTokens > 0 && { cacheWriteInputTokens }),
+      ...(cacheReadInputTokens > 0 && { cacheReadInputTokens }),
       cost: costFor(
         catalogKey(envelope.model),
-        { inputTokens, outputTokens, thinkingTokens: 0 }
+        { inputTokens, outputTokens, thinkingTokens: 0, cacheWriteInputTokens, cacheReadInputTokens }
       ),
       timestamps: { start, first: first ?? end, end },
       warning: WARNING_CANCELLED

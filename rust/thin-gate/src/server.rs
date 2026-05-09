@@ -1054,23 +1054,10 @@ fn synthetic_events() -> Vec<Event> {
         },
         Event::Done {
             result: AnswerResult {
-                status: Status::Completed,
                 output: Some("Hello, world.".into()),
                 input_tokens: 5,
                 output_tokens: 3,
-                thinking_tokens: 0,
-                cache_write_input_tokens: None,
-                cache_read_input_tokens: None,
-                cost: 0.0,
-                timestamps: Timestamps {
-                    start: "0".into(),
-                    first: "0".into(),
-                    end: "0".into(),
-                },
-                warning: None,
-                tool_calls: None,
-                max_inter_frame_ms: None,
-                reasoning: None,
+                ..Default::default()
             },
         },
     ]
@@ -1189,23 +1176,9 @@ mod tests {
 
     fn make_result(warning: Option<&str>) -> AnswerResult {
         AnswerResult {
-            status: Status::Completed,
             output: Some("ok".into()),
-            input_tokens: 0,
-            output_tokens: 0,
-            thinking_tokens: 0,
-            cache_write_input_tokens: None,
-            cache_read_input_tokens: None,
-            cost: 0.0,
-            timestamps: Timestamps {
-                start: "0".into(),
-                first: "0".into(),
-                end: "0".into(),
-            },
             warning: warning.map(|w| w.to_string()),
-            tool_calls: None,
-            max_inter_frame_ms: None,
-            reasoning: None,
+            ..Default::default()
         }
     }
 

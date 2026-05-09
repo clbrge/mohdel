@@ -49,23 +49,16 @@ fn delta_function_call_kind_serializes_snake_case() {
 fn done_event_carries_answer_result_in_camel_case() {
     let e = Event::Done {
         result: AnswerResult {
-            status: Status::Completed,
             output: Some("Hi.".into()),
             input_tokens: 10,
             output_tokens: 5,
-            thinking_tokens: 0,
-            cache_write_input_tokens: None,
-            cache_read_input_tokens: None,
             cost: 0.001,
             timestamps: Timestamps {
                 start: "1".into(),
                 first: "2".into(),
                 end: "3".into(),
             },
-            warning: None,
-            tool_calls: None,
-            max_inter_frame_ms: None,
-            reasoning: None,
+            ..Default::default()
         },
     };
     let v = serde_json::to_value(&e).unwrap();

@@ -247,7 +247,12 @@ pub enum DeltaKind {
 
 // ---------- AnswerResult (terminal `done.result`) ----------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// `Default` impl is provided so that test fixtures and stubs can construct
+/// minimal instances via struct-update syntax (`AnswerResult { status: ...,
+/// ..Default::default() }`). Real adapter code populates every field
+/// explicitly. Adding a new field shouldn't force every literal-construction
+/// site to be updated — `Default` absorbs the new field automatically.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AnswerResult {
     pub status: Status,
@@ -281,7 +286,7 @@ pub struct AnswerResult {
     pub reasoning: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Timestamps {
     pub start: String,
@@ -310,9 +315,10 @@ pub struct ToolCall {
     pub thought_signature: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
+    #[default]
     Completed,
     ToolUse,
     Incomplete,

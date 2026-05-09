@@ -231,3 +231,37 @@ All under `~/.config/mohdel/` (XDG via `env-paths`):
 | `default.json` | Default model selection |
 
 Cache under `~/.cache/mohdel/` (benchmark rankings, file uploads).
+
+
+## Adding a wire-protocol field
+
+`AnswerResult`, `CallEnvelope`, `Event`, and the other types in
+`js/core/events.js` ↔ `rust/thin-gate/src/protocol.rs` form a frozen
+contract. Adding or changing a field touches every site below — miss
+one and you ship a release that crashes embedders.
+
+1. **JS type** — add the field to the JSDoc in `js/core/events.js`.
+2. **JS adapter(s)** — produce the field in `js/session/adapters/*.js`,
+   including the `cancelledDone` path in `_cancelled.js` if the field
+   should survive mid-stream cancellation.
+3. **JS pricing** — extend `_pricing.js` `computeCost` if the field
+   contributes to cost.
+4. **Rust struct** — add to `protocol.rs` as `Option<...>` with
+   `#[serde(default, skip_serializing_if = "Option::is_none")]`.
+   `AnswerResult` derives `Default` so struct literals using
+   `..Default::default()` absorb the field automatically; explicit
+   literals still need updating.
+5. **Conformance fixtures** — add at least one variant to the matching
+   `test/conformance/*.json` file that USES the field. The
+   cross-language conformance tests
+   (`rust/thin-gate/tests/conformance.rs` +
+   `test/unit/core-conformance.test.js`) only catch Rust↔JS drift on
+   exercised fields; an absent variant means an unexercised schema.
+6. **JS conformance allowlist** — add the field name to the relevant
+   `*_ALLOWED` set in `test/unit/core-conformance.test.js`. The
+   per-fixture key-set assertion fails closed on unknown keys.
+7. **Log shape** — extend `summarizeDone` in `js/session/run.js` if
+   the field belongs in the `[mohdel:answer] done` debug summary.
+8. **CHANGELOG** — describe what the field represents (semantic),
+   not which provider it came from. Catalog edits are out of scope
+   for the package CHANGELOG (those live with curated.json).

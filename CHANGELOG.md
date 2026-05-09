@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.104.1] — Rust gate accepts cache token fields
+
+### Fixed
+
+- **Rust `AnswerResult` rejected `cacheWriteInputTokens` /
+  `cacheReadInputTokens`** under `deny_unknown_fields`. Both now
+  declared as `Option<u32>`. Conformance fixtures added so future
+  Rust↔JS schema drift fails in CI.
+
+### Changed
+
+- Wire-shape docs are provider-neutral (no "Anthropic-style" /
+  "OpenAI-shape" framing).
+
 ## [0.104.0] — Prompt-cache plumbing across adapters and pricing
 
 ### Added

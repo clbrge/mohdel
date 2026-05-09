@@ -62,14 +62,12 @@
  * @property {number} outputTokens
  * @property {number} thinkingTokens
  * @property {number} [cacheWriteInputTokens]
- *   Tokens written to a fresh prompt cache breakpoint, billed at
- *   `cacheWritePrice` (typically 1.25× input on Anthropic). Absent on
- *   providers that don't surface this counter (OpenAI doesn't separately
- *   bill cache writes).
+ *   Input tokens written to a fresh prompt cache breakpoint, billed at
+ *   `cacheWritePrice`. Absent when the provider has no separate
+ *   cache-write counter.
  * @property {number} [cacheReadInputTokens]
- *   Tokens served from prompt cache, billed at `cacheReadPrice` (typically
- *   0.1× input). Set by Anthropic directly and by OpenAI-shape adapters
- *   after subset→additive normalization of `prompt_tokens_details.cached_tokens`.
+ *   Input tokens served from prompt cache, billed at `cacheReadPrice`.
+ *   Absent when the provider has no prompt caching.
  * @property {number} cost
  *   USD, computed from curated pricing. Single number (not a breakdown).
  * @property {Timestamps} timestamps

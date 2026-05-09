@@ -57,6 +57,46 @@
       "warning": "cancelled"
     }
   },
+  "done-completed-with-cache-write": {
+    "type": "done",
+    "result": {
+      "status": "completed",
+      "output": "Hello, world.",
+      "inputTokens": 50,
+      "outputTokens": 12,
+      "thinkingTokens": 0,
+      "cacheWriteInputTokens": 4096,
+      "cost": 0.0185,
+      "timestamps": { "start": "1000", "first": "1050", "end": "2000" }
+    }
+  },
+  "done-completed-with-cache-read": {
+    "type": "done",
+    "result": {
+      "status": "completed",
+      "output": "Cached answer.",
+      "inputTokens": 50,
+      "outputTokens": 12,
+      "thinkingTokens": 0,
+      "cacheReadInputTokens": 4096,
+      "cost": 0.00135,
+      "timestamps": { "start": "1000", "first": "1050", "end": "2000" }
+    }
+  },
+  "done-completed-with-cache-both": {
+    "type": "done",
+    "result": {
+      "status": "completed",
+      "output": "Mixed cache hit and write.",
+      "inputTokens": 50,
+      "outputTokens": 18,
+      "thinkingTokens": 200,
+      "cacheWriteInputTokens": 1024,
+      "cacheReadInputTokens": 3072,
+      "cost": 0.0067,
+      "timestamps": { "start": "1000", "first": "1050", "end": "2000" }
+    }
+  },
   "done-tool_use": {
     "type": "done",
     "result": {

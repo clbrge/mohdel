@@ -27,6 +27,7 @@ const EVENT_ALLOWED = new Set(['type', 'delta', 'result', 'error'])
 const DELTA_CHUNK_ALLOWED = new Set(['type', 'delta'])
 const ANSWER_RESULT_ALLOWED = new Set([
   'status', 'output', 'inputTokens', 'outputTokens', 'thinkingTokens',
+  'cacheWriteInputTokens', 'cacheReadInputTokens',
   'cost', 'timestamps', 'warning', 'toolCalls'
 ])
 const TIMESTAMPS_ALLOWED = new Set(['start', 'first', 'end'])

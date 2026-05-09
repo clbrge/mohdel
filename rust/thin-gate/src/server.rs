@@ -1059,6 +1059,8 @@ fn synthetic_events() -> Vec<Event> {
                 input_tokens: 5,
                 output_tokens: 3,
                 thinking_tokens: 0,
+                cache_write_input_tokens: None,
+                cache_read_input_tokens: None,
                 cost: 0.0,
                 timestamps: Timestamps {
                     start: "0".into(),
@@ -1192,6 +1194,8 @@ mod tests {
             input_tokens: 0,
             output_tokens: 0,
             thinking_tokens: 0,
+            cache_write_input_tokens: None,
+            cache_read_input_tokens: None,
             cost: 0.0,
             timestamps: Timestamps {
                 start: "0".into(),

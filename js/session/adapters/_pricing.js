@@ -29,14 +29,10 @@ import { getSpec, setCatalog } from './_catalog.js'
  *   - `cacheWritePrice` → `inputPrice` (graceful for non-caching providers)
  *   - `cacheReadPrice` → `inputPrice`
  *
- * Token-counting conventions:
- *   - Anthropic reports `cache_creation_input_tokens` and `cache_read_input_tokens`
- *     as ADDITIONAL to `input_tokens` (separately billable). The adapter
- *     surfaces them as `cacheWriteInputTokens` / `cacheReadInputTokens`
- *     (write/read pair, matching catalog `cacheWritePrice`/`cacheReadPrice`).
- *   - OpenAI reports `prompt_tokens_details.cached_tokens` as a SUBSET of
- *     `prompt_tokens` (already counted). Adapters subtract before passing
- *     `inputTokens` to keep this function additive across providers.
+ * Token-counting convention: this function is purely additive across
+ * `inputTokens`, `cacheWriteInputTokens`, `cacheReadInputTokens`,
+ * `outputTokens`, and `thinkingTokens`. Adapters normalize provider-specific
+ * shapes (e.g. subset-of-input vs. additional-to-input) before calling here.
  *
  * @param {any} spec  Catalog entry, or `undefined`.
  * @param {{inputTokens?: number, outputTokens?: number, thinkingTokens?: number,

@@ -255,6 +255,15 @@ pub struct AnswerResult {
     pub input_tokens: u32,
     pub output_tokens: u32,
     pub thinking_tokens: u32,
+    /// Input tokens written to a fresh prompt cache breakpoint, billed at
+    /// `cacheWritePrice`. Optional — providers without a separate cache-write
+    /// counter omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_input_tokens: Option<u32>,
+    /// Input tokens served from prompt cache, billed at `cacheReadPrice`.
+    /// Optional — providers without prompt caching omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_input_tokens: Option<u32>,
     /// Single number (USD). No per-token breakdown on the wire.
     pub cost: f64,
     pub timestamps: Timestamps,

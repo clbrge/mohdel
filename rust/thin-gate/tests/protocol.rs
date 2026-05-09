@@ -54,6 +54,8 @@ fn done_event_carries_answer_result_in_camel_case() {
             input_tokens: 10,
             output_tokens: 5,
             thinking_tokens: 0,
+            cache_write_input_tokens: None,
+            cache_read_input_tokens: None,
             cost: 0.001,
             timestamps: Timestamps {
                 start: "1".into(),

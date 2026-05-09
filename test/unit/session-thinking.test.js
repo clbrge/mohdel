@@ -141,6 +141,39 @@ describe('anthropic thinking config', () => {
     expect(messageDeltas).toHaveLength(1)
     expect(messageDeltas[0].delta.delta).toBe('Answer')
   })
+
+  test('redacted thinking: gap between output_tokens and streamed estimates thinking', async () => {
+    // Mirrors opus 4.7 default behaviour — thinking happens via redacted
+    // blocks that consume output tokens but emit no thinking_delta events.
+    const { client } = mockAnthropic([
+      { type: 'message_start', message: { usage: { input_tokens: 10 } } },
+      // 8 chars streamed → 2 tokens at 4 chars/token
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Answer..' } },
+      // Anthropic reports total output_tokens of 50 — gap (50 − 2 = 48) is non-streamed thinking
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 50 } }
+    ])
+
+    const done = (await collect(anthropic(envelope('anthropic', 'claude-opus-4-6'), { client }))).at(-1)
+    expect(done.result.thinkingTokens).toBe(48)
+    expect(done.result.outputTokens).toBe(2)
+  })
+
+  test('tool input JSON counts as streamed output (not thinking) in gap fallback', async () => {
+    // Without this, a tool-only call where Anthropic streams 200 chars of
+    // input_json_delta and reports output_tokens=50 would falsely attribute
+    // ~50 tokens to thinking instead of zero.
+    const { client } = mockAnthropic([
+      { type: 'message_start', message: { usage: { input_tokens: 10 } } },
+      { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 't1', name: 'fn' } },
+      // 200 chars of tool input JSON → 50 tokens at 4 chars/token
+      { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: 'x'.repeat(200) } },
+      { type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 50 } }
+    ])
+
+    const done = (await collect(anthropic(envelope('anthropic', 'claude-opus-4-6'), { client }))).at(-1)
+    expect(done.result.thinkingTokens).toBe(0)
+    expect(done.result.outputTokens).toBe(50)
+  })
 })
 
 // ---------- OpenAI ----------

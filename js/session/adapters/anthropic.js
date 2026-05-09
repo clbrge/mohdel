@@ -203,12 +203,18 @@ export async function * anthropic (envelope, deps = {}) {
   }
 
   const end = String(process.hrtime.bigint())
-  // Estimate thinking tokens from streamed thinking_delta char count
-  // (Anthropic API doesn't report them separately). Cap at total
-  // output tokens reported by usage.
+  // Estimate thinking tokens. Primary path: count streamed thinking_delta
+  // chars (sonnet emits these). Fallback: gap between Anthropic's reported
+  // output_tokens and what actually streamed as visible output (text +
+  // tool input JSON) — catches redacted_thinking blocks (opus 4.7 default)
+  // that consume output tokens but emit no streaming deltas.
+  const streamedOutput = currentOutput()
+  const streamedOutputChars = streamedOutput.length +
+    [...toolBlocks.values()].reduce((s, b) => s + b.inputJson.length, 0)
+  const streamedOutputTokens = Math.ceil(streamedOutputChars / ANTHROPIC_THINKING_CHARS_PER_TOKEN)
   const estimatedThinkingTokens = thinkingChars > 0
     ? Math.min(Math.ceil(thinkingChars / ANTHROPIC_THINKING_CHARS_PER_TOKEN), outputTokens)
-    : 0
+    : Math.max(0, outputTokens - streamedOutputTokens)
   const messageOutputTokens = Math.max(0, outputTokens - estimatedThinkingTokens)
 
   /** @type {import('#core/events.js').DoneEvent} */
@@ -216,7 +222,7 @@ export async function * anthropic (envelope, deps = {}) {
     type: 'done',
     result: {
       status,
-      output: currentOutput() || null,
+      output: streamedOutput || null,
       inputTokens,
       outputTokens: messageOutputTokens,
       thinkingTokens: estimatedThinkingTokens,

@@ -125,16 +125,15 @@ describe('session/run `:effort` alias on the wire', () => {
     expect(events[0].error.type).toBe('SESSION_UNKNOWN_MODEL')
   })
 
-  test('explicit outputEffort on envelope wins over suffix', async () => {
+  test('explicit outputEffort on envelope wins over suffix; suffix is still stripped from model', async () => {
     const { adapter, seen } = capturingAdapter()
     await collect(run(envelope({ model: 'anthropic/claude-opus-4:high', outputEffort: 'low' }), {
       resolveAdapter: () => adapter,
       resolveSpec: specs()
     }))
-    // Suffix stays embedded in model, outputEffort unchanged.
-    // (The effort already being set signals the caller made a deliberate choice;
-    // the shortcut is meant as a convenience, not an override.)
-    expect(seen.envelope.model).toBe('anthropic/claude-opus-4:high')
+    // Explicit outputEffort wins ('low'), but the suffix is still stripped so
+    // gen_ai.request.model and downstream logs see the canonical bare id.
+    expect(seen.envelope.model).toBe('anthropic/claude-opus-4')
     expect(seen.envelope.outputEffort).toBe('low')
   })
 

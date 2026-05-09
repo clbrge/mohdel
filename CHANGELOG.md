@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.103.0] — Span/log canonical model id; redacted-thinking gap fallback
+
+### Fixed
+
+- **Suffix stripped from `envelope.model` when explicit `outputEffort`
+  wins.** Previously the `:effort` shortcut leaked into
+  `gen_ai.request.model`, the scoped logger, and the trace cache key.
+- **`thinkingTokens` no longer reported as 0** when an Anthropic call
+  emits `redacted_thinking` blocks (claude-opus-4-7 default). The
+  adapter falls back to estimating thinking from the gap between
+  Anthropic's `usage.output_tokens` and the visible streamed content
+  (text + tool `input_json_delta`). Cost unchanged — the
+  `thinkingPrice == outputPrice` invariant means redistribution only.
+
 ## [0.102.0] — `reasoning.effort` for xAI grok-4.3+ and per-provider `'none'` semantics
 
 ### Added

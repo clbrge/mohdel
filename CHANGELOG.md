@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.104.3] — Cache tokens on session.answer span
+
+### Added
+
+- `mohdel.cache_write_input_tokens` / `mohdel.cache_read_input_tokens`
+  attributes on the `mohdel.session.answer` span (when non-zero), so
+  cache activity is visible per call without inferring it from cost.
+
 ## [0.104.2] — Schema cohesion: cancelledDone cache passthrough, Default impls, contributor checklist
 
 ### Fixed

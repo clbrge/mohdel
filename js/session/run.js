@@ -357,6 +357,8 @@ function finalizeSpanOk (span, result, sawDelta = false, maxInterFrameMs = 0) {
     'mohdel.stream': !!sawDelta,
     'mohdel.max_inter_frame_ms': maxInterFrameMs
   }
+  if (result?.cacheWriteInputTokens) attrs['mohdel.cache_write_input_tokens'] = result.cacheWriteInputTokens
+  if (result?.cacheReadInputTokens) attrs['mohdel.cache_read_input_tokens'] = result.cacheReadInputTokens
   if (result?.cost != null) attrs['mohdel.cost'] = result.cost
   if (result?.warning) attrs['mohdel.warning'] = result.warning
   if (result?.timestamps?.start && result?.timestamps?.first) {

@@ -264,11 +264,15 @@ export async function * run (envelope, {
 function normalizeModelEffort (envelope, resolveSpec) {
   const candidate = effortOf(envelope.model)
   if (!candidate) return { envelope }
-  if (envelope.outputEffort) return { envelope } // explicit wins
 
   const base = catalogKey(envelope.model)
   const baseSpec = resolveSpec(base)
   if (!baseSpec) return { envelope } // base not known — let full string fall through to not-found
+
+  // Explicit outputEffort wins; still strip the suffix so spans/logs see the canonical id.
+  if (envelope.outputEffort) {
+    return { envelope: { ...envelope, model: base } }
+  }
 
   if (!baseSpec.thinkingEffortLevels) {
     return {

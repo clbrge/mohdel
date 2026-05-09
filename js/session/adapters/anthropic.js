@@ -113,6 +113,8 @@ export async function * anthropic (envelope, deps = {}) {
   const currentOutput = () => outputParts.join('')
   let inputTokens = 0
   let outputTokens = 0
+  let cacheWriteTokens = 0
+  let cacheReadTokens = 0
   let thinkingChars = 0
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
@@ -134,6 +136,12 @@ export async function * anthropic (envelope, deps = {}) {
         case 'message_start':
           if (event.message?.usage?.input_tokens) {
             inputTokens = event.message.usage.input_tokens
+          }
+          if (event.message?.usage?.cache_creation_input_tokens) {
+            cacheWriteTokens = event.message.usage.cache_creation_input_tokens
+          }
+          if (event.message?.usage?.cache_read_input_tokens) {
+            cacheReadTokens = event.message.usage.cache_read_input_tokens
           }
           break
 
@@ -226,9 +234,17 @@ export async function * anthropic (envelope, deps = {}) {
       inputTokens,
       outputTokens: messageOutputTokens,
       thinkingTokens: estimatedThinkingTokens,
+      ...(cacheWriteTokens > 0 && { cacheWriteInputTokens: cacheWriteTokens }),
+      ...(cacheReadTokens > 0 && { cacheReadInputTokens: cacheReadTokens }),
       cost: costFor(
         catalogKey(envelope.model),
-        { inputTokens, outputTokens: messageOutputTokens, thinkingTokens: estimatedThinkingTokens }
+        {
+          inputTokens,
+          outputTokens: messageOutputTokens,
+          thinkingTokens: estimatedThinkingTokens,
+          cacheWriteInputTokens: cacheWriteTokens,
+          cacheReadInputTokens: cacheReadTokens
+        }
       ),
       timestamps: { start, first: first ?? end, end }
     }
@@ -261,7 +277,9 @@ function safeParseJson (s) {
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
  * @param {Array<{role: string, content: any}>} conversation
- * @param {string} system
+ * @param {string | Array<{type: string, text: string, cache_control?: object}>} system
+ *   Either a flat string (legacy) or an array of typed blocks with optional
+ *   `cache_control` for prompt caching. The Anthropic SDK accepts both shapes.
  */
 function buildRequest (envelope, conversation, system) {
   const spec = getSpec(catalogKey(envelope.model))
@@ -273,7 +291,9 @@ function buildRequest (envelope, conversation, system) {
     max_tokens: envelope.outputBudget ?? outputTokenLimit ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
     messages: conversation
   }
-  if (system) request.system = system
+  if (typeof system === 'string' ? system : Array.isArray(system) && system.length) {
+    request.system = system
+  }
   if (envelope.tools?.length) {
     request.tools = toAnthropicTools(envelope.tools)
   }
@@ -314,11 +334,39 @@ function splitPrompt (prompt) {
   }
   /** @type {string[]} */
   const systemParts = []
+  /** @type {Array<{type: string, text: string, cache_control?: object}>} */
+  const systemBlocks = []
+  let hasCacheMarkers = false
   /** @type {Array<{role: string, content: any}>} */
   const conversation = []
   for (const m of prompt) {
     if (m.role === 'system') {
-      systemParts.push(flattenText(m.content))
+      // Translate spore-style cache markers ({text, cache: '5m'|'1h'}) into
+      // Anthropic's cache_control. Preserves the block boundary that spore
+      // chose; collapsing into a single string would silently disable
+      // caching even when the upstream tier composed the prompt with
+      // explicit breakpoints.
+      if (Array.isArray(m.content)) {
+        for (const p of m.content) {
+          if (!p?.text) continue
+          const block = { type: 'text', text: p.text }
+          if (p.cache === '5m') {
+            block.cache_control = { type: 'ephemeral' }
+            hasCacheMarkers = true
+          } else if (p.cache === '1h') {
+            block.cache_control = { type: 'ephemeral', ttl: '1h' }
+            hasCacheMarkers = true
+          }
+          systemBlocks.push(block)
+          systemParts.push(p.text)
+        }
+      } else {
+        const text = flattenText(m.content)
+        if (text) {
+          systemBlocks.push({ type: 'text', text })
+          systemParts.push(text)
+        }
+      }
     } else if (m.role === 'tool') {
       // Tool results go in a user-role message with tool_result blocks.
       conversation.push({
@@ -351,7 +399,14 @@ function splitPrompt (prompt) {
       })
     }
   }
-  return { system: systemParts.filter(Boolean).join('\n\n'), conversation }
+  // If cache markers are present, return the structured block array so
+  // buildRequest can pass it through to Anthropic's typed system field.
+  // Otherwise fall back to the legacy string concatenation path so
+  // non-cached calls don't change request shape.
+  const system = hasCacheMarkers
+    ? systemBlocks
+    : systemParts.filter(Boolean).join('\n\n')
+  return { system, conversation }
 }
 
 /** @param {string | import('#core/envelope.js').MessagePart[]} content */

@@ -14,8 +14,8 @@ import { getSpec, setCatalog } from './_catalog.js'
 /**
  * Pure cost computation from spec + usage.
  *
- * Each price field (`inputPrice` / `outputPrice` / `thinkingPrice`) is
- * one of:
+ * Each price field (`inputPrice` / `outputPrice` / `thinkingPrice` /
+ * `cacheWritePrice` / `cacheReadPrice`) is one of:
  *
  *   - a `number` — flat per-million rate; or
  *   - an object `{">N": number, ..., "default": number}` — tiered.
@@ -24,12 +24,23 @@ import { getSpec, setCatalog } from './_catalog.js'
  *     nothing matches. Keys that aren't `">N"` or `"default"` are
  *     ignored. `>` is strict — at exactly N, the default is used.
  *
- * `thinkingPrice` is optional and falls back to the resolved
- * `outputPrice` when absent.
+ * Optional fields fall back to other prices when absent:
+ *   - `thinkingPrice` → `outputPrice`
+ *   - `cacheWritePrice` → `inputPrice` (graceful for non-caching providers)
+ *   - `cacheReadPrice` → `inputPrice`
  *
- * @param {any} spec  Catalog entry (with `inputPrice`/`outputPrice`/`thinkingPrice`),
- *                    or `undefined`.
- * @param {{inputTokens?: number, outputTokens?: number, thinkingTokens?: number}} usage
+ * Token-counting conventions:
+ *   - Anthropic reports `cache_creation_input_tokens` and `cache_read_input_tokens`
+ *     as ADDITIONAL to `input_tokens` (separately billable). The adapter
+ *     surfaces them as `cacheWriteInputTokens` / `cacheReadInputTokens`
+ *     (write/read pair, matching catalog `cacheWritePrice`/`cacheReadPrice`).
+ *   - OpenAI reports `prompt_tokens_details.cached_tokens` as a SUBSET of
+ *     `prompt_tokens` (already counted). Adapters subtract before passing
+ *     `inputTokens` to keep this function additive across providers.
+ *
+ * @param {any} spec  Catalog entry, or `undefined`.
+ * @param {{inputTokens?: number, outputTokens?: number, thinkingTokens?: number,
+ *          cacheWriteInputTokens?: number, cacheReadInputTokens?: number}} usage
  * @returns {number}
  */
 export function computeCost (spec, usage) {
@@ -37,12 +48,18 @@ export function computeCost (spec, usage) {
   const i = usage.inputTokens ?? 0
   const o = usage.outputTokens ?? 0
   const t = usage.thinkingTokens ?? 0
+  const cw = usage.cacheWriteInputTokens ?? 0
+  const cr = usage.cacheReadInputTokens ?? 0
   const ip = resolveTier(spec.inputPrice, i)
   const op = resolveTier(spec.outputPrice, i)
   if (typeof ip !== 'number' || typeof op !== 'number') return 0
   const tp = resolveTier(spec.thinkingPrice, i)
   const tpFinal = typeof tp === 'number' ? tp : op
-  const total = (i * ip + o * op + t * tpFinal) / 1_000_000
+  const cwp = resolveTier(spec.cacheWritePrice, i)
+  const cwpFinal = typeof cwp === 'number' ? cwp : ip
+  const crp = resolveTier(spec.cacheReadPrice, i)
+  const crpFinal = typeof crp === 'number' ? crp : ip
+  const total = (i * ip + cw * cwpFinal + cr * crpFinal + o * op + t * tpFinal) / 1_000_000
   return round(total)
 }
 

@@ -76,6 +76,7 @@ export async function * openai (envelope, deps = {}) {
   let inputTokens = 0
   let outputTokens = 0
   let thinkingTokens = 0
+  let cachedInputTokens = 0
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
@@ -130,6 +131,7 @@ export async function * openai (envelope, deps = {}) {
             inputTokens = event.response.usage.input_tokens ?? 0
             outputTokens = event.response.usage.output_tokens ?? 0
             thinkingTokens = event.response.usage.output_tokens_details?.reasoning_tokens ?? 0
+            cachedInputTokens = event.response.usage.input_tokens_details?.cached_tokens ?? 0
           }
           if (toolItems.size > 0) {
             status = STATUS_TOOL_USE
@@ -145,6 +147,7 @@ export async function * openai (envelope, deps = {}) {
             inputTokens = event.response.usage.input_tokens ?? 0
             outputTokens = event.response.usage.output_tokens ?? 0
             thinkingTokens = event.response.usage.output_tokens_details?.reasoning_tokens ?? 0
+            cachedInputTokens = event.response.usage.input_tokens_details?.cached_tokens ?? 0
           }
           break
 
@@ -174,18 +177,30 @@ export async function * openai (envelope, deps = {}) {
   // one from the other for the message-only count.
   const messageOutputTokens = Math.max(0, outputTokens - thinkingTokens)
 
+  // OpenAI counts cached_tokens as a SUBSET of input_tokens. Convert to
+  // mohdel's additive convention (cacheReadInputTokens is separate from
+  // inputTokens) by subtracting the cached portion before pricing. Both
+  // adapters and computeCost stay simpler with the additive shape.
+  const regularInputTokens = Math.max(0, inputTokens - cachedInputTokens)
+
   /** @type {import('#core/events.js').DoneEvent} */
   const done = {
     type: 'done',
     result: {
       status,
       output: currentOutput() || null,
-      inputTokens,
+      inputTokens: regularInputTokens,
       outputTokens: messageOutputTokens,
       thinkingTokens,
+      ...(cachedInputTokens > 0 && { cacheReadInputTokens: cachedInputTokens }),
       cost: costFor(
         catalogKey(envelope.model),
-        { inputTokens, outputTokens: messageOutputTokens, thinkingTokens }
+        {
+          inputTokens: regularInputTokens,
+          outputTokens: messageOutputTokens,
+          thinkingTokens,
+          cacheReadInputTokens: cachedInputTokens
+        }
       ),
       timestamps: { start, first: first ?? end, end }
     }

@@ -4,6 +4,36 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.104.0] — Prompt-cache plumbing across adapters and pricing
+
+### Added
+
+- **Anthropic prompt caching.** `splitPrompt` translates structured system
+  messages with `cache: '5m' | '1h'` markers into Anthropic's typed
+  `cache_control: { type: 'ephemeral', ttl?: '1h' }` blocks. The adapter
+  now extracts `cache_creation_input_tokens` and `cache_read_input_tokens`
+  from `message_start.usage` and surfaces them on `AnswerResult` and via
+  `costFor`.
+- **OpenAI / chat-completions cache reporting.** OpenAI Responses,
+  cerebras, fireworks, and xAI adapters extract
+  `prompt_tokens_details.cached_tokens` and convert the OpenAI "subset
+  of prompt_tokens" convention into mohdel's additive
+  `cacheReadInputTokens` field. Caller code sees one consistent shape
+  regardless of provider semantics.
+- **`AnswerResult.cacheWriteInputTokens` / `cacheReadInputTokens`**
+  added to the type definition. Symmetric write/read pair matching
+  catalog `cacheWritePrice`/`cacheReadPrice`; Anthropic's
+  `cache_creation_input_tokens` is normalized into `cacheWriteInputTokens`
+  at the adapter boundary.
+- **`computeCost` honours `cacheWritePrice` and `cacheReadPrice`** in
+  catalog specs, falling back to `inputPrice` when absent so non-caching
+  providers degrade gracefully. Pricing is additive: `i*ip + cw*cwp +
+  cr*crp + o*op + t*tp`.
+
+### Changed
+
+- Deps: `@google/genai ^2.0.0 → ^2.0.1`.
+
 ## [0.103.0] — Span/log canonical model id; redacted-thinking gap fallback
 
 ### Fixed

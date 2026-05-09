@@ -258,10 +258,15 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
  */
 function finalize ({ envelope, content, toolCalls, usage, finishReason, start, first, reasoning = null }) {
   const end = String(process.hrtime.bigint())
-  const inputTokens = usage.prompt_tokens || 0
+  const totalInputTokens = usage.prompt_tokens || 0
   const totalOutputTokens = usage.completion_tokens || 0
   const thinkingTokens = usage.completion_tokens_details?.reasoning_tokens || 0
+  const cachedInputTokens = usage.prompt_tokens_details?.cached_tokens || 0
   const visibleOutputTokens = Math.max(0, totalOutputTokens - thinkingTokens)
+  // OpenAI-shape APIs (cerebras/fireworks/...) report cached_tokens as a
+  // SUBSET of prompt_tokens. Convert to mohdel's additive convention so
+  // computeCost prices the cached portion at cacheReadPrice.
+  const inputTokens = Math.max(0, totalInputTokens - cachedInputTokens)
 
   const truncated = finishReason === 'length'
   let status = truncated ? STATUS_INCOMPLETE : STATUS_COMPLETED
@@ -276,9 +281,15 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
       inputTokens,
       outputTokens: visibleOutputTokens,
       thinkingTokens,
+      ...(cachedInputTokens > 0 && { cacheReadInputTokens: cachedInputTokens }),
       cost: costFor(
         catalogKey(envelope.model),
-        { inputTokens, outputTokens: visibleOutputTokens, thinkingTokens }
+        {
+          inputTokens,
+          outputTokens: visibleOutputTokens,
+          thinkingTokens,
+          cacheReadInputTokens: cachedInputTokens
+        }
       ),
       timestamps: { start, first: first ?? end, end }
     }

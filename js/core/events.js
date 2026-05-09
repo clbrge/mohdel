@@ -55,8 +55,21 @@
  * @property {(string|null)} output
  *   Final text (null when `status === 'tool_use'` with no text).
  * @property {number} inputTokens
+ *   Regular (non-cached) input tokens. For OpenAI/cerebras/fireworks where
+ *   `cached_tokens` is reported as a SUBSET of `prompt_tokens`, adapters
+ *   subtract the cached portion before exposing it here so all providers
+ *   produce additive token shapes.
  * @property {number} outputTokens
  * @property {number} thinkingTokens
+ * @property {number} [cacheWriteInputTokens]
+ *   Tokens written to a fresh prompt cache breakpoint, billed at
+ *   `cacheWritePrice` (typically 1.25× input on Anthropic). Absent on
+ *   providers that don't surface this counter (OpenAI doesn't separately
+ *   bill cache writes).
+ * @property {number} [cacheReadInputTokens]
+ *   Tokens served from prompt cache, billed at `cacheReadPrice` (typically
+ *   0.1× input). Set by Anthropic directly and by OpenAI-shape adapters
+ *   after subset→additive normalization of `prompt_tokens_details.cached_tokens`.
  * @property {number} cost
  *   USD, computed from curated pricing. Single number (not a breakdown).
  * @property {Timestamps} timestamps

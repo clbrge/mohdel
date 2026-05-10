@@ -289,5 +289,57 @@
       }
     ],
     "parallelToolCalls": true
+  },
+  "system-block-with-cache-marker-5m": {
+    "callId": "c13",
+    "authId": "a13",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "anthropic/claude-sonnet-4-6",
+    "prompt": [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "text",
+            "text": "You are a helpful assistant.",
+            "cache": "5m"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "Hello."
+      }
+    ]
+  },
+  "system-block-with-cache-marker-1h": {
+    "callId": "c14",
+    "authId": "a14",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "anthropic/claude-opus-4-7",
+    "prompt": [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "text",
+            "text": "Stable foundation block.",
+            "cache": "1h"
+          },
+          {
+            "type": "text",
+            "text": "Per-turn delta block."
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "Hello."
+      }
+    ]
   }
 }

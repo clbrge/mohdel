@@ -210,8 +210,15 @@ pub enum MessageContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum MessagePart {
-    Text { text: String },
-    Reasoning { text: String },
+    Text {
+        text: String,
+        /// Caller-set prompt-cache marker (`"5m"` | `"1h"`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache: Option<String>,
+    },
+    Reasoning {
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

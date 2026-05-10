@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.104.4] — Wire preserves cache marker on text parts
+
+### Fixed
+
+- `MessagePart::Text` on the thin-gate wire now carries optional
+  `cache: "5m" | "1h"`. Previously the field was dropped at the gate,
+  so caller-driven prompt caching never reached the adapter. New
+  conformance fixtures lock the shape.
+
 ## [0.104.3] — Cache tokens on session.answer span
 
 ### Added

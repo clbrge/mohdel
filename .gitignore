@@ -45,3 +45,4 @@ Thumbs.db
 # runtime logs (`*.log`) accumulate from local scripts.
 *.log
 npm-debug.log*
+probes/

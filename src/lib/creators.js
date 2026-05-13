@@ -39,6 +39,11 @@ const creators = {
     logo: 'minimax.svg',
     description: 'Minimax offers versatile Chinese-first chat and coding models tuned for fast, cost-aware assistants and enterprise integrations.'
   },
+  mistral: {
+    label: 'Mistral',
+    logo: 'mistral.svg',
+    description: 'Mistral AI ships strong open-weight and proprietary models with a focus on European hosting, multilingual quality, and efficient deployment.'
+  },
   moonshotai: {
     label: 'Moonshot AI',
     logo: 'moonshotai.svg',

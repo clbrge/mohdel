@@ -10,6 +10,8 @@ All notable changes to this project are documented here. Format follows
 
 - OpenAI-compatible adapter for `xiaomi/*` models (reasoning_content,
   image input, tool calling).
+- `mistral` creator entry (fixes a dangling reference from
+  `providers.js`). Adapter and provider config were already present.
 - `CallEnvelope.idleHeartbeatMs` (optional) — when set, the session
   emits a synthetic `{type:'idle', sinceMs}` event whenever the
   adapter has been silent for at least that many milliseconds, and

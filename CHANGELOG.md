@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.105.1] — Dependency bumps
+
+### Changed
+
+- `@anthropic-ai/sdk` ^0.95.1 → ^0.95.2
+- `@google/genai` ^2.0.1 → ^2.2.0
+- `groq-sdk` ^1.1.2 → ^1.2.0
+- `@clack/prompts` ^1.3.0 → ^1.4.0
+- `@opentelemetry/exporter-trace-otlp-grpc` ^0.217.0 → ^0.218.0
+- `@opentelemetry/sdk-node` ^0.217.0 → ^0.218.0
+- dev: `lint-staged` ^17.0.3 → ^17.0.4, `vitest` ^4.1.5 → ^4.1.6
+
 ## [0.105.0] — Finer-grained 429 classification
 
 ### Added

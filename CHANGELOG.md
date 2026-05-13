@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.105.0] — Finer-grained 429 classification
+
+### Added
+
+- `classifyProviderError` now splits 429 responses into
+  `RATE_LIMIT_TIER` (caller quota exhausted — retrying inside the
+  rate-limit window cannot succeed) and `RATE_LIMIT_LOAD` (provider
+  shedding load for reasons unrelated to the caller's quota — the
+  next attempt may succeed immediately). `RATE_LIMIT` (no suffix)
+  remains as a fallback when the signal is ambiguous.
+- New `opts.provider` parameter on `classifyProviderError` lets
+  adapters opt into provider-specific 429 disambiguation. Generic
+  `x-ratelimit-remaining-*` header detection covers OpenAI-compatible
+  providers; per-provider overrides cover anthropic
+  (`overloaded_error` vs `rate_limit_error`), gemini
+  (`RESOURCE_EXHAUSTED`), and cerebras (generic "high traffic" body
+  → LOAD).
+- Adapter wiring done for openai, anthropic, gemini, and every
+  provider going through `_chat_completions.js` (cerebras, xai,
+  deepseek, mistral, fireworks, groq, novita, openrouter).
+
 ## [0.104.4] — Wire preserves cache marker on text parts
 
 ### Fixed

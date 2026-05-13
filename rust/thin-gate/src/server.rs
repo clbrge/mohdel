@@ -46,7 +46,7 @@ use crate::hooks::{AuthPolicy, QuotaPolicy, QuotaSpec, RequireInlineAuth, RouteP
 use crate::metrics;
 use crate::protocol::{
     AnswerResult, CallEnvelope, DeltaChunk, DeltaKind, Event, ImageEnvelope, ImageResult,
-    Severity, Status, Timestamps, TypedError,
+    Severity, Status, TypedError,
 };
 use crate::session_pool::{PooledSession, SessionPool};
 

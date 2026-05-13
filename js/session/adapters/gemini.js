@@ -58,7 +58,7 @@ export async function * gemini (envelope, deps = {}) {
       if (parts.length) injectParts(contents, parts)
     } catch (e) {
       log?.warn({ err: e }, '[mohdel:gemini] image load failed')
-      yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
+      yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: 'gemini' }) }
       return
     }
   }
@@ -80,7 +80,7 @@ export async function * gemini (envelope, deps = {}) {
       // `typed` lets _videos.js surface PROVIDER_UNAVAILABLE on
       // upload-deadline timeouts; fall back to generic classification.
       const typed = /** @type {any} */(e).typed
-      yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key) }
+      yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'gemini' }) }
       return
     }
   }
@@ -172,7 +172,7 @@ export async function * gemini (envelope, deps = {}) {
       return
     }
     log?.warn({ err: e }, '[mohdel:gemini] stream failed')
-    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key) }
+    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: 'gemini' }) }
     return
   }
 

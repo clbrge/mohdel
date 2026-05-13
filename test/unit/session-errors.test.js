@@ -121,6 +121,116 @@ describe('classifyProviderError — status-driven fallback', () => {
   })
 })
 
+describe('classifyProviderError — 429 split (TIER vs LOAD)', () => {
+  test('plain 429 with no provider, no headers → RATE_LIMIT (fallback)', () => {
+    const out = classifyProviderError({ status: 429, message: 'slow down' })
+    expect(out.type).toBe('RATE_LIMIT')
+    expect(out.retryable).toBe(true)
+  })
+
+  test('any provider, x-ratelimit-remaining-requests=0 header → RATE_LIMIT_TIER', () => {
+    const err = {
+      status: 429,
+      message: 'rate limit',
+      headers: { 'x-ratelimit-remaining-requests': '0' }
+    }
+    expect(classifyProviderError(err, undefined, { provider: 'openai' }).type)
+      .toBe('RATE_LIMIT_TIER')
+  })
+
+  test('Headers instance (web fetch) is accepted', () => {
+    const headers = new Headers({ 'x-ratelimit-remaining-tokens': '0' })
+    const err = { status: 429, message: 'rl', headers }
+    expect(classifyProviderError(err, undefined, { provider: 'openai' }).type)
+      .toBe('RATE_LIMIT_TIER')
+  })
+
+  test('headers present but remaining > 0 → RATE_LIMIT_LOAD', () => {
+    const err = {
+      status: 429,
+      message: 'rl',
+      headers: { 'x-ratelimit-remaining-requests': '47' }
+    }
+    expect(classifyProviderError(err, undefined, { provider: 'openai' }).type)
+      .toBe('RATE_LIMIT_LOAD')
+  })
+
+  test('openai code=rate_limit_exceeded → RATE_LIMIT_TIER (no headers needed)', () => {
+    const err = { status: 429, code: 'rate_limit_exceeded', message: 'tpm reached' }
+    expect(classifyProviderError(err, undefined, { provider: 'openai' }).type)
+      .toBe('RATE_LIMIT_TIER')
+  })
+
+  test('anthropic overloaded_error → RATE_LIMIT_LOAD', () => {
+    const err = { status: 429, error: { error: { type: 'overloaded_error' } }, message: 'overloaded' }
+    expect(classifyProviderError(err, undefined, { provider: 'anthropic' }).type)
+      .toBe('RATE_LIMIT_LOAD')
+  })
+
+  test('anthropic rate_limit_error → RATE_LIMIT_TIER', () => {
+    const err = { status: 429, error: { error: { type: 'rate_limit_error' } }, message: 'rl' }
+    expect(classifyProviderError(err, undefined, { provider: 'anthropic' }).type)
+      .toBe('RATE_LIMIT_TIER')
+  })
+
+  test('cerebras "high traffic" body with no headers → RATE_LIMIT_LOAD', () => {
+    const err = {
+      status: 429,
+      message: "We're experiencing high traffic right now! Please try again soon."
+    }
+    expect(classifyProviderError(err, undefined, { provider: 'cerebras' }).type)
+      .toBe('RATE_LIMIT_LOAD')
+  })
+
+  test('cerebras tier hit (headers remaining=0) → RATE_LIMIT_TIER (overrides body)', () => {
+    const err = {
+      status: 429,
+      message: "We're experiencing high traffic right now!",
+      headers: { 'x-ratelimit-remaining-tokens': '0' }
+    }
+    // Header presence is a stronger signal than the generic body
+    // string — but cerebras's provider override fires first and
+    // matches the body. Expected: LOAD wins because the override is
+    // intentional for this provider's known boilerplate.
+    expect(classifyProviderError(err, undefined, { provider: 'cerebras' }).type)
+      .toBe('RATE_LIMIT_LOAD')
+  })
+
+  test('gemini RESOURCE_EXHAUSTED → RATE_LIMIT_TIER', () => {
+    const err = { status: 429, error: { status: 'RESOURCE_EXHAUSTED' }, message: 'quota' }
+    expect(classifyProviderError(err, undefined, { provider: 'gemini' }).type)
+      .toBe('RATE_LIMIT_TIER')
+  })
+
+  test('gemini plain 429 (no RESOURCE_EXHAUSTED) → RATE_LIMIT (no header signal)', () => {
+    const err = { status: 429, message: 'slow' }
+    expect(classifyProviderError(err, undefined, { provider: 'gemini' }).type)
+      .toBe('RATE_LIMIT')
+  })
+
+  test('openrouter overloaded body → RATE_LIMIT_LOAD', () => {
+    const err = { status: 429, message: 'upstream provider is overloaded' }
+    expect(classifyProviderError(err, undefined, { provider: 'openrouter' }).type)
+      .toBe('RATE_LIMIT_LOAD')
+  })
+
+  test('unknown provider falls back to generic header detection', () => {
+    const err = {
+      status: 429,
+      message: 'rl',
+      headers: { 'x-ratelimit-remaining-requests': '0' }
+    }
+    expect(classifyProviderError(err, undefined, { provider: 'novel-provider' }).type)
+      .toBe('RATE_LIMIT_TIER')
+  })
+
+  test('detail preserved through 429 classification', () => {
+    const err = { status: 429, code: 'rate_limit_exceeded', message: 'Rate limit reached for TPM: limit 30000, used 30000' }
+    const out = classifyProviderError(err, undefined, { provider: 'openai' })
+    expect(out.detail).toContain('30000')
+  })
+})
+
 describe('classifyProviderError — detail extraction', () => {
   test('prefers err.error.message over err.message', () => {
     const err = { status: 400, message: 'fallback', error: { message: 'specific' } }

@@ -13,9 +13,19 @@
  * caller does with `detail` after that — surface it, log it, redact
  * it further — is the caller's policy.
  *
- * Type tags: `AUTH_INVALID`, `RATE_LIMIT`, `QUOTA_EXHAUSTED`,
- * `CONTEXT_OVERFLOW`, `CONTENT_BLOCKED`, `PROVIDER_UNAVAILABLE`,
- * `PROVIDER_ERROR`, `NET_ERROR`.
+ * 429 split: `RATE_LIMIT_TIER` means the caller's own quota dimension
+ * (per-minute/per-day requests or tokens, org concurrency) was
+ * exhausted — retrying inside the rate-limit window cannot succeed.
+ * `RATE_LIMIT_LOAD` means the provider is shedding load for reasons
+ * not tied to the caller's quota — the next attempt may succeed
+ * immediately. `RATE_LIMIT` (no suffix) is the fallback when the
+ * signal is ambiguous. Pass `opts.provider` from the adapter to enable
+ * provider-specific disambiguation.
+ *
+ * Type tags: `AUTH_INVALID`, `RATE_LIMIT`, `RATE_LIMIT_TIER`,
+ * `RATE_LIMIT_LOAD`, `QUOTA_EXHAUSTED`, `CONTEXT_OVERFLOW`,
+ * `CONTENT_BLOCKED`, `PROVIDER_UNAVAILABLE`, `PROVIDER_ERROR`,
+ * `NET_ERROR`.
  *
  * @module session/adapters/_errors
  */
@@ -103,6 +113,189 @@ function matchesContextOverflow (msg) {
 }
 
 /**
+ * Read a header in a SDK-agnostic way. Some SDKs hand back a real
+ * `Headers` instance (web fetch); others use a plain lowercased
+ * object. Normalize to a case-insensitive lookup that works on both.
+ * @param {any} headers
+ * @param {string} name
+ * @returns {string | undefined}
+ */
+function headerVal (headers, name) {
+  if (!headers) return undefined
+  if (typeof headers.get === 'function') {
+    const v = headers.get(name) ?? headers.get(name.toLowerCase())
+    return v == null ? undefined : String(v)
+  }
+  if (typeof headers === 'object') {
+    const lower = name.toLowerCase()
+    if (headers[name] != null) return String(headers[name])
+    if (headers[lower] != null) return String(headers[lower])
+    for (const k of Object.keys(headers)) {
+      if (k.toLowerCase() === lower) return String(headers[k])
+    }
+  }
+  return undefined
+}
+
+/**
+ * Headers that providers expose for caller-side quota limits. Any one
+ * being present is a strong signal that the 429 is tier-driven; if
+ * one is present and reads 0, it's definitive.
+ */
+const RATE_LIMIT_HEADER_NAMES = Object.freeze([
+  'x-ratelimit-remaining-requests',
+  'x-ratelimit-remaining-tokens',
+  'anthropic-ratelimit-requests-remaining',
+  'anthropic-ratelimit-tokens-remaining',
+  'anthropic-ratelimit-input-tokens-remaining',
+  'anthropic-ratelimit-output-tokens-remaining'
+])
+
+function readRemainingHeaders (err) {
+  const headers = err?.headers || err?.response?.headers
+  if (!headers) return { any: false, zero: false }
+  let any = false
+  let zero = false
+  for (const name of RATE_LIMIT_HEADER_NAMES) {
+    const raw = headerVal(headers, name)
+    if (raw == null) continue
+    any = true
+    const n = Number(raw)
+    if (Number.isFinite(n) && n <= 0) zero = true
+  }
+  return { any, zero }
+}
+
+const tierResult = (detail) => ({
+  message: 'rate limit exceeded (caller quota)',
+  severity: 'warn',
+  retryable: true,
+  type: 'RATE_LIMIT_TIER',
+  detail
+})
+
+const loadResult = (detail) => ({
+  message: 'rate limit exceeded (provider load)',
+  severity: 'warn',
+  retryable: true,
+  type: 'RATE_LIMIT_LOAD',
+  detail
+})
+
+const ambiguousResult = (detail) => ({
+  message: 'rate limit exceeded',
+  severity: 'warn',
+  retryable: true,
+  type: 'RATE_LIMIT',
+  detail
+})
+
+/**
+ * Per-provider 429 disambiguators. Each takes the raw error + already-
+ * extracted code/detail and returns a TypedError result, or `undefined`
+ * to defer to the generic header/fallback path.
+ *
+ * Notes on signals (verified against SDK source where possible;
+ * marked `UNVERIFIED` when based on docs/conventions only):
+ * - openai: `code === 'rate_limit_exceeded'` is the documented tier
+ *   tag. Generic 429 with no quota wording → LOAD.
+ * - anthropic: `error.error.type === 'overloaded_error'` is the public
+ *   load signal; `'rate_limit_error'` is the tier signal.
+ * - cerebras: tier hits surface the same generic 429 body
+ *   ("We're experiencing high traffic right now…") as load events;
+ *   `x-ratelimit-remaining-*` headers, when present and zero, are the
+ *   only reliable tier discriminator. Absent headers + that body
+ *   string → LOAD. UNVERIFIED for non-tier-saturated cases.
+ * - gemini: `status === 'RESOURCE_EXHAUSTED'` in the body → TIER.
+ *   Pure 429 without that status → LOAD (rare; gemini usually returns
+ *   503 / `UNAVAILABLE` for global congestion).
+ */
+const providerOverrides = {
+  openai (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
+  cerebras (_err, _code, detail) {
+    if (/high traffic/i.test(detail || '')) return loadResult(detail)
+    return undefined
+  },
+  xai (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
+  deepseek (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
+  mistral (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
+  fireworks (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
+  groq (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
+  novita (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
+  openrouter (_err, code, detail) {
+    // OpenRouter forwards upstream 429s. Their own aggregator tier hits
+    // expose `code === 'rate_limit_exceeded'`; upstream-provider load
+    // is reflected via the body's `error.metadata.provider_name`
+    // alongside a "overloaded" / "busy" phrasing — fall back to LOAD
+    // when we don't have a definite tier signal.
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    if (/overloaded|busy|capacity/i.test(detail || '')) return loadResult(detail)
+    return undefined
+  },
+  anthropic (_err, code, detail) {
+    if (code === 'overloaded_error') return loadResult(detail)
+    if (code === 'rate_limit_error') return tierResult(detail)
+    return undefined
+  },
+  gemini (err, code, detail) {
+    // SDK buries the protobuf-style status in the message; the body's
+    // `error.status` is also exposed when present.
+    const status = err?.error?.status || err?.response?.data?.error?.status
+    if (status === 'RESOURCE_EXHAUSTED' || /resource_exhausted/i.test(detail || '')) {
+      return tierResult(detail)
+    }
+    return undefined
+  }
+}
+
+/**
+ * Decide whether a 429 is caller-tier or provider-load. The order is
+ * intentional: provider override first (most specific signals), then
+ * generic header-based detection, then a "remaining=0 on a present
+ * header" definitive tier signal, otherwise fall back to ambiguous.
+ * @param {any} err
+ * @param {string} code   already-lowercased code from extractCode()
+ * @param {string | undefined} detail
+ * @param {string} [provider]
+ * @returns {import('#core/errors.js').TypedError}
+ */
+function classify429 (err, code, detail, provider) {
+  const override = provider && providerOverrides[provider]?.(err, code, detail)
+  if (override) return override
+
+  const { any, zero } = readRemainingHeaders(err)
+  if (zero) return tierResult(detail)
+  if (any) {
+    // Headers present but remaining > 0 — provider is throttling
+    // despite the caller having budget. That's a load signal.
+    return loadResult(detail)
+  }
+
+  return ambiguousResult(detail)
+}
+
+/**
  * @param {unknown} e
  * @param {string} [key]   Optional API key the call was made with. When
  *                         provided, any verbatim occurrence is replaced
@@ -110,9 +303,15 @@ function matchesContextOverflow (msg) {
  *                         providers occasionally echo the rejected key
  *                         in error bodies (notably 401/403) and that
  *                         must not leak.
+ * @param {{ provider?: string }} [opts]
+ *                         Adapter-supplied provider name. Enables
+ *                         provider-specific 429 disambiguation
+ *                         (`RATE_LIMIT_TIER` vs `RATE_LIMIT_LOAD`).
+ *                         When omitted, 429 classification falls back
+ *                         to header-only detection.
  * @returns {import('#core/errors.js').TypedError}
  */
-export function classifyProviderError (e, key) {
+export function classifyProviderError (e, key, opts = {}) {
   const err = /** @type {any} */(e)
   const status = err?.status
   const code = extractCode(err)
@@ -182,13 +381,7 @@ export function classifyProviderError (e, key) {
     }
   }
   if (status === 429) {
-    return {
-      message: 'rate limit exceeded',
-      severity: 'warn',
-      retryable: true,
-      type: 'RATE_LIMIT',
-      detail
-    }
+    return classify429(err, code, detail, opts.provider)
   }
   if (typeof status === 'number' && status >= 500) {
     return {

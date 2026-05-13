@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.105.2] — Anthropic phantom thinking tokens with outputEffort=none
+
+### Fixed
+
+- `anthropic` adapter reports `thinkingTokens: 0` when the caller set
+  `outputEffort: 'none'`. The chars/4 gap fallback (for opus 4.7
+  redacted thinking) was misfiring on disabled-thinking calls.
+
 ## [0.105.1] — Dependency bumps
 
 ### Changed

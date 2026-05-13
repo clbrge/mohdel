@@ -158,6 +158,27 @@ describe('anthropic thinking config', () => {
     expect(done.result.outputTokens).toBe(2)
   })
 
+  test('outputEffort=none short-circuits the gap fallback to zero thinking', async () => {
+    // When the caller explicitly disabled thinking, buildRequest sends no
+    // `thinking` field. Anthropic emits no thinking_delta and no
+    // redacted_thinking blocks. The natural chars/4 estimation gap on
+    // streamed text would otherwise falsely attribute tokens to thinking;
+    // the explicit opt-out trumps the fallback.
+    const { client } = mockAnthropic([
+      { type: 'message_start', message: { usage: { input_tokens: 10 } } },
+      // 92 streamed chars → 23 tokens at chars/4. Real Anthropic count is
+      // denser (85 tokens) — the gap (62) would be misread as thinking.
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'x'.repeat(92) } },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 85 } }
+    ])
+
+    const done = (await collect(anthropic(envelope('anthropic', 'claude-opus-4-6', {
+      outputEffort: 'none'
+    }), { client }))).at(-1)
+    expect(done.result.thinkingTokens).toBe(0)
+    expect(done.result.outputTokens).toBe(85)
+  })
+
   test('tool input JSON counts as streamed output (not thinking) in gap fallback', async () => {
     // Without this, a tool-only call where Anthropic streams 200 chars of
     // input_json_delta and reports output_tokens=50 would falsely attribute

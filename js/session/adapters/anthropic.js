@@ -216,13 +216,27 @@ export async function * anthropic (envelope, deps = {}) {
   // output_tokens and what actually streamed as visible output (text +
   // tool input JSON) — catches redacted_thinking blocks (opus 4.7 default)
   // that consume output tokens but emit no streaming deltas.
+  //
+  // When the caller explicitly disabled thinking via `outputEffort: 'none'`,
+  // we did NOT send `request.thinking` (see buildRequest) — Anthropic
+  // won't emit thinking content, redacted or otherwise — so the fallback
+  // heuristic would only attribute the natural chars/4 estimation gap
+  // (Anthropic packs denser than 4 chars/token on most content) to a
+  // non-existent thinking budget. Trust the explicit opt-out and report
+  // zero.
   const streamedOutput = currentOutput()
   const streamedOutputChars = streamedOutput.length +
     [...toolBlocks.values()].reduce((s, b) => s + b.inputJson.length, 0)
   const streamedOutputTokens = Math.ceil(streamedOutputChars / ANTHROPIC_THINKING_CHARS_PER_TOKEN)
-  const estimatedThinkingTokens = thinkingChars > 0
-    ? Math.min(Math.ceil(thinkingChars / ANTHROPIC_THINKING_CHARS_PER_TOKEN), outputTokens)
-    : Math.max(0, outputTokens - streamedOutputTokens)
+  const thinkingDisabled = envelope.outputEffort === 'none'
+  let estimatedThinkingTokens
+  if (thinkingDisabled) {
+    estimatedThinkingTokens = 0
+  } else if (thinkingChars > 0) {
+    estimatedThinkingTokens = Math.min(Math.ceil(thinkingChars / ANTHROPIC_THINKING_CHARS_PER_TOKEN), outputTokens)
+  } else {
+    estimatedThinkingTokens = Math.max(0, outputTokens - streamedOutputTokens)
+  }
   const messageOutputTokens = Math.max(0, outputTokens - estimatedThinkingTokens)
 
   /** @type {import('#core/events.js').DoneEvent} */

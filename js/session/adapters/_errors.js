@@ -239,6 +239,10 @@ const providerOverrides = {
     if (code === 'rate_limit_exceeded') return tierResult(detail)
     return undefined
   },
+  xiaomi (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
   novita (_err, code, detail) {
     if (code === 'rate_limit_exceeded') return tierResult(detail)
     return undefined

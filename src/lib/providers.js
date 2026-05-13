@@ -95,6 +95,15 @@ const providers = {
     creators: ['xai'],
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
+  },
+  xiaomi: {
+    sdk: 'openai',
+    api: 'chatCompletions',
+    apiKeyEnv: 'XIAOMI_API_SK',
+    createConfiguration: apiKey => ({ baseURL: 'https://api.xiaomimimo.com/v1', apiKey }),
+    creators: ['xiaomi'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
   }
 }
 

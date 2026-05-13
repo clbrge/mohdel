@@ -24,6 +24,7 @@ import { novita } from './novita.js'
 import { openai } from './openai.js'
 import { openrouter } from './openrouter.js'
 import { xai } from './xai.js'
+import { xiaomi } from './xiaomi.js'
 
 export const adapters = Object.freeze({
   anthropic,
@@ -38,7 +39,8 @@ export const adapters = Object.freeze({
   novita,
   openai,
   openrouter,
-  xai
+  xai,
+  xiaomi
 })
 
 /**

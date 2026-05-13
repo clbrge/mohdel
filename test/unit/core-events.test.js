@@ -2,12 +2,12 @@ import { describe, test, expect } from 'vitest'
 import { EVENT_TYPES, isEvent } from '#core/events.js'
 
 describe('core/events', () => {
-  test('EVENT_TYPES is frozen with 3 variants', () => {
+  test('EVENT_TYPES is frozen with 4 variants', () => {
     expect(Object.isFrozen(EVENT_TYPES)).toBe(true)
-    expect([...EVENT_TYPES].sort()).toEqual(['delta', 'done', 'error'])
+    expect([...EVENT_TYPES].sort()).toEqual(['delta', 'done', 'error', 'idle'])
   })
 
-  test('isEvent accepts the three variant types', () => {
+  test('isEvent accepts every variant type', () => {
     for (const type of EVENT_TYPES) {
       expect(isEvent({ type })).toBe(true)
     }

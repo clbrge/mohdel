@@ -19,6 +19,8 @@ describe('core/envelope', () => {
       'images', 'videos', 'cache',
       'tools', 'toolChoice', 'parallelToolCalls',
       'identifier',
+      // idle heartbeat (synthetic 'idle' events on adapter silence)
+      'idleHeartbeatMs',
       // provider-specific bag (openrouter routing today; extensible)
       'providerOptions'
     ])

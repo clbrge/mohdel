@@ -7,6 +7,10 @@
     "type": "delta",
     "delta": { "type": "function_call", "delta": "{\"city\":\"" }
   },
+  "idle": {
+    "type": "idle",
+    "sinceMs": 15000
+  },
   "done-completed": {
     "type": "done",
     "result": {

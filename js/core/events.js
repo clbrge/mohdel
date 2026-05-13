@@ -1,8 +1,13 @@
 /**
  * Event union for the session → thin-gate → client stream.
  *
- * Three events:
+ * Four events:
  *   - `delta`  — streaming chunk (message text or function-call args).
+ *   - `idle`   — synthetic event emitted when the adapter has been
+ *                silent for at least `idleHeartbeatMs` (opt-in via
+ *                `CallEnvelope.idleHeartbeatMs`). Carries the elapsed
+ *                gap so the consumer can drive its own stall policy.
+ *                Never terminal; further events may follow.
  *   - `done`   — terminal with the full `AnswerResult`.
  *   - `error`  — wire-format error (serializable `TypedError`).
  *
@@ -12,7 +17,7 @@
  */
 
 /**
- * @typedef {(DeltaEvent | DoneEvent | ErrorEvent)} Event
+ * @typedef {(DeltaEvent | IdleEvent | DoneEvent | ErrorEvent)} Event
  */
 
 /**
@@ -21,6 +26,23 @@
  * @typedef {object} DeltaEvent
  * @property {'delta'} type
  * @property {DeltaChunk} delta
+ */
+
+/**
+ * Synthetic heartbeat emitted by `session/run.js` while the adapter
+ * is silent — i.e. no real event (delta / done / error / tool call)
+ * for at least `idleHeartbeatMs`. The consumer decides what to do
+ * (log, bump a watchdog, abort via its own AbortSignal). Mohdel
+ * never aborts on its own.
+ *
+ * Re-emitted every `idleHeartbeatMs` while the gap persists; the
+ * timer resets on the next real event.
+ *
+ * @typedef {object} IdleEvent
+ * @property {'idle'} type
+ * @property {number} sinceMs
+ *   Milliseconds since the last real event (or since the call
+ *   started, when no event has arrived yet).
  */
 
 /**
@@ -109,7 +131,7 @@
  *   ToolCall back unchanged so the adapter can re-attach it.
  */
 
-export const EVENT_TYPES = Object.freeze(['delta', 'done', 'error'])
+export const EVENT_TYPES = Object.freeze(['delta', 'idle', 'done', 'error'])
 
 /**
  * @param {unknown} x

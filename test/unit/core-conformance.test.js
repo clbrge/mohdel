@@ -23,7 +23,7 @@ const TOOL_SPEC_ALLOWED = new Set(['name', 'description', 'parameters'])
 const MESSAGE_ALLOWED = new Set(['role', 'content', 'toolCallId', 'toolName', 'toolCalls'])
 const MESSAGE_PART_ALLOWED = new Set(['type', 'text', 'cache'])
 
-const EVENT_ALLOWED = new Set(['type', 'delta', 'result', 'error'])
+const EVENT_ALLOWED = new Set(['type', 'delta', 'result', 'error', 'sinceMs'])
 const DELTA_CHUNK_ALLOWED = new Set(['type', 'delta'])
 const ANSWER_RESULT_ALLOWED = new Set([
   'status', 'output', 'inputTokens', 'outputTokens', 'thinkingTokens',
@@ -119,9 +119,10 @@ describe('conformance events (JS side)', () => {
     }
   })
 
-  test('covers delta, done (completed/incomplete/tool_use), error', () => {
+  test('covers delta, idle, done (completed/incomplete/tool_use), error', () => {
     const values = Object.values(events)
     expect(values.some(e => e.type === 'delta')).toBe(true)
+    expect(values.some(e => e.type === 'idle')).toBe(true)
     expect(values.some(e => e.type === 'done' && e.result.status === 'completed')).toBe(true)
     expect(values.some(e => e.type === 'done' && e.result.status === 'incomplete')).toBe(true)
     expect(values.some(e => e.type === 'done' && e.result.status === 'tool_use')).toBe(true)

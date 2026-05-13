@@ -80,6 +80,9 @@ interface CallEnvelope {
   toolChoice?:        'auto' | 'required' | 'none' | string
   parallelToolCalls?: boolean
   identifier?:        string        // opaque per-user ID forwarded to provider
+  idleHeartbeatMs?:   number        // emit synthetic 'idle' events when adapter is silent
+                                    // for ≥ N ms (re-emitted every N ms). Advisory only —
+                                    // mohdel does not abort on its own. Omit to disable.
 }
 
 interface Message {
@@ -174,11 +177,12 @@ lifetime and lock down the host accordingly.
   `result.status = 'incomplete'` and `result.warning = 'cancelled'`.
 - Stale or unknown `callId` **MUST** be silently ignored.
 
-## 4. Stdout — three events
+## 4. Stdout — four events
 
 ```ts
 type Event =
   | { type: 'delta', delta: DeltaChunk }
+  | { type: 'idle',  sinceMs: number }
   | { type: 'done',  result: AnswerResult }
   | { type: 'error', error: TypedError }
 ```
@@ -203,7 +207,23 @@ interface DeltaChunk {
 Zero or more per call. Adapters **SHOULD** flush after each delta so
 downstream consumers see low latency.
 
-### 4.2 `done` — terminal with `AnswerResult`
+### 4.2 `idle` — synthetic heartbeat
+
+```ts
+interface IdleEvent {
+  type:    'idle'
+  sinceMs: number          // ms since the last real event (or call start)
+}
+```
+
+Emitted by the session loop, not by adapters, and only when the
+caller sets `idleHeartbeatMs` on the envelope. Re-emitted every
+`idleHeartbeatMs` while the silence persists; the timer resets on
+the next real event. Advisory only — mohdel never aborts on its
+own. Consumers decide whether to log, bump a watchdog, or trigger
+an external cancel. Never terminal; further events may follow.
+
+### 4.3 `done` — terminal with `AnswerResult`
 
 ```ts
 interface AnswerResult {
@@ -227,7 +247,7 @@ interface AnswerResult {
 }
 ```
 
-### 4.3 `error` — terminal on failure
+### 4.4 `error` — terminal on failure
 
 ```ts
 interface TypedError {
@@ -243,14 +263,17 @@ interface TypedError {
 context. `message` MUST NOT contain provider response bodies —
 some providers echo API keys back on 401.
 
-### 4.4 Emission invariants
+### 4.5 Emission invariants
 
 Per envelope:
 1. Zero or more `delta` events MAY be emitted in the adapter's native
    order.
-2. Exactly one terminal event (`done` or `error`) MUST be the last
+2. Zero or more `idle` events MAY appear between any two non-terminal
+   events while the adapter is silent (only when the caller opted in
+   via `idleHeartbeatMs`).
+3. Exactly one terminal event (`done` or `error`) MUST be the last
    line.
-3. No event MAY appear after the terminal.
+4. No event MAY appear after the terminal.
 
 ## 5. Status semantics
 

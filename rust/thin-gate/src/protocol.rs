@@ -65,6 +65,14 @@ pub struct CallEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
 
+    /// When set, the session emits a synthetic `Event::Idle` every
+    /// `idle_heartbeat_ms` of adapter silence (no delta / done /
+    /// error). Advisory only — mohdel never aborts on its own;
+    /// consumers decide whether to log, bump a watchdog, or trigger
+    /// an external cancel. Omitting the field disables the heartbeat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_heartbeat_ms: Option<u32>,
+
     /// Namespaced bag of provider-specific options. Keys are
     /// provider names (e.g. `"openrouter"`); values are opaque JSON
     /// the matching session adapter reads. Accepting `Value` here
@@ -233,9 +241,23 @@ pub struct MediaRef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Event {
-    Delta { delta: DeltaChunk },
-    Done { result: AnswerResult },
-    Error { error: TypedError },
+    Delta {
+        delta: DeltaChunk,
+    },
+    /// Synthetic heartbeat — emitted by the session loop while the
+    /// adapter is silent (gated by `CallEnvelope::idle_heartbeat_ms`).
+    /// Carries the elapsed gap since the last real event so consumers
+    /// can drive their own stall policy. Never terminal.
+    Idle {
+        #[serde(rename = "sinceMs")]
+        since_ms: u32,
+    },
+    Done {
+        result: AnswerResult,
+    },
+    Error {
+        error: TypedError,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

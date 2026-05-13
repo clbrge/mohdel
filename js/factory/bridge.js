@@ -51,6 +51,7 @@ import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
  * | `images` / `videos` / `cache`                     | flat fields on envelope                              |
  * | `tools` / `toolChoice` / `parallelToolCalls`      | flat fields on envelope                              |
  * | `identifier`                                      | envelope.identifier (adapter maps to provider field) |
+ * | `idleHeartbeatMs`                                 | envelope.idleHeartbeatMs (session emits idle events) |
  * | `realtimeHandler` / `bufferOpts`                  | drained via createRealtimeDeltaBuffer                |
  * | `providerOrder` / `providerAllow` / `providerDeny`| envelope.providerOptions.openrouter                  |
  * | `traceparent` / `baggage`                         | envelope transport metadata                          |
@@ -183,6 +184,7 @@ function toEnvelope ({ modelKey, configuration, prompt, options }) {
   if (options.toolChoice) envelope.toolChoice = options.toolChoice
   if (options.parallelToolCalls === false) envelope.parallelToolCalls = false
   if (options.identifier) envelope.identifier = options.identifier
+  if (options.idleHeartbeatMs !== undefined) envelope.idleHeartbeatMs = options.idleHeartbeatMs
 
   // OpenRouter routing prefs ride in their own bag to keep the flat
   // envelope clean. The openrouter adapter reads this via

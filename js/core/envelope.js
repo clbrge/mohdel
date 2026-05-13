@@ -57,6 +57,14 @@
  *   Opaque per-user ID passed to the provider for tracking / abuse
  *   monitoring.
  *
+ * @property {number} [idleHeartbeatMs]
+ *   When set, the session emits a synthetic `{type:'idle', sinceMs}`
+ *   event whenever the adapter has been silent for at least this
+ *   many milliseconds, and re-emits every `idleHeartbeatMs` while
+ *   the gap persists. The consumer decides whether to act (log,
+ *   bump a watchdog, abort via its own AbortSignal). Mohdel never
+ *   aborts on its own. Omitting the field disables the heartbeat.
+ *
  * @property {Object<string, object>} [providerOptions]
  *   Namespaced bag of provider-specific knobs that don't fit the
  *   shared envelope. Keys are provider names; values are arbitrary
@@ -139,5 +147,6 @@ export const ENVELOPE_FIELDS = Object.freeze([
   'toolChoice',
   'parallelToolCalls',
   'identifier',
+  'idleHeartbeatMs',
   'providerOptions'
 ])

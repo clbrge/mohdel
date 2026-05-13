@@ -64,7 +64,8 @@
     ],
     "toolChoice": "auto",
     "parallelToolCalls": false,
-    "identifier": "user-abc"
+    "identifier": "user-abc",
+    "idleHeartbeatMs": 15000
   },
   "structured-prompt-with-parts": {
     "callId": "c4",

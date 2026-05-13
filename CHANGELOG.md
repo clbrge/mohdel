@@ -4,6 +4,24 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased] — Idle heartbeat events
+
+### Added
+
+- `CallEnvelope.idleHeartbeatMs` (optional) — when set, the session
+  emits a synthetic `{type:'idle', sinceMs}` event whenever the
+  adapter has been silent for at least that many milliseconds, and
+  re-emits every `idleHeartbeatMs` while the silence persists. The
+  timer resets on every real event.
+- `Event::Idle` variant on the wire (JS + Rust). Advisory only —
+  mohdel never aborts on its own. Consumers decide whether to log,
+  bump a watchdog, or trigger an external cancel. Omitting
+  `idleHeartbeatMs` disables the feature and preserves the prior
+  event stream byte-for-byte.
+- Conformance fixtures: new `idle` event in
+  `test/conformance/events.json`; `full-options` envelope gains
+  `idleHeartbeatMs`.
+
 ## [0.105.2] — Anthropic phantom thinking tokens with outputEffort=none
 
 ### Fixed

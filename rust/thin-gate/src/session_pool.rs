@@ -256,7 +256,7 @@ impl PooledSession {
                         }
                         match serde_json::from_str::<Event>(trimmed) {
                             Ok(Event::Done { .. } | Event::Error { .. }) => return Ok(()),
-                            Ok(Event::Delta { .. }) => continue, // keep draining
+                            Ok(Event::Delta { .. } | Event::Idle { .. }) => continue, // keep draining
                             Err(_) => return Err(()), // invalid line — session protocol broken
                         }
                     }

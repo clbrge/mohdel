@@ -29,6 +29,7 @@ import { getProviderLimits } from './adapters/_providers.js'
 import { providerOf, catalogKey, effortOf } from '#core/model-id.js'
 import * as defaultCooldown from './_cooldown.js'
 import * as defaultLimiter from './_rate_limiter.js'
+import { withIdleHeartbeat } from './_idle_heartbeat.js'
 import { logger as defaultLogger } from './_logger.js'
 import {
   startSpan,
@@ -175,7 +176,18 @@ export async function * run (envelope, {
   let lastFrameAt = startedAt
   let maxInterFrameMs = 0
   try {
-    for await (const ev of adapter(envelope, { signal, log, span })) {
+    const adapterStream = adapter(envelope, { signal, log, span })
+    const heartbeated = withIdleHeartbeat(adapterStream, envelope.idleHeartbeatMs)
+    for await (const ev of heartbeated) {
+      // Idle events are synthetic — they're emitted *because* nothing
+      // else has happened. Don't reset the inter-frame clock (that
+      // would mask the very stall the heartbeat is reporting) and
+      // don't run them through the terminal/cooldown branches.
+      if (ev.type === 'idle') {
+        yield ev
+        continue
+      }
+
       const now = Date.now()
       const gap = now - lastFrameAt
       if (gap > maxInterFrameMs) maxInterFrameMs = gap

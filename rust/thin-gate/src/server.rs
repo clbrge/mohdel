@@ -737,7 +737,7 @@ fn apply_enforcer_feedback(state: &mut PoolStreamState, event: &Event) {
             }
             record_call_metric(state, "error");
         }
-        Event::Delta { .. } => {}
+        Event::Delta { .. } | Event::Idle { .. } => {}
     }
 }
 

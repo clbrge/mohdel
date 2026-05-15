@@ -6,6 +6,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync } from 'fs'
 import { CACHE_DIR } from './cache.js'
+import { catalogEntries } from './common.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CONFIG_PATH = join(__dirname, '..', '..', 'config', 'benchmarks.json')
@@ -254,7 +255,7 @@ const computeGroupScores = (available, benchmarks) => {
 
 const buildCuratedIndex = (curated) => {
   const index = new Map()
-  for (const [key, entry] of Object.entries(curated)) {
+  for (const [key, entry] of catalogEntries(curated)) {
     if (entry.deprecated) continue
     const modelPart = key.split('/').slice(1).join('/')
     index.set(modelPart, key)

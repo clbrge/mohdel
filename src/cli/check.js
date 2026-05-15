@@ -1,7 +1,7 @@
 import { label, err, warn, ok } from './colors.js'
 import providers from '../lib/providers.js'
 import { validate, isValidTag } from '../lib/schema.js'
-import { getCuratedModels, loadDefaultEnv } from '../lib/common.js'
+import { getCuratedModels, loadDefaultEnv, catalogEntries, catalogValues } from '../lib/common.js'
 
 // --- Local validation ---
 
@@ -10,7 +10,7 @@ const checkLocal = (curated) => {
   const warnings = []
   const knownProviders = new Set(Object.keys(providers))
 
-  for (const [key, spec] of Object.entries(curated)) {
+  for (const [key, spec] of catalogEntries(curated)) {
     const [keyProvider] = key.split('/')
 
     if (spec.deprecated) {
@@ -87,8 +87,9 @@ detection, file an issue — it'll be rebuilt on the /session stack.`)
   const json = args.includes('--json')
 
   const curated = await getCuratedModels()
-  const active = Object.values(curated).filter(s => !s.deprecated).length
-  const deprecated = Object.values(curated).length - active
+  const all = catalogValues(curated)
+  const active = all.filter(s => !s.deprecated).length
+  const deprecated = all.length - active
 
   if (!json) {
     console.log(`${label('Catalog:')} ${active} active, ${deprecated} deprecated\n`)

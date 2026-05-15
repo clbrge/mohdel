@@ -139,10 +139,13 @@ export async function runOnboard () {
       }
     }
     console.log(`\n${meta('Commands:')}
-  mo model list          Browse models
-  mo model show <model>  Model details
-  mo default             Set default model
-  mo --help              All commands`)
+  mo ask <model> "..."     One-shot inference (pipeable)
+  mo doctor                Check install health
+  mo model list            Browse curated models
+  mo model show <model>    Model details
+  mo default               Set default model
+  mo provider setup <p>    Add another provider
+  mo --help                All commands`)
     return
   }
 

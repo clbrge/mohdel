@@ -250,9 +250,35 @@ ${meta('tags:')}         ${(info.tags || []).map(t => tag(t)).join(', ') || meta
 
   if (action === 'add') {
     const modelId = arg1
+    if (modelId === '-h' || modelId === '--help') {
+      console.log(`mohdel model add — add a model entry to ~/.config/mohdel/curated.json
+
+Usage:
+  model add <provider>/<model-id>
+
+What it does:
+  1. Resolves <provider> against the known provider list (anthropic, openai, …)
+  2. Pre-fills 'model', 'provider', 'sdk' from that resolution
+  3. If your API key is set, fetches upstream model metadata (context, pricing, …)
+  4. Prompts for any missing required field
+
+Examples:
+  mo model add fireworks/deepseek-r1
+  mo model add anthropic/claude-haiku-4-5
+
+Required fields (asked if not pre-filled):
+  model        the literal id sent to the provider's API
+  creator      who trained the model (e.g. anthropic, openai, alibaba)
+  inputFormat  subset of [text, image, video]
+
+See docs/CATALOG.md for the full field reference, and
+config/curated.example.json for ready-to-copy entries.`)
+      process.exit(0)
+    }
     if (!modelId || !modelId.includes('/')) {
       console.error('Usage: model add <provider>/<model-id>')
       console.error('Example: mo model add fireworks/deepseek-r1')
+      console.error('Run "mo model add --help" for details.')
       process.exit(1)
     }
 
@@ -324,6 +350,31 @@ ${meta('tags:')}         ${(info.tags || []).map(t => tag(t)).join(', ') || meta
   }
 
   if (action === 'curate') {
+    if (arg1 === '-h' || arg1 === '--help') {
+      console.log(`mohdel model curate — bulk-add upstream models to your catalog
+
+Usage:
+  curate                  Pick a provider from a menu
+  curate <provider>       Curate models from one provider directly
+
+What it does:
+  Lists every model your API key can see at <provider>, lets you select
+  which to add to ~/.config/mohdel/curated.json. Pre-fills 'model',
+  'provider', 'sdk', and any metadata the SDK can return.
+
+Examples:
+  mo curate                  # interactive provider picker
+  mo curate anthropic
+  mo curate openai
+
+Tip: after curating, fill in the things only you know — prices, contextTokenLimit,
+tags, thinkingEffortLevels — with 'mo model set <id> <key> <value>' or by editing
+~/.config/mohdel/curated.json directly. See docs/CATALOG.md for the field reference
+and config/curated.example.json for ready-to-copy entries.
+
+Requires an API key for the chosen provider — run 'mo' to configure one.`)
+      process.exit(0)
+    }
     const { initializeAPIs, processModels } = await import('../lib/select.js')
     const { api, providersWithKeys } = await initializeAPIs()
 

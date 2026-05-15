@@ -4,6 +4,56 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.107.0] — Onboarding UX: `mo doctor`, JSON Schema, friendly errors, docs
+
+### Added
+
+- `mo doctor` — single-command health check covering config dir, environment
+  file, API keys per provider, `curated.json` parse + schema validation, and
+  default-model resolution. Pretty output by default; `--json` for machine
+  consumers. Exits 0 on success (warnings allowed) or 1 on errors.
+- JSON Schema for `curated.json` at `config/curated.schema.json`. Editors that
+  speak JSON Schema (VS Code, JetBrains, Helix, Neovim with `coc-json`) get
+  autocomplete, inline type checking, and hover docs while editing the catalog.
+  Two ways to wire it: an inline `$schema` pointer at the top of the file, or a
+  `.vscode/settings.json` `json.schemas` mapping.
+- `config/curated.example.json` — five worked entries (minimal, full-featured
+  with thinking effort + cache pricing + leaderboard, deprecated stub, image
+  generation, custom rate limits) with inline `$schema` pointer.
+- `docs/CATALOG.md` — full reference for `curated.json`: required vs
+  recommended vs capability fields, image entries, custom-field convention,
+  editor support, and the `mo curate` / `mo model add` / `mo check` workflow.
+- `docs/GLOSSARY.md` — short definitions for envelope, thin-gate, session,
+  factory, creator vs provider, thinking effort, status, cooldown, and the
+  rest of the recurring vocabulary.
+- `docs/COOKBOOK.md` — six copy-paste recipes (summarize a file, stream to
+  terminal, swap providers via env var, tool-use round trip, vision, batch
+  with cost totals).
+- `--help` for `mo model add` and `mo curate` (and the `mo curate` alias),
+  each with concrete examples and pointers to the catalog docs.
+- Friendly next-step hints in `mo ask` errors: model not in catalog →
+  `mo curate <provider>` / `mo model add <id>`; API-key missing or rejected →
+  `mo setup <provider>`; broken deprecation chain → `mo check`. Hints are
+  pure pattern-match on `err.message`/`err.detail`, so the lib layer stays
+  neutral.
+- Top-level meta-key support in `curated.json`: keys starting with `$` (e.g.
+  `$schema`) or `_` (e.g. `_comment`) are preserved on load/save but excluded
+  from every iteration site (alias map, suggestion search, rank index,
+  pickers, validation). Lets users embed a JSON Schema pointer or inline
+  notes in the catalog without polluting downstream behaviour.
+- New `src/lib/common.js` helpers: `isMetaKey`, `catalogEntries`,
+  `catalogKeys`, `catalogValues` — used internally by every catalog
+  iteration site so meta-key filtering stays consistent.
+
+### Changed
+
+- README rewrite for clarity.
+- Returning-user `mo` menu (when at least one provider is already
+  configured) leads with `mo ask <model> "..."`, surfaces `mo doctor`, and
+  includes `mo provider setup <p>` for adding a second key.
+- `@anthropic-ai/sdk` ^0.95.2 → ^0.96.0
+- `@google/genai` ^2.2.0 → ^2.3.0
+
 ## [0.106.0] — Idle heartbeat events + Xiaomi adapter
 
 ### Added

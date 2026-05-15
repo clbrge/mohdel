@@ -1,14 +1,45 @@
 # Mohdel
 
-Self-hosted LLM gateway with an embeddable SDK. Process-isolated, OpenTelemetry-native inference across 11 providers — streaming, tools, thinking control, image generation — without orchestration. Run `thin-gate` as a subprocess for fault isolation, cross-process quota, and any-language HTTP callers; or use the Node factory in-process for CLI tools, scripts, and single-process services.
+One Node API and one CLI for 11 LLM providers — call any model with the same `answer()` shape, get tokens and per-call USD cost back, swap models by changing one string. Self-hosted: your keys, your infra, no SaaS proxy in the path.
 
-Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, OpenRouter, Novita.
+```bash
+npm install -g mohdel
+mo                                     # interactive setup — pick a provider, paste your API key
+mo ask gemini/gemini-3-flash-preview "why is the sky blue"
+```
 
-Node 22+, ES modules.
+Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, OpenRouter, Novita. Node 22+, ES modules.
 
-This README covers install, the `mo` CLI, and configuration. For the JS library guide see [INTEGRATION.md](INTEGRATION.md). For design rationale see [ARCHITECTURE.md](ARCHITECTURE.md). For logging conventions see [LOGGING.md](LOGGING.md).
+## Why mohdel
 
-Three planes: JS client over a unix socket, Rust thin-gate as the scheduler + state owner, JS session as the provider executor. The `mohdel()` factory path runs the same session inline for single-process consumers. See the **Architecture** section below for a tour.
+- **One interface across providers.** Same `answer()` call, same event stream, same `{ status, output, inputTokens, outputTokens, cost }` result. Switching from `anthropic/claude-sonnet-4-6` to `openai/gpt-5.4-mini` is one string change — adapter differences stay inside mohdel.
+- **Real numbers on every call.** Token counts and per-call USD cost computed from your own pricing catalog (`curated.json`) — not estimates, not provider-specific shapes. See [docs/CATALOG.md](docs/CATALOG.md) for the catalog format.
+- **Observability without instrumentation.** OpenTelemetry spans, trace-linked logs, and OTLP metrics over one endpoint. Set `OTEL_EXPORTER_OTLP_ENDPOINT`; everything else is wired.
+- **Two integration paths, same API.** In-process factory for CLI tools, scripts, single-process services. Optional `thin-gate` subprocess for fault isolation, cross-process quota, and any-language HTTP callers — no code change to switch.
+- **Self-hosted, no vendor in the path.** API keys live in `~/.config/mohdel/`. Mohdel calls provider APIs directly; nothing routes through a third party.
+
+## Documentation
+
+- [INTEGRATION.md](INTEGRATION.md) — JS library guide (factory, client, answer options, tools, streaming, vision, errors, OTel)
+- [docs/COOKBOOK.md](docs/COOKBOOK.md) — copy-paste recipes (summarize a file, stream, swap providers, tools, vision, batch + cost)
+- [docs/CATALOG.md](docs/CATALOG.md) — `curated.json` walkthrough with worked examples
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) — short definitions for envelope, thin-gate, session, creator vs provider, status, …
+- [ARCHITECTURE.md](ARCHITECTURE.md) — design rationale, three-plane architecture
+- [PROTOCOL.md](PROTOCOL.md) — wire format for porting clients/sessions to other languages
+- [LOGGING.md](LOGGING.md) — log levels, prefixes, pino integration
+
+## Quick Start
+
+The three lines at the top of this README are the whole onboarding: install, run `mo` to pick a provider and paste your API key, then `mo ask`. Gemini, Groq, and Cerebras all have free tiers — start there if you don't already have a paid key.
+
+Model IDs always use the `<provider>/<model>` format:
+
+```
+gemini/gemini-3-flash-preview
+anthropic/claude-sonnet-4-6
+openai/gpt-5.4-mini
+groq/llama-4-scout-17b-16e-instruct
+```
 
 ## What mohdel is not
 
@@ -21,43 +52,6 @@ Scope-capping is deliberate. If you're shopping for any of the following, mohdel
 - **Not a SaaS proxy.** Self-hosted. Your API keys, your infra. No routing through a third party, no vendor lock-in.
 
 See [ARCHITECTURE.md §Design principles](ARCHITECTURE.md#design-principles) for the full rationale behind each.
-
-## Observability out of the box
-
-Every call emits:
-
-- **OpenTelemetry span** (`mohdel.session.answer`) under the caller's `traceparent`, with GenAI semantic-convention attributes (`gen_ai.request.model`, `gen_ai.system`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`) plus mohdel's own (`mohdel.status`, `mohdel.cost`, `mohdel.thinking_tokens`, `mohdel.time_to_first_token_ms`, `mohdel.cooldown` on fast-fail).
-- **Trace-linked logs** — every stderr log line carries `{traceId, spanId, callId, authId, provider, model}`. Dump logs + traces into the same collector (SigNoz, Honeycomb, Jaeger + Loki) and they're correlated for free. No per-call instrumentation code.
-- **Gate-side OTLP metrics** (when running `thin-gate`): `mohdel.sessions.{alive,respawned,spawn_failures}`, `mohdel.calls{provider,status}`, `mohdel.call.duration_ms`, `mohdel.cooldown.rejections`, `mohdel.quota.rejections`, `mohdel.policy.errors`.
-
-One endpoint for everything: set `OTEL_EXPORTER_OTLP_ENDPOINT` and spans + metrics flow to it over gRPC. No-op when unset — zero overhead for callers who aren't wired. See [INTEGRATION.md §OpenTelemetry](INTEGRATION.md#opentelemetry) and [LOGGING.md](LOGGING.md) for details.
-
-The OTel SDK packages (`@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-grpc`) are **`optionalDependencies`** — installed by default, but `npm install --omit=optional` skips them (along with their gRPC transitive tree). If you do that and later want trace export, install them explicitly:
-
-```bash
-npm install @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-grpc
-```
-
-`@opentelemetry/api` stays in `dependencies` — the no-op tracer needs it regardless of whether export is wired.
-
-## Quick Start
-
-```bash
-npm install -g mohdel
-mo                                     # interactive setup — pick a provider, paste your API key
-mo ask gemini/gemini-3-flash-preview "why is the sky blue"
-```
-
-That's it. `mo` guides you through getting an API key (Gemini, Groq, and Cerebras all have free tiers).
-
-Model IDs always use the `<provider>/<model>` format:
-
-```
-gemini/gemini-3-flash-preview
-anthropic/claude-sonnet-4-6
-openai/gpt-5.4-mini
-groq/llama-4-scout-17b-16e-instruct
-```
 
 ## CLI
 
@@ -141,6 +135,24 @@ No subprocess; the factory runs the same session adapters inline. Right for CLI 
 
 For the full API — initialization, alias resolution, answer options, response shape, tool use, streaming, vision, error handling, OpenTelemetry, sub-path exports — see **[INTEGRATION.md](INTEGRATION.md)**.
 
+## Observability
+
+Every call emits:
+
+- **OpenTelemetry span** (`mohdel.session.answer`) under the caller's `traceparent`, with GenAI semantic-convention attributes (`gen_ai.request.model`, `gen_ai.system`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`) plus mohdel's own (`mohdel.status`, `mohdel.cost`, `mohdel.thinking_tokens`, `mohdel.time_to_first_token_ms`, `mohdel.cooldown` on fast-fail).
+- **Trace-linked logs** — every stderr log line carries `{traceId, spanId, callId, authId, provider, model}`. Dump logs + traces into the same collector (SigNoz, Honeycomb, Jaeger + Loki) and they're correlated for free. No per-call instrumentation code.
+- **Gate-side OTLP metrics** (when running `thin-gate`): `mohdel.sessions.{alive,respawned,spawn_failures}`, `mohdel.calls{provider,status}`, `mohdel.call.duration_ms`, `mohdel.cooldown.rejections`, `mohdel.quota.rejections`, `mohdel.policy.errors`.
+
+One endpoint for everything: set `OTEL_EXPORTER_OTLP_ENDPOINT` and spans + metrics flow to it over gRPC. No-op when unset — zero overhead for callers who aren't wired. See [INTEGRATION.md §OpenTelemetry](INTEGRATION.md#opentelemetry) and [LOGGING.md](LOGGING.md) for details.
+
+The OTel SDK packages (`@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-grpc`) are **`optionalDependencies`** — installed by default, but `npm install --omit=optional` skips them (along with their gRPC transitive tree). If you do that and later want trace export, install them explicitly:
+
+```bash
+npm install @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-grpc
+```
+
+`@opentelemetry/api` stays in `dependencies` — the no-op tracer needs it regardless of whether export is wired.
+
 ## Architecture
 
 Mohdel splits into three planes that can be deployed independently:
@@ -176,26 +188,7 @@ With no session-bin configured, thin-gate runs in demo mode: `POST /v1/call` ret
 
 ### Calling from JS
 
-```js
-import { call } from 'mohdel/client'
-
-const envelope = {
-  callId: 'c-1',
-  authId: 'u-1',
-  auth: { key: process.env.ANTHROPIC_API_SK },
-  model: 'anthropic/claude-haiku-4-5',
-  prompt: 'Say hi.',
-  outputBudget: 100
-}
-
-for await (const ev of call(envelope, { socketPath: '/tmp/mohdel-data.sock' })) {
-  if (ev.type === 'delta') process.stdout.write(ev.delta.delta)
-  else if (ev.type === 'done') console.log('\n→ status:', ev.result.status, 'cost:', ev.result.cost)
-  else if (ev.type === 'error') console.error('error:', ev.error.message)
-}
-```
-
-Client surface is deliberately tiny: `call(envelope, { socketPath, signal? })`. Pass an `AbortSignal` to cancel in flight; thin-gate will forward a cancel control message to the session and reuse it on the pool. The envelope is the flat `answer(prompt, options)` surface plus transport metadata (`callId`, `authId`, `auth.key`, optional `traceparent`); see [`js/core/envelope.js`](js/core/envelope.js) for the full field list.
+The client snippet under [Library Usage](#library-usage) above is the full surface: `call(envelope, { socketPath, signal? })` returns an async iterable of events. Pass an `AbortSignal` to cancel in flight; thin-gate forwards a cancel control message to the session and reuses it on the pool. The envelope is the flat `answer(prompt, options)` surface plus transport metadata (`callId`, `authId`, `auth.key`, optional `traceparent`); see [`js/core/envelope.js`](js/core/envelope.js) for the full field list.
 
 ### Canonical types (frozen wire contract)
 
@@ -365,12 +358,6 @@ All modes honor `AbortSignal`. The benchmarks in `bench/` use this to pin adapte
 Fork the repository and submit a pull request. Code style: Node 22+, ES modules, no semicolons, 2-space indent, single quotes (StandardJS). See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 **Mohdel's wire is language-agnostic.** The JS client is the first implementation, not the only one — a Python / Go / Ruby / Swift / Elixir / ... client is a great starter contribution. See [CONTRIBUTING.md §Porting a client to another language](CONTRIBUTING.md#porting-a-client-to-another-language) and [PROTOCOL.md](PROTOCOL.md).
-
-## See Also
-
-- [INTEGRATION.md](INTEGRATION.md) — embed mohdel in your code (factory, model proxy, answer options, tool use, streaming, vision, errors, OTel)
-- [ARCHITECTURE.md](ARCHITECTURE.md) — design decisions and rationale
-- [LOGGING.md](LOGGING.md) — log levels, prefixes, pino integration
 
 ## License
 

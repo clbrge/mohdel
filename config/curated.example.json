@@ -1,0 +1,81 @@
+{
+  "$schema": "./curated.schema.json",
+  "_comment": "Worked examples for ~/.config/mohdel/curated.json. See docs/CATALOG.md for the field reference. Each top-level key is '<provider>/<model-id>'. The provider segment is the routing key; the model-id segment must match the value of the 'model' field below (which is the literal id mohdel sends to the provider's API).",
+
+  "anthropic/claude-haiku-4-5": {
+    "_comment_a": "Minimal-but-useful entry. Required fields only: model, creator, inputFormat. Everything else is recommended — without prices, 'cost' on results will be 0; without contextTokenLimit, callers can't enforce input budgets.",
+    "model": "claude-haiku-4-5-20251001",
+    "creator": "anthropic",
+    "provider": "anthropic",
+    "sdk": "anthropic",
+    "label": "Claude Haiku 4.5",
+    "inputFormat": ["text", "image"],
+    "inputPrice": 1,
+    "outputPrice": 5,
+    "contextTokenLimit": 200000,
+    "outputTokenLimit": 64000,
+    "tags": ["fast", "chat"]
+  },
+
+  "anthropic/claude-sonnet-4-6": {
+    "_comment_b": "Full-featured entry. Adds cache pricing (provider-side prompt caching), thinking effort levels (mohdel translates 'low'/'medium'/'high'/etc. to the provider's native budget), default thinking effort, and a leaderboard tuple. The leaderboard is [intelligence, speed, latency] — used by 'mo rank'.",
+    "model": "claude-sonnet-4-6",
+    "creator": "anthropic",
+    "provider": "anthropic",
+    "sdk": "anthropic",
+    "label": "Claude Sonnet 4.6",
+    "inputFormat": ["text", "image"],
+    "inputPrice": 3,
+    "outputPrice": 15,
+    "cacheWritePrice": 3.75,
+    "cacheReadPrice": 0.30,
+    "contextTokenLimit": 1000000,
+    "outputTokenLimit": 128000,
+    "defaultThinkingEffort": "medium",
+    "thinkingEffortLevels": {
+      "low": 100,
+      "medium": 500,
+      "high": 2000,
+      "max": 5000
+    },
+    "tags": ["chat", "tool-loop", "vision"],
+    "leaderboard": [80, 95, 1.2]
+  },
+
+  "anthropic/claude-3-7-sonnet": {
+    "_comment_c": "Deprecated stub: a one-field entry that redirects callers to the replacement. 'mo' will refuse to use this id and point at the target. Stubs do NOT need any other fields.",
+    "deprecated": "anthropic/claude-sonnet-4-6"
+  },
+
+  "novita/flux-2-dev": {
+    "_comment_d": "Image-generation entry. type:'image' selects the image dispatcher (no streaming, no tools). imageEndpoint is the provider-side endpoint name; imagePrice is per-image USD.",
+    "model": "flux-2-dev",
+    "creator": "bfl",
+    "provider": "novita",
+    "label": "Flux 2 Dev",
+    "inputFormat": ["text"],
+    "type": "image",
+    "imagePrice": 0.012,
+    "imageEndpoint": "flux-2-dev",
+    "imageDefaultSize": "1024x1024",
+    "tags": ["image"]
+  },
+
+  "openai/gpt-5.4-mini": {
+    "_comment_e": "Entry with custom rate limits. rpmLimit and tpmLimit override the provider-level defaults in providers.json. rateLimitScope:'model' means the limit is per-model; 'provider' means it joins the provider-level pool.",
+    "model": "gpt-5.4-mini",
+    "creator": "openai",
+    "provider": "openai",
+    "sdk": "openai",
+    "label": "GPT-5.4 Mini",
+    "inputFormat": ["text", "image"],
+    "inputPrice": 0.15,
+    "outputPrice": 0.60,
+    "contextTokenLimit": 400000,
+    "outputTokenLimit": 16384,
+    "rpmLimit": 500,
+    "tpmLimit": 2000000,
+    "rateLimitScope": "model",
+    "tags": ["chat", "cheap"]
+  }
+}

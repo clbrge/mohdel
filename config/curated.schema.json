@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/clbrge/mohdel/blob/main/config/curated.schema.json",
+  "title": "Mohdel curated.json",
+  "description": "Schema for ~/.config/mohdel/curated.json — see docs/CATALOG.md for the full reference.",
+  "type": "object",
+  "propertyNames": {
+    "pattern": "^([a-z0-9_-]+/.+|_[a-zA-Z0-9_-]+)$",
+    "description": "Model id in the form '<provider>/<model>'. Underscore-prefixed keys (like '_comment') are allowed for inline notes."
+  },
+  "additionalProperties": {
+    "oneOf": [
+      { "$ref": "#/$defs/deprecatedStub" },
+      { "$ref": "#/$defs/modelEntry" },
+      { "type": "string", "description": "Inline comment value for underscore-prefixed keys." }
+    ]
+  },
+  "$defs": {
+    "deprecatedStub": {
+      "type": "object",
+      "description": "Redirect from a retired model id to its replacement.",
+      "required": ["deprecated"],
+      "additionalProperties": true,
+      "properties": {
+        "deprecated": {
+          "type": "string",
+          "description": "Replacement model id (e.g. 'anthropic/claude-sonnet-4-6')."
+        }
+      }
+    },
+    "modelEntry": {
+      "type": "object",
+      "description": "A real model entry. 'model', 'creator', and 'inputFormat' are required.",
+      "required": ["model", "creator", "inputFormat"],
+      "additionalProperties": true,
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Literal model id sent to the provider's API."
+        },
+        "creator": {
+          "type": "string",
+          "description": "Organization that trained the model (e.g. 'anthropic', 'openai', 'alibaba')."
+        },
+        "inputFormat": {
+          "type": "array",
+          "description": "Accepted input modalities. Defaults to ['text'].",
+          "items": { "type": "string", "enum": ["text", "image", "video"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "provider": {
+          "type": "string",
+          "description": "Routing provider. Defaults to the provider segment of the catalog key."
+        },
+        "sdk": { "type": "string", "description": "SDK adapter to use (some providers require this)." },
+        "type": {
+          "type": "string",
+          "enum": ["model", "image"],
+          "default": "model",
+          "description": "'model' for chat/completion, 'image' for image generation."
+        },
+        "label": { "type": "string", "description": "Human-readable name shown in UIs." },
+        "description": { "type": "string" },
+        "version": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "created": { "type": "number", "description": "Unix timestamp (seconds)." },
+
+        "inputPrice": {
+          "oneOf": [
+            { "type": "number", "minimum": 0 },
+            { "type": "object", "required": ["default"], "additionalProperties": { "type": "number" }, "properties": { "default": { "type": "number" } } }
+          ],
+          "description": "USD per 1M input tokens. Object form is for tiered pricing — must include a 'default' key."
+        },
+        "outputPrice": {
+          "oneOf": [
+            { "type": "number", "minimum": 0 },
+            { "type": "object", "required": ["default"], "additionalProperties": { "type": "number" }, "properties": { "default": { "type": "number" } } }
+          ],
+          "description": "USD per 1M output tokens."
+        },
+        "thinkingPrice": {
+          "oneOf": [
+            { "type": "number", "minimum": 0 },
+            { "type": "object", "required": ["default"], "additionalProperties": { "type": "number" }, "properties": { "default": { "type": "number" } } }
+          ],
+          "description": "USD per 1M thinking/reasoning tokens (when the provider bills these separately)."
+        },
+        "cacheWritePrice": { "type": "number", "minimum": 0, "description": "USD per 1M tokens written to provider-side prompt cache." },
+        "cacheReadPrice": { "type": "number", "minimum": 0, "description": "USD per 1M tokens served from provider-side prompt cache." },
+
+        "contextTokenLimit": { "type": "integer", "minimum": 1, "description": "Maximum total tokens (input + output)." },
+        "outputTokenLimit": { "type": "integer", "minimum": 1, "description": "Maximum output tokens per call." },
+        "thinkingTokenLimit": { "type": "integer", "minimum": 1, "description": "Maximum thinking tokens per call (when separate from output)." },
+        "tokenizerHeadroom": { "type": "number", "exclusiveMinimum": 0, "description": "Multiplier applied to local token estimates to account for tokenizer drift." },
+
+        "thinkingEffortLevels": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "description": "Map effort name → provider-native budget. Standard names: low/medium/high/xhigh/max/none.",
+              "additionalProperties": { "type": "number", "minimum": 0 }
+            }
+          ]
+        },
+        "defaultThinkingEffort": { "type": "string", "description": "Effort level used when the envelope omits 'outputEffort'." },
+
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._-]{0,31}$" },
+          "uniqueItems": true,
+          "description": "Free-form classification tags (used by 'mo bench --tag', 'mo rank', and caller-side selection)."
+        },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Alternative ids that should resolve to this entry."
+        },
+        "replaces": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Older model ids this one supersedes."
+        },
+        "leaderboard": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "[intelligence, speed, latency] triple — drives 'mo rank'."
+        },
+        "leaderboardNote": { "type": "string" },
+
+        "supportsTools": { "type": "boolean", "description": "Set false to mark a model as tool-less." },
+
+        "imagePrice": { "type": "number", "minimum": 0, "description": "USD per generated image (image-type entries)." },
+        "imageEndpoint": { "type": "string", "description": "Provider-side image endpoint name." },
+        "imageDefaultSize": { "type": "string", "description": "Default size when envelope omits one (e.g. '1024x1024')." },
+
+        "rpmLimit": { "type": "integer", "minimum": 1, "description": "Requests per minute. Overrides provider default." },
+        "tpmLimit": { "type": "integer", "minimum": 1, "description": "Tokens per minute. Overrides provider default." },
+        "rateLimitScope": {
+          "type": "string",
+          "enum": ["model", "provider"],
+          "description": "'model' = private budget. 'provider' = shared with provider-level pool."
+        },
+
+        "deprecated": { "type": "string", "description": "If present, this entry is treated as a stub (use 'deprecatedStub' shape)." },
+        "suspended": { "type": "string", "description": "Reason this model is temporarily disabled." },
+
+        "displayName": { "type": "string", "deprecated": true, "description": "Deprecated — use 'label'." }
+      }
+    }
+  }
+}

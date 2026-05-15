@@ -17,6 +17,15 @@ export const EXCLUDED_PATH = join(CONFIG_DIR, 'excluded.json')
 export const PROVIDERS_CONFIG_PATH = join(CONFIG_DIR, 'providers.json')
 export const ENV_PATH = join(CONFIG_DIR, 'environment')
 
+// Meta keys (e.g. $schema for JSON Schema editors, _* for inline notes) live at
+// the top level of curated.json alongside model entries. They're preserved on
+// load/save but excluded from every iteration site so they don't pollute alias
+// maps, rank indices, suggestion search, or pickers.
+export const isMetaKey = (key) => key.startsWith('$') || key.startsWith('_')
+export const catalogEntries = (catalog) => Object.entries(catalog).filter(([k]) => !isMetaKey(k))
+export const catalogKeys = (catalog) => Object.keys(catalog).filter(k => !isMetaKey(k))
+export const catalogValues = (catalog) => catalogEntries(catalog).map(([, v]) => v)
+
 const DEFAULT_CURATED = {}
 
 const DEFAULT_EXCLUDED = {}
@@ -115,6 +124,11 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
       if (typeof loadedData === 'object' && loadedData !== null && !Array.isArray(loadedData)) {
         const processedData = {}
         for (const [key, entryValue] of Object.entries(loadedData)) {
+          // Meta keys are preserved on round-trip but skipped from entry processing.
+          if (isMetaKey(key)) {
+            processedData[key] = entryValue
+            continue
+          }
           if (typeof entryValue !== 'object' || entryValue === null || Array.isArray(entryValue)) {
             processedData[key] = entryValue
             continue
@@ -131,7 +145,7 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
         }
 
         if (operationType === 'curated models') {
-          for (const [curatedKey, entry] of Object.entries(processedData)) {
+          for (const [curatedKey, entry] of catalogEntries(processedData)) {
             const issues = validate(entry, curatedKey)
             for (const issue of issues) {
               moduleLogger.warn(`[mohdel:schema] ${curatedKey}: ${issue.field} — ${issue.message}`)

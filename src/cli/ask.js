@@ -3,6 +3,42 @@ import { loadDefaultEnv } from '../lib/common.js'
 
 const noop = () => {}
 
+// Friendly next-step hints for common ask-time failures. Pure pattern match on
+// err.message — keeps the lib layer neutral, but gives CLI users a copy-pasteable
+// command instead of just an error.
+const hintsForError = (err, modelId) => {
+  const msg = String(err?.message || '')
+  const detail = String(err?.detail || '')
+  const both = `${msg}\n${detail}`
+  const provider = modelId.includes('/') ? modelId.split('/')[0] : null
+  const hints = []
+
+  if (/not found in curated models/i.test(both)) {
+    if (provider) {
+      hints.push(`→ run:  mo curate ${provider}        # add upstream models from this provider`)
+      hints.push(`→ or:   mo model add ${modelId}      # add this one manually`)
+    } else {
+      hints.push('→ run:  mo ls                       # list available models')
+    }
+    hints.push('→ see:  docs/CATALOG.md             # catalog format reference')
+  }
+
+  if (/API key not found/i.test(both) || /AUTH_INVALID/i.test(err?.type || '') || /401|unauthorized|invalid api key/i.test(both)) {
+    if (provider) hints.push(`→ run:  mo setup ${provider}`)
+    else hints.push('→ run:  mo                          # interactive provider/key setup')
+  }
+
+  if (/deprecated/i.test(both) && /replacement/i.test(both)) {
+    hints.push('→ run:  mo check                    # find broken deprecation links in curated.json')
+  }
+
+  if (/Provider configuration for/i.test(both)) {
+    hints.push('→ see:  docs/CATALOG.md             # the provider segment must match a known adapter')
+  }
+
+  return hints
+}
+
 export async function runAsk (args) {
   if (args.includes('-h') || args.includes('--help')) {
     console.log(`mohdel ask — one-shot inference, pipeable
@@ -97,6 +133,7 @@ Examples:
     model = mo.use(modelId)
   } catch (err) {
     console.error(err.message)
+    for (const h of hintsForError(err, modelId)) console.error(h)
     process.exit(1)
   }
 
@@ -155,6 +192,7 @@ Examples:
     if (summary.length) process.stderr.write(`${summary.join(', ')}\n`)
   } catch (err) {
     console.error(`Error: ${err.detail || err.message}`)
+    for (const h of hintsForError(err, modelId)) console.error(h)
     process.exit(1)
   }
 }

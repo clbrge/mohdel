@@ -1,4 +1,4 @@
-import { getCuratedModels, saveCuratedModels } from './common.js'
+import { getCuratedModels, saveCuratedModels, isMetaKey, catalogKeys } from './common.js'
 
 let curatedCache = null
 let aliasMapCache = null
@@ -17,6 +17,7 @@ const buildAliasMap = (curatedModels) => {
 
   // Pass 1: count names and cache parsed results
   for (const fullModelId in curatedModels) {
+    if (isMetaKey(fullModelId)) continue
     const { provider, model: modelName } = getMohdelModel(fullModelId)
     const baseMatch = modelName.match(BASE_NAME_RE)
     const baseName = baseMatch?.[1] || null
@@ -79,7 +80,7 @@ export const suggestModels = (query, maxResults = 5) => {
   const q = query.toLowerCase()
   const scored = []
 
-  for (const fullId of Object.keys(curatedCache)) {
+  for (const fullId of catalogKeys(curatedCache)) {
     if (curatedCache[fullId].deprecated) continue
     const entry = curatedCache[fullId]
     const label = (entry.label || '').toLowerCase()

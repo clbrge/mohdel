@@ -57,6 +57,7 @@ Commands:
   ask <provider/model> [prompt]           One-shot inference (pipeable)
 
   default                                 Set default model (interactive)
+  doctor                                  Check that your install is wired up
 
 Aliases:
   models                model list
@@ -126,6 +127,9 @@ const resolvedArgs = alias ? [...alias.inject, ...args] : args
 if (resolved === 'default') {
   const { runDefault } = await import('./default.js')
   await runDefault()
+} else if (resolved === 'doctor') {
+  const { runDoctor } = await import('./doctor.js')
+  await runDoctor(resolvedArgs)
 } else if (resolved === 'ask') {
   const { runAsk } = await import('./ask.js')
   await runAsk(resolvedArgs)

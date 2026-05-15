@@ -1,12 +1,12 @@
 import { intro, outro, select, isCancel, cancel } from '@clack/prompts'
-import { getCuratedModels, CONFIG_PATH, saveConfig } from '../lib/common.js'
+import { getCuratedModels, CONFIG_PATH, saveConfig, catalogEntries } from '../lib/common.js'
 import providers from '../lib/providers.js'
 
 export async function runDefault () {
   intro('Mohdel — Set Default Model')
 
   const curated = await getCuratedModels()
-  const modelOptions = Object.entries(curated).map(([modelId, info]) => ({
+  const modelOptions = catalogEntries(curated).map(([modelId, info]) => ({
     value: modelId,
     label: `${info.label} (${modelId})`
   }))

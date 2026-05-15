@@ -7,7 +7,8 @@ import {
   saveCuratedModels,
   saveExcludedModels,
   loadEnvFile,
-  loadDefaultEnv
+  loadDefaultEnv,
+  catalogEntries
 } from './common.js'
 import { getMohdelModel } from './curated-cache.js'
 import { stripUnknown } from './schema.js'
@@ -81,7 +82,7 @@ const findReplacementCandidates = (providerName, modelId, curated) => {
 
   const candidates = []
 
-  for (const [curatedKey, curatedInfo] of Object.entries(curated)) {
+  for (const [curatedKey, curatedInfo] of catalogEntries(curated)) {
     const { provider: curProviderName, model: curModelId } = getMohdelModel(curatedKey)
     if (curProviderName === providerName && curModelId !== modelId) {
       if (baseRegExp.test(curModelId)) {

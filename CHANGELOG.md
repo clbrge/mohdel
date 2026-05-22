@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.108.0] — Session log envelope: nested `span` for OTel-pino correlation
+
+### Changed
+
+- Session log lines now carry trace context as a nested
+  `span: { traceId, spanId, traceFlags }` object instead of flat
+  `traceId` / `spanId` fields at the root, matching the standard
+  OpenTelemetry pino convention. The public `createLogger` API and the
+  wire/event protocol are unchanged.
+
 ## [0.107.0] — Onboarding UX: `mo doctor`, JSON Schema, friendly errors, docs
 
 ### Added

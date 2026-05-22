@@ -336,14 +336,20 @@ function openSpan (envelope) {
  */
 function scopedLogger (logger, envelope, span) {
   const ctx = span?.spanContext?.() || {}
-  return logger.withContext({
+  const context = {
     callId: envelope.callId,
     authId: envelope.authId,
     provider: providerOf(envelope.model),
-    model: envelope.model,
-    traceId: ctx.traceId,
-    spanId: ctx.spanId
-  })
+    model: envelope.model
+  }
+  if (ctx.traceId) {
+    context.span = {
+      traceId: ctx.traceId,
+      spanId: ctx.spanId,
+      traceFlags: ctx.traceFlags ?? 1
+    }
+  }
+  return logger.withContext(context)
 }
 
 /**

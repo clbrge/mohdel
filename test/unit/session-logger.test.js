@@ -140,9 +140,10 @@ describe('run.js logger emission', () => {
     expect(start.provider).toBe('echo')
     // The no-op tracer may echo the parent's spanId or assign a fresh
     // one depending on SDK registration; the contract is that the
-    // traceId carries through so a collector can stitch logs + spans.
-    expect(start.traceId).toBe('0123456789abcdef0123456789abcdef')
-    expect(typeof start.spanId).toBe('string')
+    // traceId carries through (nested under `span`, per OTel pino
+    // convention) so a collector can stitch logs + spans.
+    expect(start.span.traceId).toBe('0123456789abcdef0123456789abcdef')
+    expect(typeof start.span.spanId).toBe('string')
 
     expect(done.status).toBe('completed')
     expect(typeof done.totalMs).toBe('number')

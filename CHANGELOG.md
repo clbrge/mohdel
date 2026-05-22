@@ -13,6 +13,11 @@ All notable changes to this project are documented here. Format follows
   `traceId` / `spanId` fields at the root, matching the standard
   OpenTelemetry pino convention. The public `createLogger` API and the
   wire/event protocol are unchanged.
+- `@anthropic-ai/sdk` ^0.96.0 → ^0.98.0
+- `@google/genai` ^2.3.0 → ^2.6.0
+- `openai` ^6.37.0 → ^6.39.0
+- `lint-staged` ^17.0.4 → ^17.0.5 (dev)
+- `vitest` ^4.1.6 → ^4.1.7 (dev)
 
 ## [0.107.0] — Onboarding UX: `mo doctor`, JSON Schema, friendly errors, docs
 

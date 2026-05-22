@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.108.2] — Fix package-lock sync in release flow
+
+The release-it `after:bump` hook now refreshes `package-lock.json`
+after the sub-package version bump, so CI's `npm ci` succeeds. No
+runtime changes.
+
 ## [0.108.1] — Republish of 0.108.0
 
 No code changes from 0.108.0. The 0.108.0 release was tagged but

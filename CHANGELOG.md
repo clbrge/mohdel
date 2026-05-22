@@ -4,11 +4,11 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [0.108.2] — Fix package-lock sync in release flow
+## [0.108.2] — Sync `package-lock.json` and `Cargo.lock` in release flow
 
-The release-it `after:bump` hook now refreshes `package-lock.json`
-after the sub-package version bump, so CI's `npm ci` succeeds. No
-runtime changes.
+The release-it `after:bump` hook now refreshes both `package-lock.json`
+and `Cargo.lock` after the version bump, so CI's `npm ci` succeeds and
+the working tree stays clean through the cargo build. No runtime changes.
 
 ## [0.108.1] — Republish of 0.108.0
 

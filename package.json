@@ -65,7 +65,7 @@
   "release-it": {
     "hooks": {
       "before:bump": "grep -q '^## \\[${version}\\]' CHANGELOG.md || (echo 'CHANGELOG.md is missing a ## [${version}] section — add it before releasing.' >&2 && exit 1)",
-      "after:bump": "node scripts/sync-version.js && npm install --package-lock-only --ignore-scripts"
+      "after:bump": "node scripts/sync-version.js && npm install --package-lock-only --ignore-scripts && cargo update --workspace"
     },
     "git": {
       "commitMessage": "release: v${version}",

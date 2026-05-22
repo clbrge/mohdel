@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.108.1] — Republish of 0.108.0
+
+No code changes from 0.108.0. The 0.108.0 release was tagged but
+never landed on the npm registry — the publish workflow was migrated
+to npm trusted publishing (OIDC) mid-release and the original tag was
+cut against the legacy token-based workflow. 0.108.1 is the first
+version of the 0.108 line actually available on npm.
+
 ## [0.108.0] — Session log envelope: nested `span` for OTel-pino correlation
 
 ### Changed

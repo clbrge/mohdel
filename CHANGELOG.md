@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.109.0] — Maintenance: dependency bumps
+
+### Changed
+
+- `fireworks` provider definition moved into alphabetical position in
+  `providers.js` (between `cerebras` and `gemini`). No behavioral change —
+  the provider config is byte-for-byte identical, only its source order
+  changed.
+- `@anthropic-ai/sdk` ^0.98.0 → ^0.100.1
+- `@google/genai` ^2.6.0 → ^2.8.0
+- `groq-sdk` ^1.2.0 → ^1.2.1
+- `openai` ^6.39.0 → ^6.42.0
+- `@clack/prompts` ^1.4.0 → ^1.5.1 (optional)
+- `lint-staged` ^17.0.5 → ^17.0.7 (dev)
+- `release-it` ^20.0.1 → ^20.2.0 (dev)
+- `vitest` ^4.1.7 → ^4.1.8 (dev)
+
 ## [0.108.2] — Sync `package-lock.json` and `Cargo.lock` in release flow
 
 The release-it `after:bump` hook now refreshes both `package-lock.json`

@@ -24,6 +24,14 @@ const providers = {
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
   },
+  fireworks: {
+    sdk: 'fireworks',
+    apiKeyEnv: 'FIREWORKS_API_SK',
+    createConfiguration: apiKey => ({ apiKey, baseURL: 'https://api.fireworks.ai/inference/v1' }),
+    creators: ['meta', 'alibaba'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
+  },
   gemini: {
     sdk: 'gemini',
     apiKeyEnv: 'GEMINI_API_SK',
@@ -44,14 +52,6 @@ const providers = {
     apiKeyEnv: 'MISTRAL_API_SK',
     createConfiguration: apiKey => ({ baseURL: 'https://api.mistral.ai/v1', apiKey }),
     creators: ['mistral']
-  },
-  fireworks: {
-    sdk: 'fireworks',
-    apiKeyEnv: 'FIREWORKS_API_SK',
-    createConfiguration: apiKey => ({ apiKey, baseURL: 'https://api.fireworks.ai/inference/v1' }),
-    creators: ['meta', 'alibaba'],
-    contextSemantics: 'shared',
-    outputCapStrategy: 'accept'
   },
   novita: {
     sdk: 'openai',

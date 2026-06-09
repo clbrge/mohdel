@@ -297,6 +297,42 @@ describe('factory bridge — runAnswer', () => {
     })
   })
 
+  test('canonical tool role preserves toolCallId (spore emits tool, not tool_result)', async () => {
+    let captured
+    const capturing = async function * (env) {
+      captured = env
+      yield * goneDoneAdapter()()
+    }
+    await runAnswer({
+      ...baseArgs,
+      prompt: {
+        messages: [
+          { role: 'user', content: 'what is the hostname?' },
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [{ id: 'c1', name: 'get_hostname', arguments: {} }]
+          },
+          {
+            role: 'tool',
+            toolCallId: 'c1',
+            toolName: 'get_hostname',
+            content: 'dev-box'
+          }
+        ]
+      }
+    }, { ...deps, resolveAdapter: () => capturing })
+
+    // Regression: a `tool` message must keep its toolCallId. Dropping it
+    // makes adapters send an empty call_id/tool_use_id → provider 400.
+    expect(captured.prompt[2]).toEqual({
+      role: 'tool',
+      toolCallId: 'c1',
+      toolName: 'get_hostname',
+      content: 'dev-box'
+    })
+  })
+
   test('system as block array is flattened to a string', async () => {
     let captured
     const capturing = async function * (env) {

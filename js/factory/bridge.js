@@ -278,8 +278,10 @@ function configToAuth (configuration) {
  * strings and pre-shaped arrays pass through untouched.
  *
  * Role mapping:
- *   - factory `tool_result` → envelope `tool` (carrying `toolCallId`,
- *     `content`, and optional `name` from `toolName`).
+ *   - factory `tool_result` or `tool` → envelope `tool` (carrying
+ *     `toolCallId`, `content`, and optional `name` from `toolName`).
+ *     Spore emits the canonical `tool` role directly; the gate path
+ *     (mohdel-gate-client) preserves it, so the factory path must too.
  *   - `assistant.toolCalls` carries through as-is onto the envelope
  *     Message so adapters can emit the provider-native tool_use.
  *
@@ -299,7 +301,7 @@ function toEnvelopePrompt (prompt) {
       })
     }
     for (const m of prompt.messages) {
-      if (m.role === 'tool_result') {
+      if (m.role === 'tool_result' || m.role === 'tool') {
         const msg = {
           role: 'tool',
           content: m.content ?? ''

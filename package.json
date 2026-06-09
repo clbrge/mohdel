@@ -90,7 +90,7 @@
     "mohdel-thin-gate-linux-x64-gnu": "0.109.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
+    "@anthropic-ai/sdk": "^0.102.0",
     "@cerebras/cerebras_cloud_sdk": "^1.61.1",
     "@google/genai": "^2.8.0",
     "@opentelemetry/api": "^1.9.1",

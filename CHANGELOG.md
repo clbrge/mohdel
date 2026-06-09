@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.110.0] — Fix: preserve `toolCallId` for `tool`-role messages
+
+### Fixed
+
+- `toEnvelopePrompt` now accepts the `tool` role in addition to `tool_result`
+  in the factory `{ system?, messages }` prompt shape, carrying `toolCallId`
+  and `toolName` onto the envelope.
+
 ## [0.109.0] — Maintenance: dependency bumps
 
 ### Changed

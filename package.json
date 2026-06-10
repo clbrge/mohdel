@@ -6,7 +6,7 @@
     "name": "Christophe Le Bars",
     "email": "clb@toort.net"
   },
-  "description": "Self-hosted LLM gateway with an embeddable SDK. Process-isolated, OpenTelemetry-native inference across 11 providers — streaming, tools, thinking control — without orchestration. Use the Node factory in-process, or run thin-gate for fault isolation and any-language HTTP callers.",
+  "description": "Self-hosted LLM gateway and SDK for Node — a LiteLLM-style unified API for 11 providers (Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, DeepSeek, OpenRouter, …) with per-call USD cost tracking, streaming, tool calls, vision, speech-to-text, and built-in OpenTelemetry. Run in-process, or behind the process-isolated thin-gate for fault containment.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -90,7 +90,7 @@
     "mohdel-thin-gate-linux-x64-gnu": "0.110.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.102.0",
+    "@anthropic-ai/sdk": "^0.104.1",
     "@cerebras/cerebras_cloud_sdk": "^1.61.1",
     "@google/genai": "^2.8.0",
     "@opentelemetry/api": "^1.9.1",

@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.111.0] — Feature: speech-to-text via `transcribe()`
 
 ### Added
 
@@ -14,20 +14,27 @@ All notable changes to this project are documented here. Format follows
   endpoint; registered for `groq`, `mistral`, and `openai`. Audio comes
   from a `file://` or `data:` URI; result is
   `{ status, text, language, durationSeconds, cost, timestamps }`.
+  Factory path only for now — thin-gate has no `/v1/transcription` route
+  yet, so the cross-process client cannot transcribe.
+- `mo transcribe <model> <audio-file>` CLI command — MIME type guessed
+  from the extension (`--mime` to override), `--language` / `--prompt`
+  hints, `--json` output, duration/cost summary on stderr.
 - Catalog support for transcription entries: `type: "transcription"`,
   `transcriptionPrice` (USD per audio minute), `"audio"` in
   `inputFormat`. Cost is duration × per-minute price when the provider
   reports duration, with a token-pricing fallback for OpenAI's
   `gpt-4o-*-transcribe` models (`computeTranscriptionCost` in
   `_pricing.js`).
-- `mo transcribe <model> <audio-file>` CLI command — MIME type guessed
-  from the extension (`--mime` to override), `--language` / `--prompt`
-  hints, `--json` output, duration/cost summary on stderr.
 - Live transcription smoke tests (`test/live/transcription.live.test.js`),
   key-gated per provider; the audio fixture is a generated sine WAV.
 
-  Factory path only — thin-gate has no `/v1/transcription` route yet, so
-  the cross-process client cannot transcribe.
+### Changed
+
+- README repositioned around the gateway wedge new "How it compares"
+  section (LiteLLM, Vercel AI SDK, OpenRouter, raw SDKs).
+- `package.json` description rewritten in searcher vocabulary:
+  LiteLLM-style unified API, provider names spelled out, per-call USD
+  cost tracking, speech-to-text.
 
 ## [0.110.0] — Fix: preserve `toolCallId` for `tool`-role messages
 

@@ -1,6 +1,6 @@
 # Mohdel
 
-One Node API and one CLI for 11 LLM providers — call any model with the same `answer()` shape, get tokens and per-call USD cost back, swap models by changing one string. Self-hosted: your keys, your infra, no SaaS proxy in the path.
+Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 11 providers; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
 
 ```bash
 npm install -g mohdel
@@ -12,11 +12,45 @@ Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, D
 
 ## Why mohdel
 
+- **Real numbers on every call.** Token counts and per-call USD cost computed from your own pricing catalog (`curated.json`) — not estimates, not provider-specific shapes. Bill tenants, alert on spend, reconcile invoices. See [docs/CATALOG.md](docs/CATALOG.md) for the catalog format.
 - **One interface across providers.** Same `answer()` call, same event stream, same `{ status, output, inputTokens, outputTokens, cost }` result. Switching from `anthropic/claude-sonnet-4-6` to `openai/gpt-5.4-mini` is one string change — adapter differences stay inside mohdel.
-- **Real numbers on every call.** Token counts and per-call USD cost computed from your own pricing catalog (`curated.json`) — not estimates, not provider-specific shapes. See [docs/CATALOG.md](docs/CATALOG.md) for the catalog format.
+- **Self-hosted, no vendor in the path.** API keys live in `~/.config/mohdel/`. Mohdel calls provider APIs directly; nothing routes through a third party, nothing marks up your tokens, no extra hop of availability risk.
 - **Observability without instrumentation.** OpenTelemetry spans, trace-linked logs, and OTLP metrics over one endpoint. Set `OTEL_EXPORTER_OTLP_ENDPOINT`; everything else is wired.
 - **Two integration paths, same API.** In-process factory for CLI tools, scripts, single-process services. Optional `thin-gate` subprocess for fault isolation, cross-process quota, and any-language HTTP callers — no code change to switch.
-- **Self-hosted, no vendor in the path.** API keys live in `~/.config/mohdel/`. Mohdel calls provider APIs directly; nothing routes through a third party.
+
+## How it compares
+
+The one-paragraph version: **LiteLLM** is the closest analog but lives in
+Python; **Vercel AI SDK** is an application toolkit, not an infra layer;
+**OpenRouter** is the same one-API promise as a SaaS in your request path;
+**raw provider SDKs** are N different shapes with no cost accounting.
+
+|  | mohdel | LiteLLM | Vercel AI SDK | OpenRouter | Raw SDKs |
+|---|---|---|---|---|---|
+| Runs in a Node stack natively | yes | Python service | yes | n/a (SaaS) | yes |
+| Per-call USD cost on the result | yes | yes | no | yes | no |
+| Self-hosted, keys never leave your infra | yes | yes | yes | no | yes |
+| Provider-SDK process isolation | yes (thin-gate) | proxy only | no | n/a | no |
+| OTel spans + metrics out of the box | yes | via callbacks | no | no | no |
+| UI streaming helpers, structured output, agents | no — by design | no | yes | no | varies |
+
+- **vs LiteLLM** — same core promise (unified calls, cost tracking,
+  self-hosted gateway), but Node-native: if your stack is JS, there's no
+  Python sidecar to deploy, version, and monitor. The honest gap: LiteLLM's
+  proxy exposes an OpenAI-compatible endpoint and admin features (virtual
+  keys, budgets); thin-gate speaks its own [wire protocol](PROTOCOL.md) —
+  callers use the JS client or implement the protocol.
+- **vs Vercel AI SDK** — different layer, not a rival. The AI SDK is an
+  application toolkit (UI streaming, structured outputs, agent loops) with no
+  per-call cost, no gateway, no process isolation. Use it *above* mohdel if
+  you like it — mohdel is the inference primitive underneath.
+- **vs OpenRouter** — the self-hosted version of the same idea. With a SaaS
+  router you accept their uptime, their markup, and your prompts transiting
+  their infra. Mohdel goes direct to providers with your keys — and ships an
+  `openrouter` adapter for when you want both.
+- **vs raw provider SDKs** — no abstraction tax to escape later: mohdel's
+  envelope is flat and close to the SDKs underneath, and `cost`/`tokens`
+  come back normalized so you never parse five different usage shapes.
 
 ## Documentation
 
@@ -105,9 +139,21 @@ All list/show commands support `--json [fields]` — bare `--json` lists availab
 
 ## Library Usage
 
-Two integration paths: the **client** (primary, cross-process) and the **factory** (in-process shortcut).
+Two integration paths, same adapters underneath: start with the in-process **factory**; graduate to the cross-process **client** when you want gateway-grade isolation.
 
-### Client — cross-process (recommended)
+### Factory — in-process (start here)
+
+```js
+import mohdel from 'mohdel'
+
+const mo = await mohdel()
+const result = await mo.use('anthropic/claude-sonnet-4-6').answer('Hello')
+console.log(result.output, result.cost)
+```
+
+No subprocess, no setup beyond your API key. Right for CLI tools (`mo ask`), scripts, tests, and single-process services — which is most projects.
+
+### Client — cross-process (the production gateway)
 
 ```js
 import { call } from 'mohdel/client'
@@ -123,19 +169,7 @@ for await (const ev of call(envelope, { socketPath: '/tmp/mohdel-data.sock' })) 
 }
 ```
 
-Requires a running `thin-gate` subprocess. See [INTEGRATION.md §Client](INTEGRATION.md#client-cross-process--primary-production-integration) for setup.
-
-### Factory — in-process shortcut
-
-```js
-import mohdel from 'mohdel'
-
-const mo = await mohdel()
-const result = await mo.use('anthropic/claude-sonnet-4-6').answer('Hello')
-console.log(result.output, result.cost)
-```
-
-No subprocess; the factory runs the same session adapters inline. Right for CLI (`mo ask`), scripts, tests, single-process services.
+Same API, but inference runs in a pooled subprocess behind the `thin-gate` supervisor (Rust): a crashing provider SDK can't take your service down, quota is enforced across processes, and non-JS callers can speak the same wire. Switching from factory to client is a configuration change, not a rewrite. See [INTEGRATION.md §Client](INTEGRATION.md#client-cross-process--primary-production-integration) for setup.
 
 For the full API — initialization, alias resolution, answer options, response shape, tool use, streaming, vision, error handling, OpenTelemetry, sub-path exports — see **[INTEGRATION.md](INTEGRATION.md)**.
 

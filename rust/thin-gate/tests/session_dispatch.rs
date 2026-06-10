@@ -14,7 +14,7 @@ use serde_json::json;
 use tokio::net::UnixStream;
 
 use mohdel_thin_gate::{
-    protocol::{Event, Status, TypedError},
+    protocol::{Event, Status, TranscriptionResult, TypedError},
     SessionConfig, SessionPool,
 };
 
@@ -387,6 +387,46 @@ rl.on('line', (line) => {
         }
         other => panic!("expected error event, got {other:?}"),
     }
+
+    server.abort();
+}
+
+#[tokio::test]
+async fn pool_dispatches_transcription() {
+    let path = temp_sock_path("transcription");
+    let _guard = SocketGuard(path.clone());
+
+    let pool = SessionPool::new(node_session_cfg(), 1).await.expect("pool");
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = mohdel_thin_gate::serve_data(&serve_path, Some(pool)).await;
+    });
+
+    wait_for_socket(&path).await;
+    // `fake` transcription adapter: scenario spec rides in `prompt`.
+    let body = Bytes::from(
+        serde_json::to_vec(&json!({
+            "callId": "tr-e2e-1",
+            "authId": "a1",
+            "auth": { "key": "k" },
+            "model": "fake/test",
+            "audio": { "fileUri": "file:///tmp/clip.wav", "mimeType": "audio/wav" },
+            "prompt": "{\"mode\":\"ok\",\"text\":\"hi from fake\"}"
+        }))
+        .unwrap(),
+    );
+    let res = send(&path, "POST", "/v1/transcription", body).await;
+
+    let status = res.status();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "body: {}",
+        String::from_utf8_lossy(&bytes)
+    );
+    let result: TranscriptionResult = serde_json::from_slice(&bytes).expect("parse result");
+    assert_eq!(result.text, "hi from fake");
 
     server.abort();
 }

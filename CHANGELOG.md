@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.112.0] — Feature: `/v1/transcription` on thin-gate
+
+### Added
+
+- `POST /v1/transcription` on thin-gate's data plane — closes the
+  "factory path only" gap from 0.111.0; the cross-process client can
+  now transcribe via `callTranscription(envelope, { socketPath })`
+  from `mohdel/client`. Same one-shot shape as `/v1/image`: plain JSON
+  response, no streaming, no enforcer, `op: "transcription"` driver
+  tag. `audio.fileUri` is `file://` (gate sessions read the path —
+  requires a shared filesystem with the caller) or `data:` (inline,
+  subject to the 16 MiB body cap). Rust protocol structs
+  (`TranscriptionEnvelope` / `TranscriptionResult`), conformance
+  fixtures, and an end-to-end session-dispatch test included; the
+  image and transcription paths now share one one-shot pool-exchange
+  helper in the gate.
+
 ## [0.111.0] — Feature: speech-to-text via `transcribe()`
 
 ### Added

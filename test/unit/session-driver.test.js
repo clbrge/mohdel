@@ -282,6 +282,47 @@ describe('session/driver', () => {
     expect(lines[0].error.type).toBe('SESSION_UNKNOWN_PROVIDER')
   })
 
+  // Transcription envelopes — `op: "transcription"` dispatches to
+  // runTranscription() and emits a single `transcription_done` line.
+
+  test('transcription envelope emits single transcription_done line', async () => {
+    const trEnv = {
+      op: 'transcription',
+      callId: 'tr-1',
+      authId: 'a1',
+      auth: { key: 'k' },
+      model: 'fake/test',
+      audio: { fileUri: 'file:///tmp/clip.wav', mimeType: 'audio/wav' },
+      prompt: JSON.stringify({ mode: 'ok', text: 'hello from fixture' })
+    }
+    const stdin = inputStream(JSON.stringify(trEnv))
+    const { stream: stdout, output } = capturingStdout()
+    await drive(stdin, stdout)
+    const lines = parseNDJSON(output())
+    expect(lines).toHaveLength(1)
+    expect(lines[0].type).toBe('transcription_done')
+    expect(lines[0].result.status).toBe('completed')
+    expect(lines[0].result.text).toBe('hello from fixture')
+  })
+
+  test('transcription envelope on unknown provider emits error line', async () => {
+    const trEnv = {
+      op: 'transcription',
+      callId: 'tr-2',
+      authId: 'a1',
+      auth: { key: 'k' },
+      model: 'nonesuch/test',
+      audio: { fileUri: 'file:///tmp/clip.wav', mimeType: 'audio/wav' }
+    }
+    const stdin = inputStream(JSON.stringify(trEnv))
+    const { stream: stdout, output } = capturingStdout()
+    await drive(stdin, stdout)
+    const lines = parseNDJSON(output())
+    expect(lines).toHaveLength(1)
+    expect(lines[0].type).toBe('error')
+    expect(lines[0].error.type).toBe('SESSION_UNKNOWN_PROVIDER')
+  })
+
   test('pre-cancel buffer is bounded: flood of unmatched cancels does not grow without bound', async () => {
     // Send 200 cancels for distinct unknown callIds, then an envelope
     // matching the FIRST of those cancels. Cap is 128, so the first ~72

@@ -613,8 +613,25 @@ OpenAI-compatible `/audio/transcriptions` endpoint. The model entry must
 exist in `curated.json` with `type: "transcription"` — see
 [docs/CATALOG.md](docs/CATALOG.md#transcription-entries).
 
-Factory path only for now: thin-gate has no `/v1/transcription` route
-yet, so the cross-process client cannot transcribe.
+Cross-process callers use `POST /v1/transcription` (one-shot JSON, like
+`/v1/image`):
+
+```js
+import { callTranscription } from 'mohdel/client'
+
+const result = await callTranscription({
+  callId: 't-1',
+  authId: 'tenant-42',
+  auth: { key: process.env.GROQ_API_SK },
+  model: 'groq/whisper-large-v3-turbo',
+  audio: { fileUri: 'file:///absolute/path/to/meeting.mp3', mimeType: 'audio/mpeg' }
+}, { socketPath: '/tmp/mohdel-data.sock' })
+```
+
+`file://` URIs are read by the gate's session processes, so they must
+share a filesystem with whatever produced the path. `data:` URIs carry
+the bytes inline instead, subject to the gate's 16 MiB body cap —
+fine for short clips, not for long recordings.
 
 ## Rate limiting
 

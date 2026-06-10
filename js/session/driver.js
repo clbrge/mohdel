@@ -16,6 +16,7 @@ import readline from 'node:readline'
 
 import { run } from './run.js'
 import { runImage } from './run_image.js'
+import { runTranscription } from './run_transcription.js'
 import { setCatalog } from './adapters/_catalog.js'
 
 // Bounded memory for pre-dequeue cancels. Hostile/buggy supervisors
@@ -145,6 +146,16 @@ export async function drive (stdin, stdout) {
         const out = await runImage(imgEnv)
         if (out.ok) {
           stdout.write(JSON.stringify({ type: 'image_done', result: out.result }) + '\n')
+        } else {
+          stdout.write(JSON.stringify({ type: 'error', error: out.error }) + '\n')
+        }
+      } else if (envelope.op === 'transcription') {
+        // Same one-shot contract as the image path; shape matches
+        // `js/core/transcription.js` after the tag strip.
+        const { op: _op, ...trEnv } = envelope
+        const out = await runTranscription(trEnv)
+        if (out.ok) {
+          stdout.write(JSON.stringify({ type: 'transcription_done', result: out.result }) + '\n')
         } else {
           stdout.write(JSON.stringify({ type: 'error', error: out.error }) + '\n')
         }

@@ -6,6 +6,7 @@ import url from 'node:url'
 import { isEvent } from '#core'
 import { ENVELOPE_FIELDS } from '#core/envelope.js'
 import { IMAGE_ENVELOPE_FIELDS } from '#core/image.js'
+import { TRANSCRIPTION_ENVELOPE_FIELDS } from '#core/transcription.js'
 
 const here = path.dirname(url.fileURLToPath(import.meta.url))
 const fixturesDir = path.join(here, '..', 'conformance')
@@ -195,6 +196,51 @@ describe('conformance images (JS side)', () => {
         for (const img of fx.images ?? []) {
           assertOnlyKnownKeys(img, IMAGE_DATA_ALLOWED, 'imageData')
         }
+      })
+    }
+
+    test(`round-trips JSON.stringify/parse: ${name}`, () => {
+      expect(JSON.parse(JSON.stringify(fx))).toEqual(fx)
+    })
+  }
+})
+
+// ---------- Transcription fixtures ----------
+
+const TRANSCRIPTION_ENVELOPE_ALLOWED = new Set(TRANSCRIPTION_ENVELOPE_FIELDS)
+const TRANSCRIPTION_RESULT_ALLOWED = new Set([
+  'status', 'text', 'language', 'durationSeconds',
+  'inputTokens', 'outputTokens', 'cost', 'timestamps'
+])
+
+describe('conformance transcriptions (JS side)', () => {
+  const fixtures = loadFixture('transcriptions.json')
+
+  test('fixture file is non-empty and covers envelope + result shapes', () => {
+    const names = Object.keys(fixtures)
+    expect(names.some(n => n.startsWith('envelope-'))).toBe(true)
+    expect(names.some(n => n.startsWith('result-'))).toBe(true)
+  })
+
+  for (const [name, fx] of Object.entries(fixtures)) {
+    if (name.startsWith('envelope-')) {
+      test(`transcription envelope has required fields: ${name}`, () => {
+        for (const required of ['callId', 'authId', 'auth', 'model', 'audio']) {
+          expect(fx).toHaveProperty(required)
+        }
+        expect(fx.model).toMatch(/^[^/]+\/.+/)
+        expect(fx.audio.fileUri).toMatch(/^(file:\/\/|data:)/)
+      })
+
+      test(`transcription envelope only contains frozen-type fields: ${name}`, () => {
+        assertOnlyKnownKeys(fx, TRANSCRIPTION_ENVELOPE_ALLOWED, 'transcriptionEnvelope')
+        assertOnlyKnownKeys(fx.auth, AUTH_ALLOWED, 'auth')
+        assertOnlyKnownKeys(fx.audio, MEDIA_ALLOWED, 'audio')
+      })
+    } else if (name.startsWith('result-')) {
+      test(`transcription result only contains frozen-type fields: ${name}`, () => {
+        assertOnlyKnownKeys(fx, TRANSCRIPTION_RESULT_ALLOWED, 'transcriptionResult')
+        assertOnlyKnownKeys(fx.timestamps, TIMESTAMPS_ALLOWED, 'timestamps')
       })
     }
 

@@ -18,7 +18,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use mohdel_thin_gate::protocol::{CallEnvelope, Event, ImageEnvelope, ImageResult};
+use mohdel_thin_gate::protocol::{
+    CallEnvelope, Event, ImageEnvelope, ImageResult, TranscriptionEnvelope, TranscriptionResult,
+};
 use serde_json::Value;
 
 fn fixtures_dir() -> PathBuf {
@@ -197,6 +199,53 @@ fn unknown_image_envelope_fields_are_rejected() {
         "futureField": "nope"
     });
     let result: Result<ImageEnvelope, _> = serde_json::from_value(injected);
+    let err = result.expect_err("unknown field must be rejected");
+    assert!(err.to_string().contains("unknown") || err.to_string().contains("futureField"));
+}
+
+#[test]
+fn transcription_envelopes_and_results_round_trip_losslessly() {
+    let map = load_map("transcriptions.json");
+    assert!(!map.is_empty(), "expected at least one transcription fixture");
+
+    for (name, raw) in map {
+        if name.starts_with("envelope-") {
+            let parsed: TranscriptionEnvelope = serde_json::from_value(raw.clone())
+                .unwrap_or_else(|e| panic!("parse transcription envelope {}: {}", name, e));
+            let reserialized: Value = serde_json::to_value(&parsed).unwrap();
+            assert_eq!(
+                normalize(reserialized),
+                normalize(raw.clone()),
+                "transcription envelope '{}' not preserved",
+                name
+            );
+        } else if name.starts_with("result-") {
+            let parsed: TranscriptionResult = serde_json::from_value(raw.clone())
+                .unwrap_or_else(|e| panic!("parse transcription result {}: {}", name, e));
+            let reserialized: Value = serde_json::to_value(&parsed).unwrap();
+            assert_eq!(
+                normalize(reserialized),
+                normalize(raw.clone()),
+                "transcription result '{}' not preserved",
+                name
+            );
+        } else {
+            panic!("unexpected fixture name '{}' in transcriptions.json", name);
+        }
+    }
+}
+
+#[test]
+fn unknown_transcription_envelope_fields_are_rejected() {
+    let injected = serde_json::json!({
+        "callId": "t1",
+        "authId": "a1",
+        "auth": { "key": "k" },
+        "model": "groq/whisper-large-v3",
+        "audio": { "fileUri": "file:///tmp/clip.wav", "mimeType": "audio/wav" },
+        "futureField": "nope"
+    });
+    let result: Result<TranscriptionEnvelope, _> = serde_json::from_value(injected);
     let err = result.expect_err("unknown field must be rejected");
     assert!(err.to_string().contains("unknown") || err.to_string().contains("futureField"));
 }

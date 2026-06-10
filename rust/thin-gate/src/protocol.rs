@@ -439,3 +439,63 @@ pub struct ImageResult {
 pub enum ImageStatus {
     Completed,
 }
+
+// ---------- TranscriptionEnvelope / TranscriptionResult (one-shot) ----------
+//
+// Mirrors `js/core/transcription.js`. Same one-shot shape as the image
+// path: single request/response over `POST /v1/transcription`, plain
+// JSON body, `op: "transcription"` driver-stdin tag.
+//
+// `audio.fileUri` must be a `file://` or `data:` URI. Providers only
+// accept multipart upload (no remote URL), so the session reads the
+// bytes itself — `file://` assumes the gate's sessions share a
+// filesystem with whoever produced the path; `data:` carries the bytes
+// inline subject to `MAX_CALL_BODY_BYTES`.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TranscriptionEnvelope {
+    pub call_id: String,
+    pub auth_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<Auth>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traceparent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baggage: Option<String>,
+
+    // See CallEnvelope — same rules. Full mohdel id.
+    pub model: String,
+    pub audio: MediaRef,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TranscriptionResult {
+    /// Always "completed" — transcriptions are one-shot, no incomplete state.
+    pub status: TranscriptionStatus,
+    pub text: String,
+    /// Detected (or echoed) language; null when the provider reports none.
+    pub language: Option<String>,
+    /// Audio duration as reported by the provider; null when not reported.
+    pub duration_seconds: Option<f64>,
+    /// Present only for token-billed providers (OpenAI gpt-4o-*-transcribe).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u64>,
+    pub cost: f64,
+    /// `first` == `end` (no streaming) — see ImageResult.
+    pub timestamps: Timestamps,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranscriptionStatus {
+    Completed,
+}

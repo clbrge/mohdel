@@ -1,0 +1,56 @@
+{
+  "envelope-minimal": {
+    "callId": "t1",
+    "authId": "a1",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "groq/whisper-large-v3",
+    "audio": {
+      "fileUri": "file:///tmp/clip.wav",
+      "mimeType": "audio/wav"
+    }
+  },
+  "envelope-full": {
+    "callId": "t2",
+    "authId": "a2",
+    "auth": {
+      "key": "sk-test"
+    },
+    "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01",
+    "baggage": "user=a2",
+    "model": "openai/gpt-4o-mini-transcribe",
+    "audio": {
+      "fileUri": "data:audio/wav;base64,UklGRiQAAABXQVZF",
+      "mimeType": "audio/wav"
+    },
+    "language": "fr",
+    "prompt": "Coppersmith, indexter, lakeid."
+  },
+  "result-duration-billed": {
+    "status": "completed",
+    "text": "Bonjour tout le monde.",
+    "language": "fr",
+    "durationSeconds": 12.5,
+    "cost": 0.0000834,
+    "timestamps": {
+      "start": "1000000000",
+      "first": "3000000000",
+      "end": "3000000000"
+    }
+  },
+  "result-token-billed": {
+    "status": "completed",
+    "text": "Hello everyone.",
+    "language": null,
+    "durationSeconds": null,
+    "inputTokens": 312,
+    "outputTokens": 18,
+    "cost": 0.00021,
+    "timestamps": {
+      "start": "0",
+      "first": "100",
+      "end": "100"
+    }
+  }
+}

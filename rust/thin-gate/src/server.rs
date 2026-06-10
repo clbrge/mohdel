@@ -46,7 +46,7 @@ use crate::hooks::{AuthPolicy, QuotaPolicy, QuotaSpec, RequireInlineAuth, RouteP
 use crate::metrics;
 use crate::protocol::{
     AnswerResult, CallEnvelope, DeltaChunk, DeltaKind, Event, ImageEnvelope, ImageResult,
-    Severity, Status, TypedError,
+    Severity, Status, TranscriptionEnvelope, TranscriptionResult, TypedError,
 };
 use crate::session_pool::{PooledSession, SessionPool};
 
@@ -231,6 +231,8 @@ async fn handle_data(req: Request<Incoming>, state: Arc<GateState>) -> Response<
         handle_call(req, state).await
     } else if method == Method::POST && path == "/v1/image" {
         handle_image(req, state).await
+    } else if method == Method::POST && path == "/v1/transcription" {
+        handle_transcription(req, state).await
     } else {
         not_found_response(&method, &path)
     }
@@ -814,15 +816,16 @@ fn stream_error(
         .expect("response build")
 }
 
-// ---------- Image path ----------
+// ---------- One-shot paths (image, transcription) ----------
 //
 // One-shot request/response: no streaming, no enforcer (cooldown /
-// rate-limit skipped — images are low-frequency one-shots, see
-// `js/session/run_image.js` for the matching session-side policy).
-// Session-side dispatch is tagged with `op: "image"` on stdin so
-// the driver can route to `runImage()`. Response line shape:
-// `{type:"image_done", result}` on success, `{type:"error", error}`
-// on adapter failure.
+// rate-limit skipped — low-frequency one-shots, see
+// `js/session/run_image.js` / `js/session/run_transcription.js` for
+// the matching session-side policy). Session-side dispatch is tagged
+// with `op: "image"` / `op: "transcription"` on stdin so the driver
+// can route to `runImage()` / `runTranscription()`. Response line
+// shape: `{type:"image_done"|"transcription_done", result}` on
+// success, `{type:"error", error}` on adapter failure.
 
 /// HTTP handler for `POST /v1/image`. See `handle_call` for the
 /// composition use case.
@@ -888,14 +891,79 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
     dispatch_image_via_pool(pool, envelope).await
 }
 
-/// Wire form sent to the session over stdin: the ImageEnvelope plus a
-/// `op: "image"` tag so the driver can dispatch to `runImage()`.
-/// Internal protocol — not exposed over HTTP.
+/// HTTP handler for `POST /v1/transcription`. See `handle_call` for the
+/// composition use case.
+pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    let body = match Limited::new(req.into_body(), MAX_CALL_BODY_BYTES).collect().await {
+        Ok(b) => b.to_bytes(),
+        Err(e) => {
+            let too_large = e.downcast_ref::<LengthLimitError>().is_some();
+            return typed_error_response(
+                if too_large { StatusCode::PAYLOAD_TOO_LARGE } else { StatusCode::BAD_REQUEST },
+                Severity::Error,
+                if too_large { "request body exceeds maximum size" } else { "failed to read request body" },
+                &format!("{e}"),
+                if too_large { "PROTOCOL_PAYLOAD_TOO_LARGE" } else { "PROTOCOL_READ_BODY" },
+                false,
+            );
+        }
+    };
+
+    let envelope: TranscriptionEnvelope = match serde_json::from_slice::<TranscriptionEnvelope>(&body) {
+        Ok(e) => {
+            if crate::protocol::split_model_id(&e.model).is_none() {
+                return typed_error_response(
+                    StatusCode::BAD_REQUEST,
+                    Severity::Error,
+                    "invalid envelope",
+                    &format!("model must be '<provider>/<id>' (got: {})", e.model),
+                    "PROTOCOL_INVALID_ENVELOPE",
+                    false,
+                );
+            }
+            e
+        }
+        Err(e) => {
+            // F48: see note at the matching `CallEnvelope` parse site
+            // above — do not switch to a value-echoing deserializer
+            // without sanitizing detail here.
+            return typed_error_response(
+                StatusCode::BAD_REQUEST,
+                Severity::Error,
+                "invalid envelope",
+                &format!("{e}"),
+                "PROTOCOL_INVALID_ENVELOPE",
+                false,
+            );
+        }
+    };
+
+    let pool = match &state.pool {
+        Some(p) => p.clone(),
+        None => {
+            return typed_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                Severity::Error,
+                "transcription path requires a session pool",
+                "no pool configured",
+                "SESSION_POOL_UNAVAILABLE",
+                false,
+            );
+        }
+    };
+
+    dispatch_transcription_via_pool(pool, envelope).await
+}
+
+/// Wire form sent to the session over stdin: the path's envelope plus
+/// an `op` tag ("image" / "transcription") so the driver can dispatch
+/// to the matching one-shot runner. Internal protocol — not exposed
+/// over HTTP.
 #[derive(Serialize)]
-struct ImageDriverEnvelope<'a> {
+struct OneShotDriverEnvelope<'a, E: Serialize> {
     op: &'static str,
     #[serde(flatten)]
-    inner: &'a ImageEnvelope,
+    inner: &'a E,
 }
 
 /// Single line returned by the session on the image path.
@@ -906,37 +974,73 @@ enum ImageSessionLine {
     Error { error: TypedError },
 }
 
+/// Single line returned by the session on the transcription path.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum TranscriptionSessionLine {
+    TranscriptionDone { result: TranscriptionResult },
+    Error { error: TypedError },
+}
+
 async fn dispatch_image_via_pool(
     pool: SessionPool,
     envelope: ImageEnvelope,
 ) -> Response<Body> {
-    let mut session = match pool.acquire().await {
-        Some(s) => s,
-        None => {
-            return typed_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Severity::Fatal,
-                "session pool is closed",
-                "pool returned None on acquire",
-                "SESSION_POOL_CLOSED",
-                false,
-            );
-        }
-    };
+    let tagged = OneShotDriverEnvelope { op: "image", inner: &envelope };
+    match oneshot_exchange::<ImageSessionLine>(&pool, &tagged, "image").await {
+        Ok(ImageSessionLine::ImageDone { result }) => oneshot_ok_response(&result),
+        Ok(ImageSessionLine::Error { error }) => oneshot_error_response(&error),
+        Err(resp) => resp,
+    }
+}
 
-    let tagged = ImageDriverEnvelope { op: "image", inner: &envelope };
-    let envelope_bytes = match serde_json::to_vec(&tagged) {
+async fn dispatch_transcription_via_pool(
+    pool: SessionPool,
+    envelope: TranscriptionEnvelope,
+) -> Response<Body> {
+    let tagged = OneShotDriverEnvelope { op: "transcription", inner: &envelope };
+    match oneshot_exchange::<TranscriptionSessionLine>(&pool, &tagged, "transcription").await {
+        Ok(TranscriptionSessionLine::TranscriptionDone { result }) => oneshot_ok_response(&result),
+        Ok(TranscriptionSessionLine::Error { error }) => oneshot_error_response(&error),
+        Err(resp) => resp,
+    }
+}
+
+/// Acquire a session, write one tagged envelope line, read exactly one
+/// terminal line back (one-shot paths have no streaming), parse it as
+/// `L`, release the session. On any failure the session is discarded
+/// and the ready-to-send error response is returned as `Err`. `what`
+/// names the path ("image", "transcription") in error details.
+async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
+    pool: &SessionPool,
+    tagged: &impl Serialize,
+    what: &str,
+) -> Result<L, Response<Body>> {
+    let envelope_bytes = match serde_json::to_vec(tagged) {
         Ok(b) => b,
         Err(e) => {
-            pool.release(session);
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Error,
                 "failed to serialize envelope",
                 &format!("{e}"),
                 "PROTOCOL_SERIALIZE",
                 false,
-            );
+            ));
+        }
+    };
+
+    let mut session = match pool.acquire().await {
+        Some(s) => s,
+        None => {
+            return Err(typed_error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Severity::Fatal,
+                "session pool is closed",
+                "pool returned None on acquire",
+                "SESSION_POOL_CLOSED",
+                false,
+            ));
         }
     };
 
@@ -949,91 +1053,89 @@ async fn dispatch_image_via_pool(
 
     if let Err(e) = write_result {
         pool.discard(session);
-        return typed_error_response(
+        return Err(typed_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             Severity::Error,
             "failed to write envelope to session stdin",
             &format!("{e}"),
             "SESSION_STDIN_WRITE_FAILED",
             true,
-        );
+        ));
     }
 
-    // Read exactly one line. Image path has no streaming — the session
-    // emits a single terminal `image_done` or `error`.
     let mut buf = String::new();
     let read = read_capped_line(&mut session.reader, &mut buf, MAX_NDJSON_LINE_BYTES).await;
 
     let line = match read {
         Ok(0) => {
             pool.discard(session);
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Error,
                 "session subprocess exited mid-call",
-                "EOF before image response",
+                &format!("EOF before {what} response"),
                 "SESSION_DIED",
                 true,
-            );
+            ));
         }
         Err(e) => {
             pool.discard(session);
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Error,
                 "error reading session stdout",
                 &format!("{e}"),
                 "SESSION_IO_ERROR",
                 true,
-            );
+            ));
         }
         Ok(_) => buf,
     };
 
     let trimmed = line.trim_end_matches(['\r', '\n']);
-    let parsed: ImageSessionLine = match serde_json::from_str(trimmed) {
+    let parsed: L = match serde_json::from_str(trimmed) {
         Ok(p) => p,
         Err(e) => {
             pool.discard(session);
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Error,
                 "session emitted unexpected line",
                 &format!("{e}"),
                 "SESSION_INVALID_EVENT",
                 false,
-            );
+            ));
         }
     };
 
     // Session is clean after one-shot terminal → release.
     pool.release(session);
+    Ok(parsed)
+}
 
-    match parsed {
-        ImageSessionLine::ImageDone { result } => {
-            let body_bytes = serde_json::to_vec(&result).unwrap_or_else(|_| b"{}".to_vec());
-            let body = Full::new(Bytes::from(body_bytes)).boxed();
-            Response::builder()
-                .status(StatusCode::OK)
-                .header("content-type", "application/json")
-                .body(body)
-                .expect("response build")
-        }
-        ImageSessionLine::Error { error } => {
-            let status = match error.kind.as_deref() {
-                Some("AUTH_INVALID") => StatusCode::UNAUTHORIZED,
-                Some("SESSION_UNKNOWN_PROVIDER") => StatusCode::BAD_REQUEST,
-                _ => StatusCode::BAD_GATEWAY,
-            };
-            let body_bytes = serde_json::to_vec(&error).unwrap_or_else(|_| b"{}".to_vec());
-            let body = Full::new(Bytes::from(body_bytes)).boxed();
-            Response::builder()
-                .status(status)
-                .header("content-type", "application/json")
-                .body(body)
-                .expect("response build")
-        }
-    }
+fn oneshot_ok_response<T: Serialize>(result: &T) -> Response<Body> {
+    let body_bytes = serde_json::to_vec(result).unwrap_or_else(|_| b"{}".to_vec());
+    let body = Full::new(Bytes::from(body_bytes)).boxed();
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(body)
+        .expect("response build")
+}
+
+fn oneshot_error_response(error: &TypedError) -> Response<Body> {
+    let status = match error.kind.as_deref() {
+        Some("AUTH_INVALID") => StatusCode::UNAUTHORIZED,
+        Some("SESSION_UNKNOWN_PROVIDER") => StatusCode::BAD_REQUEST,
+        _ => StatusCode::BAD_GATEWAY,
+    };
+    let body_bytes = serde_json::to_vec(error).unwrap_or_else(|_| b"{}".to_vec());
+    let body = Full::new(Bytes::from(body_bytes)).boxed();
+    Response::builder()
+        .status(status)
+        .header("content-type", "application/json")
+        .body(body)
+        .expect("response build")
 }
 
 // ---------- Synthetic fallback (no SessionPool) ----------

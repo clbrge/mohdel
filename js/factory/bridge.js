@@ -22,6 +22,7 @@
 
 import { run } from '../session/run.js'
 import { runImage } from '../session/run_image.js'
+import { runTranscription } from '../session/run_transcription.js'
 import { MohdelError, Severity } from '../../src/lib/errors.js'
 import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
 
@@ -145,6 +146,39 @@ export async function runAnswerImage ({ provider, model, configuration, prompt, 
   if (options.seed != null) envelope.seed = options.seed
 
   const out = await runImage(envelope, spec ? { spec } : {})
+  if (!out.ok) throw fromTypedError(out.error, { provider, model })
+  return out.result
+}
+
+/**
+ * Run a `transcribe()` call through the /session runtime.
+ *
+ * @param {object} args
+ * @param {string} args.provider
+ * @param {string} args.model
+ * @param {any} args.configuration
+ * @param {{fileUri: string, mimeType: string}} args.audio
+ * @param {any} [args.options]    `language` / `prompt` map onto the
+ *                                envelope; `callId` / `authId` are
+ *                                transport metadata.
+ * @param {any} [args.spec]       modelSpec passthrough so the adapter
+ *                                picks up `model` and
+ *                                `transcriptionPrice` without
+ *                                re-reading the catalog.
+ * @returns {Promise<any>}
+ */
+export async function runAnswerTranscription ({ provider, model, configuration, audio, options = {}, spec }) {
+  const envelope = {
+    callId: options.callId || newCallId(),
+    authId: options.authId || 'local',
+    auth: configToAuth(configuration),
+    model: `${provider}/${model}`,
+    audio
+  }
+  if (options.language) envelope.language = options.language
+  if (options.prompt) envelope.prompt = options.prompt
+
+  const out = await runTranscription(envelope, spec ? { spec } : {})
   if (!out.ok) throw fromTypedError(out.error, { provider, model })
   return out.result
 }

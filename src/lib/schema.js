@@ -27,6 +27,7 @@ const fieldDefs = {
   imagePrice: { type: 'number' },
   imageEndpoint: { type: 'string' },
   imageDefaultSize: { type: 'string' },
+  transcriptionPrice: { type: 'number' },
   deprecated: { type: 'string' },
   suspended: { type: 'string' },
   rpmLimit: { type: 'number' },

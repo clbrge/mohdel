@@ -5,8 +5,8 @@ const noop = () => {}
 
 // Friendly next-step hints for common ask-time failures. Pure pattern match on
 // err.message — keeps the lib layer neutral, but gives CLI users a copy-pasteable
-// command instead of just an error.
-const hintsForError = (err, modelId) => {
+// command instead of just an error. Shared with `mo transcribe`.
+export const hintsForError = (err, modelId) => {
   const msg = String(err?.message || '')
   const detail = String(err?.detail || '')
   const both = `${msg}\n${detail}`

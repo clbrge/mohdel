@@ -269,7 +269,7 @@ Examples:
 Required fields (asked if not pre-filled):
   model        the literal id sent to the provider's API
   creator      who trained the model (e.g. anthropic, openai, alibaba)
-  inputFormat  subset of [text, image, video]
+  inputFormat  subset of [text, image, video, audio]
 
 See docs/CATALOG.md for the full field reference, and
 config/curated.example.json for ready-to-copy entries.`)

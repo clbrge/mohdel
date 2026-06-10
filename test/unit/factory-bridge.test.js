@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest'
 
-import { runAnswer, runAnswerImage } from '../../js/factory/bridge.js'
+import { runAnswer, runAnswerImage, runAnswerTranscription } from '../../js/factory/bridge.js'
 import { createCooldownTracker } from '../../js/session/_cooldown.js'
 import { createRateLimiter } from '../../js/session/_rate_limiter.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
@@ -419,6 +419,48 @@ describe('compat bridge — runAnswerImage', () => {
       model: 'x',
       configuration: { apiKey: 'k' },
       prompt: 'x'
+    })).rejects.toMatchObject({
+      name: 'MohdelError',
+      message: 'SESSION_UNKNOWN_PROVIDER'
+    })
+  })
+})
+
+describe('compat bridge — runAnswerTranscription', () => {
+  test('uses supplied spec override; maps options onto the envelope', async () => {
+    let captured
+    global.fetch = async (url, opts) => {
+      captured = { url, opts }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ text: 'salut', language: 'fr', duration: 120 }),
+        text: async () => ''
+      }
+    }
+    const result = await runAnswerTranscription({
+      provider: 'groq',
+      model: 'whisper-large-v3-turbo',
+      configuration: { apiKey: 'k' },
+      audio: { fileUri: 'data:audio/wav;base64,aGk=', mimeType: 'audio/wav' },
+      options: { language: 'fr', prompt: 'noms propres' },
+      spec: { model: 'whisper-upstream', transcriptionPrice: 0.0006 }
+    })
+    expect(captured.url).toBe('https://api.groq.com/openai/v1/audio/transcriptions')
+    expect(captured.opts.headers.Authorization).toBe('Bearer k')
+    expect(captured.opts.body.get('model')).toBe('whisper-upstream')
+    expect(captured.opts.body.get('language')).toBe('fr')
+    expect(captured.opts.body.get('prompt')).toBe('noms propres')
+    expect(result.text).toBe('salut')
+    expect(result.cost).toBe(0.0012)
+  })
+
+  test('error surface: unknown provider yields MohdelError', async () => {
+    await expect(runAnswerTranscription({
+      provider: 'nonesuch',
+      model: 'x',
+      configuration: { apiKey: 'k' },
+      audio: { fileUri: 'data:audio/wav;base64,aGk=', mimeType: 'audio/wav' }
     })).rejects.toMatchObject({
       name: 'MohdelError',
       message: 'SESSION_UNKNOWN_PROVIDER'

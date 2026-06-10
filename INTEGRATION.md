@@ -245,6 +245,7 @@ mohdel()                       ← factory: load env, curated catalog, build log
   .use('provider/model')       ← resolve alias, get a model proxy
     .answer(prompt, options)   ← run inference, return AnswerResult
     .image(prompt, options)    ← generate an image (OpenAI, Novita)
+    .transcribe(audio, options)← speech → text (Groq, Mistral, OpenAI)
 ```
 
 Under the hood, `.answer()` delegates to `runAnswer()` in `js/factory/bridge.js`, which drives the session adapter directly in-process (no gate, no subprocess). You don't see any of that — the API is identical.
@@ -321,6 +322,7 @@ Valid levels: `none`, `low`, `medium`, `high`. Call-time `outputEffort` still wi
 | `model.info()` | `object` | Full curated spec (sync) |
 | `model.answer(prompt, options?)` | `Promise<AnswerResult>` | Run inference |
 | `model.image(prompt, options?)` | `Promise<ImageResult>` | Generate image (openai, novita) |
+| `model.transcribe(audio, options?)` | `Promise<TranscriptionResult>` | Speech → text (groq, mistral, openai) |
 | `model.addTag(tag)` | `Promise<string[]>` | Tag management, persisted |
 | `model.removeTag(tag)` | `Promise<string[]>` | (alias: `delTag`) |
 | `model.listTags()` | `string[]` | (alias: `tags`) |
@@ -581,6 +583,38 @@ for (const img of result.images) {
 ```
 
 Separate from `.answer()` — images don't stream. Returns `{ status: 'completed', images, seed, timestamps }`. Supported by `openai` (DALL-E) and `novita` (async submit + poll).
+
+## Transcription (voice → text)
+
+```js
+const whisper = mo.use('groq/whisper-large-v3-turbo')
+const result = await whisper.transcribe(
+  { fileUri: 'file:///absolute/path/to/meeting.mp3', mimeType: 'audio/mpeg' },
+  {
+    language: 'fr',                  // optional ISO-639-1 hint
+    prompt: 'Coppersmith, mohdel'    // optional spelling/context hint
+  }
+)
+
+result.text             // the transcript
+result.durationSeconds  // audio length as reported by the provider
+result.cost             // USD — transcriptionPrice (per minute) × duration
+```
+
+Separate from `.answer()` — transcriptions don't stream. Returns
+`{ status: 'completed', text, language, durationSeconds, cost, timestamps }`
+(plus `inputTokens`/`outputTokens` for token-billed models). Audio is
+uploaded as multipart from a `file://` or `data:` URI — remote `https://`
+audio is not fetched; download it yourself first.
+
+Supported by `groq` (Whisper, fastest + free tier), `mistral` (Voxtral),
+and `openai` (Whisper, gpt-4o-*-transcribe) — all through the same
+OpenAI-compatible `/audio/transcriptions` endpoint. The model entry must
+exist in `curated.json` with `type: "transcription"` — see
+[docs/CATALOG.md](docs/CATALOG.md#transcription-entries).
+
+Factory path only for now: thin-gate has no `/v1/transcription` route
+yet, so the cross-process client cannot transcribe.
 
 ## Rate limiting
 

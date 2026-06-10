@@ -45,7 +45,7 @@
         "inputFormat": {
           "type": "array",
           "description": "Accepted input modalities. Defaults to ['text'].",
-          "items": { "type": "string", "enum": ["text", "image", "video"] },
+          "items": { "type": "string", "enum": ["text", "image", "video", "audio"] },
           "minItems": 1,
           "uniqueItems": true
         },
@@ -56,9 +56,9 @@
         "sdk": { "type": "string", "description": "SDK adapter to use (some providers require this)." },
         "type": {
           "type": "string",
-          "enum": ["model", "image"],
+          "enum": ["model", "image", "transcription"],
           "default": "model",
-          "description": "'model' for chat/completion, 'image' for image generation."
+          "description": "'model' for chat/completion, 'image' for image generation, 'transcription' for speech-to-text."
         },
         "label": { "type": "string", "description": "Human-readable name shown in UIs." },
         "description": { "type": "string" },
@@ -137,6 +137,7 @@
         "imagePrice": { "type": "number", "minimum": 0, "description": "USD per generated image (image-type entries)." },
         "imageEndpoint": { "type": "string", "description": "Provider-side image endpoint name." },
         "imageDefaultSize": { "type": "string", "description": "Default size when envelope omits one (e.g. '1024x1024')." },
+        "transcriptionPrice": { "type": "number", "minimum": 0, "description": "USD per audio minute (transcription-type entries). Token-billed transcription models (OpenAI gpt-4o-*-transcribe) use inputPrice/outputPrice instead." },
 
         "rpmLimit": { "type": "integer", "minimum": 1, "description": "Requests per minute. Overrides provider default." },
         "tpmLimit": { "type": "integer", "minimum": 1, "description": "Tokens per minute. Overrides provider default." },

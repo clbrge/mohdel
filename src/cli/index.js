@@ -55,6 +55,7 @@ Commands:
   ratelimit provider rm <p>               Remove provider-level limits
 
   ask <provider/model> [prompt]           One-shot inference (pipeable)
+  transcribe <provider/model> <file>      Speech → text from an audio file
 
   default                                 Set default model (interactive)
   doctor                                  Check that your install is wired up
@@ -133,6 +134,9 @@ if (resolved === 'default') {
 } else if (resolved === 'ask') {
   const { runAsk } = await import('./ask.js')
   await runAsk(resolvedArgs)
+} else if (resolved === 'transcribe') {
+  const { runTranscribe } = await import('./transcribe.js')
+  await runTranscribe(resolvedArgs)
 } else if (resolved === 'model') {
   const { runModel } = await import('./model.js')
   await runModel(resolvedArgs)

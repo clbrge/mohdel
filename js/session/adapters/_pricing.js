@@ -101,6 +101,38 @@ export function costFor (model, usage) {
 }
 
 /**
+ * Cost of a transcription call.
+ *
+ * Providers bill speech-to-text two ways, and the catalog supports both:
+ *
+ *   - `transcriptionPrice` — flat USD per audio **minute** (Groq,
+ *     Mistral; the industry quoting unit). Used when the provider
+ *     reported the audio duration.
+ *   - token pricing (`inputPrice`/`outputPrice`) — OpenAI's
+ *     gpt-4o-*-transcribe models report token usage instead of
+ *     duration; falls through to `computeCost`.
+ *
+ * Duration wins when both are available. Unknown models or specs
+ * without prices return `0` — same graceful degradation as
+ * `computeCost`.
+ *
+ * @param {any} spec  Catalog entry, or `undefined`.
+ * @param {{durationSeconds?: number | null, inputTokens?: number, outputTokens?: number}} usage
+ * @returns {number}
+ */
+export function computeTranscriptionCost (spec, usage) {
+  if (!spec) return 0
+  const seconds = usage.durationSeconds
+  if (typeof seconds === 'number' && seconds > 0 && typeof spec.transcriptionPrice === 'number') {
+    return round((seconds / 60) * spec.transcriptionPrice)
+  }
+  if (usage.inputTokens || usage.outputTokens) {
+    return computeCost(spec, { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens })
+  }
+  return 0
+}
+
+/**
  * Test convenience: inject pricing-only specs by model id. Wraps
  * `setCatalog` with the `{input, output, thinking?}` shape used in
  * existing tests, translating to spec fields.

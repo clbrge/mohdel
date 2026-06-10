@@ -49,7 +49,7 @@ For a real model entry (not a deprecated stub), three fields are required:
 |---|---|---|
 | `model` | string | The literal model id sent to the provider's API. Often different from the catalog key (e.g. catalog key `anthropic/claude-haiku-4-5`, provider id `claude-haiku-4-5-20251001`). |
 | `creator` | string | The organization that trained the model (`anthropic`, `openai`, `alibaba`, `moonshotai`, …). Independent of `provider` — `cerebras` hosts Alibaba's Qwen. |
-| `inputFormat` | string[] | Subset of `["text", "image", "video"]`. Defaults to `["text"]`. Anything else is rejected by the envelope validator. |
+| `inputFormat` | string[] | Subset of `["text", "image", "video", "audio"]`. Defaults to `["text"]`. Anything else is rejected by the envelope validator. |
 
 ## Recommended fields
 
@@ -106,6 +106,24 @@ For image models, set `type: "image"` and fill in:
 ```
 
 `imagePrice` is per image (not per token). `imageEndpoint` is the provider-side endpoint name. `imageDefaultSize` is the size used when the envelope omits one.
+
+## Transcription entries
+
+For speech-to-text models, set `type: "transcription"` and price per audio **minute**:
+
+```json
+"groq/whisper-large-v3-turbo": {
+  "model": "whisper-large-v3-turbo",
+  "creator": "openai",
+  "provider": "groq",
+  "label": "Whisper Large v3 Turbo",
+  "inputFormat": ["audio"],
+  "type": "transcription",
+  "transcriptionPrice": 0.000667
+}
+```
+
+`transcriptionPrice` is USD per audio minute, applied to the duration the provider reports. Exception: OpenAI's `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` report token usage instead of duration — give those entries `inputPrice` / `outputPrice` (USD per 1M tokens) and omit `transcriptionPrice`. Supported providers: `groq`, `mistral`, `openai` (all the same OpenAI-compatible `/audio/transcriptions` endpoint).
 
 ## Custom fields
 

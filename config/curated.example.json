@@ -61,6 +61,18 @@
     "tags": ["image"]
   },
 
+  "groq/whisper-large-v3-turbo": {
+    "_comment_f": "Transcription entry. type:'transcription' selects the speech-to-text dispatcher (multipart upload, no streaming). transcriptionPrice is per audio MINUTE — Groq's $0.04/hour ≈ $0.000667/min. Token-billed models (openai/gpt-4o-mini-transcribe) use inputPrice/outputPrice instead.",
+    "model": "whisper-large-v3-turbo",
+    "creator": "openai",
+    "provider": "groq",
+    "label": "Whisper Large v3 Turbo",
+    "inputFormat": ["audio"],
+    "type": "transcription",
+    "transcriptionPrice": 0.000667,
+    "tags": ["transcription", "fast"]
+  },
+
   "openai/gpt-5.4-mini": {
     "_comment_e": "Entry with custom rate limits. rpmLimit and tpmLimit override the provider-level defaults in providers.json. rateLimitScope:'model' means the limit is per-model; 'provider' means it joins the provider-level pool.",
     "model": "gpt-5.4-mini",

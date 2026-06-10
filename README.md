@@ -20,7 +20,7 @@ Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, D
 
 ## Documentation
 
-- [INTEGRATION.md](INTEGRATION.md) — JS library guide (factory, client, answer options, tools, streaming, vision, errors, OTel)
+- [INTEGRATION.md](INTEGRATION.md) — JS library guide (factory, client, answer options, tools, streaming, vision, transcription, errors, OTel)
 - [docs/COOKBOOK.md](docs/COOKBOOK.md) — copy-paste recipes (summarize a file, stream, swap providers, tools, vision, batch + cost)
 - [docs/CATALOG.md](docs/CATALOG.md) — `curated.json` walkthrough with worked examples
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) — short definitions for envelope, thin-gate, session, creator vs provider, status, …
@@ -66,6 +66,10 @@ mo ask anthropic/claude-sonnet-4-6 --stream "write a haiku about recursion"
 
 # With thinking effort
 mo ask anthropic/claude-opus-4-6 --effort high "prove P != NP"
+
+# Speech → text from an audio file
+mo transcribe groq/whisper-large-v3-turbo meeting.mp3
+mo transcribe mistral/voxtral-mini-transcribe interview.wav --language fr
 
 # Browse the model catalog
 mo ls                                  # list all curated models

@@ -42,7 +42,8 @@ const SPECS = {
   deepseek: { defaultModel: 'deepseek-chat', streams: false },
   groq: { defaultModel: 'llama-3.3-70b-versatile', streams: false },
   mistral: { defaultModel: 'mistral-small-latest', streams: false },
-  novita: { defaultModel: 'kwaipilot/kat-coder-pro', streams: false }
+  novita: { defaultModel: 'kwaipilot/kat-coder-pro', streams: false },
+  qwen: { defaultModel: 'qwen3.6-flash', streams: false, truncateBudget: 16 }
 }
 
 async function collect (iter) {

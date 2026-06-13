@@ -88,6 +88,15 @@ const providers = {
     },
     creators: []
   },
+  qwen: {
+    sdk: 'openai',
+    api: 'chatCompletions',
+    apiKeyEnv: 'QWEN_API_SK',
+    createConfiguration: apiKey => ({ baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', apiKey }),
+    creators: ['alibaba'],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
+  },
   xai: {
     sdk: 'openai',
     apiKeyEnv: 'XAI_API_SK',

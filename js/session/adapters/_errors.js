@@ -243,6 +243,10 @@ const providerOverrides = {
     if (code === 'rate_limit_exceeded') return tierResult(detail)
     return undefined
   },
+  qwen (_err, code, detail) {
+    if (code === 'rate_limit_exceeded') return tierResult(detail)
+    return undefined
+  },
   novita (_err, code, detail) {
     if (code === 'rate_limit_exceeded') return tierResult(detail)
     return undefined

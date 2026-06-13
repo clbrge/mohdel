@@ -6,6 +6,7 @@ import { deepseek } from '../../js/session/adapters/deepseek.js'
 import { mistral } from '../../js/session/adapters/mistral.js'
 import { openrouter } from '../../js/session/adapters/openrouter.js'
 import { fireworks } from '../../js/session/adapters/fireworks.js'
+import { qwen } from '../../js/session/adapters/qwen.js'
 import { xai } from '../../js/session/adapters/xai.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
 
@@ -587,6 +588,79 @@ describe('xai adapter', () => {
     await collect(xai(envelope('xai', 'grok-thinker', { outputEffort: 'none', outputBudget: 100 }), { client }))
     expect(captured.req.reasoning).toEqual({ effort: 'none' })
     expect(captured.req.max_output_tokens).toBe(100)
+  })
+})
+
+// ---------- Qwen ----------
+
+describe('qwen adapter', () => {
+  test('builds non-streaming request and emits delta + done', async () => {
+    const { client, captured } = mockChat(basicResponse())
+    const events = await collect(qwen(envelope('qwen', 'qwen3.6-flash'), { client }))
+    expect(captured.args.model).toBe('qwen3.6-flash')
+    expect(captured.args.messages).toEqual([{ role: 'user', content: 'hi' }])
+    expect(events.map(e => e.type)).toEqual(['delta', 'done'])
+    expect(events[1].result.output).toBe('hello world')
+    expect(events[1].result.status).toBe('completed')
+  })
+
+  test('outputEffort maps to enable_thinking + thinking_budget', async () => {
+    setCatalog({ 'qwen/qwen3.7-max': { thinkingEffortLevels: { none: 0, low: 1024, high: 8192 } } })
+    const { client, captured } = mockChat(basicResponse())
+    await collect(qwen(envelope('qwen', 'qwen3.7-max', { outputEffort: 'high', outputBudget: 100 }), { client }))
+    expect(captured.args.enable_thinking).toBe(true)
+    expect(captured.args.thinking_budget).toBe(8192)
+    expect(captured.args.reasoning_effort).toBeUndefined()
+    expect(captured.args.max_tokens).toBe(8292)
+    expect(captured.args.temperature).toBeUndefined()
+  })
+
+  test('outputEffort=none sends enable_thinking=false without a budget', async () => {
+    setCatalog({ 'qwen/qwen3.7-max': { thinkingEffortLevels: { none: 0, low: 1024 } } })
+    const { client, captured } = mockChat(basicResponse())
+    await collect(qwen(envelope('qwen', 'qwen3.7-max', { outputEffort: 'none', outputBudget: 100 }), { client }))
+    expect(captured.args.enable_thinking).toBe(false)
+    expect(captured.args.thinking_budget).toBeUndefined()
+    expect(captured.args.temperature).toBe(0)
+    expect(captured.args.max_tokens).toBe(100)
+  })
+
+  test('defaultThinkingEffort applies when envelope omits outputEffort', async () => {
+    setCatalog({
+      'qwen/qwen3.7-plus': {
+        thinkingEffortLevels: { none: 0, low: 1024 },
+        defaultThinkingEffort: 'low'
+      }
+    })
+    const { client, captured } = mockChat(basicResponse())
+    await collect(qwen(envelope('qwen', 'qwen3.7-plus', { outputBudget: 100 }), { client }))
+    expect(captured.args.enable_thinking).toBe(true)
+    expect(captured.args.thinking_budget).toBe(1024)
+  })
+
+  test('no thinkingEffortLevels in spec → no thinking fields sent', async () => {
+    const { client, captured } = mockChat(basicResponse())
+    await collect(qwen(envelope('qwen', 'qwen3.6-flash'), { client }))
+    expect(captured.args.enable_thinking).toBeUndefined()
+    expect(captured.args.thinking_budget).toBeUndefined()
+  })
+
+  test('429 with rate_limit_exceeded code classifies as tier limit', async () => {
+    const client = {
+      chat: {
+        completions: {
+          create: async () => {
+            const e = new Error('rate limited')
+            e.status = 429
+            e.code = 'rate_limit_exceeded'
+            throw e
+          }
+        }
+      }
+    }
+    const events = await collect(qwen(envelope('qwen', 'qwen3.6-flash'), { client }))
+    expect(events.at(-1).type).toBe('error')
+    expect(events.at(-1).error.type).toBe('RATE_LIMIT_TIER')
   })
 })
 

@@ -22,7 +22,7 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **Adapter** — the per-provider code inside the session that maps a `CallEnvelope` to provider-native API calls and back. One file per provider in `js/session/adapters/`.
 
-**SDK shape** — the family of provider APIs an adapter speaks. Many providers expose an OpenAI-shaped chat-completions API, so they share the `openai` SDK adapter (DeepSeek, Mistral, xAI, Novita, Xiaomi…). Anthropic, Gemini, Cerebras, Fireworks, Groq, OpenRouter each have their own.
+**SDK shape** — the family of provider APIs an adapter speaks. Many providers expose an OpenAI-shaped chat-completions API, so they share the `openai` SDK adapter (DeepSeek, Mistral, xAI, Novita, Xiaomi, Qwen Cloud…). Anthropic, Gemini, Cerebras, Fireworks, Groq, OpenRouter each have their own.
 
 ---
 

@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Qwen Cloud provider (`qwen/*`) — OpenAI-compatible chat completions
+  against Alibaba's international DashScope endpoint
+  (`dashscope-intl.aliyuncs.com/compatible-mode/v1`), key via
+  `QWEN_API_SK`. Thinking is wired through the new `qwen`
+  reasoning-field variant: `outputEffort` maps to `enable_thinking`
+  plus a numeric `thinking_budget` from the spec's
+  `thinkingEffortLevels`; Qwen hybrid models think by default, so
+  effort `none` sends an explicit `enable_thinking: false`.
+
 ## [0.112.0] — Feature: `/v1/transcription` on thin-gate
 
 ### Added

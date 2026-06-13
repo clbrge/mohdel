@@ -83,6 +83,13 @@ const PROVIDER_INFO = {
     url: 'https://novita.ai/dashboard/key',
     hint: 'Create an API key at novita.ai → Dashboard → API Key',
     free: false
+  },
+  qwen: {
+    label: 'Qwen Cloud',
+    description: 'Qwen 3.7 Max/Plus, 3.6 Flash — reasoning, coding, long context. Free quota for new users.',
+    url: 'https://home.qwencloud.com/api-keys',
+    hint: 'Create an API key at home.qwencloud.com → API Keys',
+    free: false
   }
 }
 

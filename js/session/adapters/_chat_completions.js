@@ -55,10 +55,14 @@ const DSML_PARAM_RE = /<\uFF5CDSML\uFF5Cparameter\s+name="([^"]+)"(?:\s+string="
  * @property {'openai'|'mistral'|'cerebras'} [toolChoiceFlavor]
  * @property {'user'|'safety_identifier'} [identifierField]
  *   Defaults to 'user'.
- * @property {'reasoning_effort'|'cerebras_zai'} [reasoningField]
+ * @property {'reasoning_effort'|'cerebras_zai'|'qwen'} [reasoningField]
  *   How to wire outputEffort into the request. `reasoning_effort`
  *   sets `args.reasoning_effort = effort`. `cerebras_zai` flips
  *   `args.disable_reasoning = false` instead (zai-family only).
+ *   `qwen` sets `args.enable_thinking` plus a numeric
+ *   `args.thinking_budget` from the spec's effort level — Qwen hybrid
+ *   models think by default, so `enable_thinking: false` must be sent
+ *   explicitly to switch thinking off.
  * @property {boolean} [parseDsml]
  *   Extract DeepSeek DSML function-call blocks from message content
  *   when native `tool_calls` is absent.
@@ -351,6 +355,11 @@ function buildRequest (envelope, spec, config) {
       if (effort !== 'none') delete args.temperature
       if (config.reasoningField === 'cerebras_zai' && /zai/i.test(bareOf(envelope.model))) {
         args.disable_reasoning = (effort === 'none')
+      } else if (config.reasoningField === 'qwen') {
+        args.enable_thinking = (effort !== 'none')
+        if (effort !== 'none' && typeof headroom === 'number') {
+          args.thinking_budget = headroom
+        }
       } else {
         args.reasoning_effort = effort
       }

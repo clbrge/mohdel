@@ -1,6 +1,6 @@
 # Mohdel
 
-Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 11 providers; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
+Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 13 providers; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
 
 ```bash
 npm install -g mohdel
@@ -8,7 +8,7 @@ mo                                     # interactive setup — pick a provider, 
 mo ask gemini/gemini-3-flash-preview "why is the sky blue"
 ```
 
-Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, OpenRouter, Novita. Node 22+, ES modules.
+Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, OpenRouter, Novita. Node 22+, ES modules.
 
 ## Why mohdel
 
@@ -306,6 +306,8 @@ What each provider supports through mohdel's unified interface:
 | DeepSeek | No | Yes | Yes | No | No | DSML tool-call fallback when model emits tags in content |
 | Fireworks | Yes | Yes | Yes | No | Yes (`reasoning_effort`) | OpenAI SDK + `baseURL`; model id auto-prefixed |
 | Mistral | No | Yes | Yes | No | No | `tool_choice: "any"` = required |
+| Qwen Cloud | No | Yes | No | No | Yes (`enable_thinking` + `thinking_budget`) | Alibaba DashScope intl; hybrid models think by default — effort `none` sends explicit off |
+| Xiaomi | No | Yes | Yes | No | Auto | MiMo; shared chat-completions path, `reasoning_content` captured |
 | OpenRouter | Yes | Yes | Yes | No | Varies | Meta-provider; `providerOptions.openrouter` for routing prefs |
 | Novita | No | No | No | No | No | Image generation only |
 

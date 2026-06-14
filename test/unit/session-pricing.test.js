@@ -38,6 +38,42 @@ describe('computeCost', () => {
     expect(computeCost({ inputPrice: 1, outputPrice: 5 }, {})).toBe(0)
   })
 
+  // Cache-token pricing: reads at cacheReadPrice, writes split into 5m
+  // (cacheWritePrice) and 1h (cacheWrite1hPrice) tiers. Both fall back
+  // gracefully so adding the 1h fields never regresses single-tier specs.
+  describe('cache pricing', () => {
+    test('cache read bills at cacheReadPrice', () => {
+      const spec = { inputPrice: 5, outputPrice: 25, cacheReadPrice: 0.5 }
+      expect(computeCost(spec, { cacheReadInputTokens: 1_000_000 })).toBe(0.5)
+    })
+
+    test('cache read falls back to inputPrice when cacheReadPrice absent', () => {
+      const spec = { inputPrice: 5, outputPrice: 25 }
+      expect(computeCost(spec, { cacheReadInputTokens: 1_000_000 })).toBe(5)
+    })
+
+    test('5m write bills at cacheWritePrice', () => {
+      const spec = { inputPrice: 5, outputPrice: 25, cacheWritePrice: 6.25 }
+      expect(computeCost(spec, { cacheWriteInputTokens: 1_000_000 })).toBe(6.25)
+    })
+
+    test('1h portion bills at cacheWrite1hPrice', () => {
+      const spec = { inputPrice: 5, outputPrice: 25, cacheWritePrice: 6.25, cacheWrite1hPrice: 10 }
+      expect(computeCost(spec, { cacheWriteInputTokens: 1_000_000, cacheWrite1hInputTokens: 1_000_000 })).toBe(10)
+    })
+
+    test('mixed 5m + 1h write prices each tier on its split', () => {
+      const spec = { inputPrice: 5, outputPrice: 25, cacheWritePrice: 6.25, cacheWrite1hPrice: 10 }
+      // 350k @ 6.25 + 250k @ 10 = 2.1875 + 2.5
+      expect(computeCost(spec, { cacheWriteInputTokens: 600_000, cacheWrite1hInputTokens: 250_000 })).toBeCloseTo(4.6875, 6)
+    })
+
+    test('1h portion falls back to cacheWritePrice when cacheWrite1hPrice absent (no regression)', () => {
+      const spec = { inputPrice: 5, outputPrice: 25, cacheWritePrice: 6.25 }
+      expect(computeCost(spec, { cacheWriteInputTokens: 1_000_000, cacheWrite1hInputTokens: 1_000_000 })).toBe(6.25)
+    })
+  })
+
   // Tiered pricing (OpenAI gpt-5.4, xAI grok-4-1-fast, etc.) expresses
   // prices as `{">THRESHOLD": rate, "default": rate}` where the active
   // rate depends on the call's input-token count.

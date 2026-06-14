@@ -104,6 +104,7 @@ export async function * gemini (envelope, deps = {}) {
   let inputTokens = 0
   let outputTokens = 0
   let thinkingTokens = 0
+  let cacheReadTokens = 0
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
@@ -164,6 +165,9 @@ export async function * gemini (envelope, deps = {}) {
         if (typeof chunk.usageMetadata.thoughtsTokenCount === 'number') {
           thinkingTokens = chunk.usageMetadata.thoughtsTokenCount
         }
+        if (typeof chunk.usageMetadata.cachedContentTokenCount === 'number') {
+          cacheReadTokens = chunk.usageMetadata.cachedContentTokenCount
+        }
       }
     }
   } catch (e) {
@@ -186,18 +190,23 @@ export async function * gemini (envelope, deps = {}) {
   }
 
   const end = String(process.hrtime.bigint())
+  // Implicit caching reports cachedContentTokenCount as a SUBSET of
+  // promptTokenCount. Convert to mohdel's additive convention by subtracting
+  // the cached portion before pricing, matching the OpenAI adapter.
+  const regularInputTokens = Math.max(0, inputTokens - cacheReadTokens)
   /** @type {import('#core/events.js').DoneEvent} */
   const done = {
     type: 'done',
     result: {
       status,
       output: currentOutput() || null,
-      inputTokens,
+      inputTokens: regularInputTokens,
       outputTokens,
       thinkingTokens,
+      ...(cacheReadTokens > 0 && { cacheReadInputTokens: cacheReadTokens }),
       cost: costFor(
         catalogKey(envelope.model),
-        { inputTokens, outputTokens, thinkingTokens }
+        { inputTokens: regularInputTokens, outputTokens, thinkingTokens, cacheReadInputTokens: cacheReadTokens }
       ),
       timestamps: { start, first: first ?? end, end }
     }

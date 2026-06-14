@@ -4,6 +4,37 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.114.0] — Fix: Anthropic 1h and Gemini implicit cache cost accounting
+
+### Added
+
+- Anthropic per-TTL cache-creation accounting. The streaming adapter now reads
+  `usage.cache_creation.ephemeral_1h_input_tokens` and exposes
+  `cacheWrite1hInputTokens` on the done result. `computeCost` prices the 1h write
+  tier via a new optional spec field `cacheWrite1hPrice`; the 5m portion
+  (`cacheWriteInputTokens − cacheWrite1hInputTokens`) stays on `cacheWritePrice`.
+  A request may mix TTLs, so both tiers can be non-zero.
+- Gemini implicit-cache read accounting. The adapter now reads
+  `usageMetadata.cachedContentTokenCount` and exposes `cacheReadInputTokens` on
+  the done result, priced via the existing `cacheReadPrice` spec field.
+
+### Fixed
+
+- Gemini cached input was billed at full `inputPrice`. Cached tokens are now
+  subtracted from `inputTokens` (subset convention, matching the OpenAI adapter)
+  and priced at `cacheReadPrice`, so reported `cost` reflects the provider's
+  cached-token discount.
+- Anthropic 1h cache writes were priced at the 5m rate. They now bill at
+  `cacheWrite1hPrice` when the spec provides it.
+
+### Notes
+
+- Additive and backward-compatible. When `cacheWrite1hInputTokens` is absent or a
+  spec omits `cacheWrite1hPrice`, the whole write bills at `cacheWritePrice` —
+  prior behaviour. Realizing the corrected rates requires catalog specs to carry
+  `cacheWrite1hPrice` (Anthropic) and `cacheReadPrice` (Gemini); without them the
+  new fields are observability-only and cost is unchanged.
+
 ## [0.113.0] — Feature: Qwen Cloud provider
 
 ### Added

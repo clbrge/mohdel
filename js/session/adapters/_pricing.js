@@ -27,7 +27,14 @@ import { getSpec, setCatalog } from './_catalog.js'
  * Optional fields fall back to other prices when absent:
  *   - `thinkingPrice` → `outputPrice`
  *   - `cacheWritePrice` → `inputPrice` (graceful for non-caching providers)
+ *   - `cacheWrite1hPrice` → `cacheWritePrice` (graceful when only one write tier is priced)
  *   - `cacheReadPrice` → `inputPrice`
+ *
+ * `cacheWrite1hInputTokens` is the 1h-TTL subset of `cacheWriteInputTokens`
+ * (Anthropic bills 1h writes at a higher rate than 5m). The 5m portion is
+ * `cacheWriteInputTokens - cacheWrite1hInputTokens`. When the 1h field is
+ * absent or the catalog has no `cacheWrite1hPrice`, the whole write bills at
+ * `cacheWritePrice` — identical to the single-tier behaviour.
  *
  * Token-counting convention: this function is purely additive across
  * `inputTokens`, `cacheWriteInputTokens`, `cacheReadInputTokens`,
@@ -36,7 +43,8 @@ import { getSpec, setCatalog } from './_catalog.js'
  *
  * @param {any} spec  Catalog entry, or `undefined`.
  * @param {{inputTokens?: number, outputTokens?: number, thinkingTokens?: number,
- *          cacheWriteInputTokens?: number, cacheReadInputTokens?: number}} usage
+ *          cacheWriteInputTokens?: number, cacheWrite1hInputTokens?: number,
+ *          cacheReadInputTokens?: number}} usage
  * @returns {number}
  */
 export function computeCost (spec, usage) {
@@ -45,6 +53,8 @@ export function computeCost (spec, usage) {
   const o = usage.outputTokens ?? 0
   const t = usage.thinkingTokens ?? 0
   const cw = usage.cacheWriteInputTokens ?? 0
+  const cw1h = Math.min(cw, usage.cacheWrite1hInputTokens ?? 0)
+  const cw5m = Math.max(0, cw - cw1h)
   const cr = usage.cacheReadInputTokens ?? 0
   const ip = resolveTier(spec.inputPrice, i)
   const op = resolveTier(spec.outputPrice, i)
@@ -53,9 +63,11 @@ export function computeCost (spec, usage) {
   const tpFinal = typeof tp === 'number' ? tp : op
   const cwp = resolveTier(spec.cacheWritePrice, i)
   const cwpFinal = typeof cwp === 'number' ? cwp : ip
+  const cw1hp = resolveTier(spec.cacheWrite1hPrice, i)
+  const cw1hpFinal = typeof cw1hp === 'number' ? cw1hp : cwpFinal
   const crp = resolveTier(spec.cacheReadPrice, i)
   const crpFinal = typeof crp === 'number' ? crp : ip
-  const total = (i * ip + cw * cwpFinal + cr * crpFinal + o * op + t * tpFinal) / 1_000_000
+  const total = (i * ip + cw5m * cwpFinal + cw1h * cw1hpFinal + cr * crpFinal + o * op + t * tpFinal) / 1_000_000
   return round(total)
 }
 

@@ -114,6 +114,7 @@ export async function * anthropic (envelope, deps = {}) {
   let inputTokens = 0
   let outputTokens = 0
   let cacheWriteTokens = 0
+  let cacheWrite1hTokens = 0
   let cacheReadTokens = 0
   let thinkingChars = 0
   let status = STATUS_COMPLETED
@@ -139,6 +140,12 @@ export async function * anthropic (envelope, deps = {}) {
           }
           if (event.message?.usage?.cache_creation_input_tokens) {
             cacheWriteTokens = event.message.usage.cache_creation_input_tokens
+          }
+          // cache_creation breaks the write total down by TTL (5m + 1h).
+          // Surface the 1h subset so the cost layer can price it separately;
+          // a request may mix TTLs, so both tiers can be non-zero.
+          if (event.message?.usage?.cache_creation?.ephemeral_1h_input_tokens) {
+            cacheWrite1hTokens = event.message.usage.cache_creation.ephemeral_1h_input_tokens
           }
           if (event.message?.usage?.cache_read_input_tokens) {
             cacheReadTokens = event.message.usage.cache_read_input_tokens
@@ -249,6 +256,7 @@ export async function * anthropic (envelope, deps = {}) {
       outputTokens: messageOutputTokens,
       thinkingTokens: estimatedThinkingTokens,
       ...(cacheWriteTokens > 0 && { cacheWriteInputTokens: cacheWriteTokens }),
+      ...(cacheWrite1hTokens > 0 && { cacheWrite1hInputTokens: cacheWrite1hTokens }),
       ...(cacheReadTokens > 0 && { cacheReadInputTokens: cacheReadTokens }),
       cost: costFor(
         catalogKey(envelope.model),
@@ -257,6 +265,7 @@ export async function * anthropic (envelope, deps = {}) {
           outputTokens: messageOutputTokens,
           thinkingTokens: estimatedThinkingTokens,
           cacheWriteInputTokens: cacheWriteTokens,
+          cacheWrite1hInputTokens: cacheWrite1hTokens,
           cacheReadInputTokens: cacheReadTokens
         }
       ),

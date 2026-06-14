@@ -73,6 +73,21 @@ describe('session/adapters/gemini', () => {
     expect(done.result.outputTokens).toBe(2)
   })
 
+  test('cachedContentTokenCount is subtracted from input and surfaced as cache read', async () => {
+    const { client } = makeClient({
+      chunks: [
+        chunk('Hi'),
+        {
+          candidates: [{ content: { parts: [] }, finishReason: 'STOP' }],
+          usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 2, cachedContentTokenCount: 30 }
+        }
+      ]
+    })
+    const done = (await collect(gemini(envelope(), { client }))).at(-1)
+    expect(done.result.inputTokens).toBe(70)
+    expect(done.result.cacheReadInputTokens).toBe(30)
+  })
+
   test('MAX_TOKENS → incomplete + insufficientOutputBudget', async () => {
     const { client } = makeClient({
       chunks: [

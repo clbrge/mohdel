@@ -67,6 +67,32 @@ describe('session/adapters/anthropic', () => {
     expect(done.result.warning).toBeUndefined()
   })
 
+  test('mixed-TTL cache_creation surfaces the 1h subset of the write total', async () => {
+    // A request can mix TTLs, so both tiers are non-zero; cacheWriteInputTokens
+    // is the total and cacheWrite1hInputTokens the 1h subset (5m = total − 1h).
+    const { client } = makeClient({
+      events: [
+        {
+          type: 'message_start',
+          message: {
+            usage: {
+              input_tokens: 10,
+              cache_creation_input_tokens: 1000,
+              cache_creation: { ephemeral_5m_input_tokens: 600, ephemeral_1h_input_tokens: 400 },
+              cache_read_input_tokens: 500
+            }
+          }
+        },
+        { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } },
+        { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 2 } }
+      ]
+    })
+    const done = (await collect(anthropic(envelope(), { client }))).at(-1)
+    expect(done.result.cacheWriteInputTokens).toBe(1000)
+    expect(done.result.cacheWrite1hInputTokens).toBe(400)
+    expect(done.result.cacheReadInputTokens).toBe(500)
+  })
+
   test('max_tokens truncation produces incomplete + warning', async () => {
     const { client } = makeClient({
       events: [

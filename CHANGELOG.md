@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.114.1] — Docs: cache pricing fields / Chore: bump dependencies
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.104.1` → `^0.105.0`.
+- `@google/genai` `^2.8.0` → `^2.9.0`.
+- `openai` `^6.42.0` → `^6.44.0`.
+- `vitest` (dev) `^4.1.8` → `^4.1.9`.
+
+No code changes.
+
+### Documentation
+
+- Document the `cacheWrite1hInputTokens` field on the `DoneEvent` result (the
+  1h-TTL subset of `cacheWriteInputTokens`, billed at `cacheWrite1hPrice`).
+- Document the `cacheWrite1hPrice` catalog field, and correct the prompt-caching
+  note: Anthropic uses explicit breakpoints while OpenAI and Gemini cache
+  implicitly with read counts surfaced automatically. No code changes.
+
 ## [0.114.0] — Fix: Anthropic 1h and Gemini implicit cache cost accounting
 
 ### Added

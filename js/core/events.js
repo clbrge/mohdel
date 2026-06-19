@@ -87,6 +87,10 @@
  *   Input tokens written to a fresh prompt cache breakpoint, billed at
  *   `cacheWritePrice`. Absent when the provider has no separate
  *   cache-write counter.
+ * @property {number} [cacheWrite1hInputTokens]
+ *   The 1h-TTL subset of `cacheWriteInputTokens` (Anthropic), billed at
+ *   `cacheWrite1hPrice`; the 5m portion is the remainder. A request may mix
+ *   TTLs. Absent when the turn has no 1h-TTL cache writes.
  * @property {number} [cacheReadInputTokens]
  *   Input tokens served from prompt cache, billed at `cacheReadPrice`.
  *   Absent when the provider has no prompt caching.

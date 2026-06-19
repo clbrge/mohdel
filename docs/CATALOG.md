@@ -70,7 +70,8 @@ Prices are **USD per 1M tokens**. So `"inputPrice": 3` means $3 per million inpu
 
 | Field | Notes |
 |---|---|
-| `cacheWritePrice` / `cacheReadPrice` | Provider-side prompt caching (Anthropic, OpenAI). When the caller sets `cache: true` on an envelope, mohdel attributes cache-write/read tokens against these rates. |
+| `cacheWritePrice` / `cacheReadPrice` | Provider-side prompt caching. `cacheWritePrice` bills fresh cache-creation (5m TTL); `cacheReadPrice` bills tokens served from cache. Anthropic uses explicit breakpoints (`cache: '5m'\|'1h'` on a part); OpenAI and Gemini cache implicitly and their read counts are surfaced automatically. Each falls back to `inputPrice` when absent. |
+| `cacheWrite1hPrice` | Anthropic only. Bills the 1h-TTL portion of cache-creation (2× input, vs 1.25× for 5m). Falls back to `cacheWritePrice` when absent — so omitting it prices all writes at the 5m rate. |
 | `thinkingEffortLevels` | Object mapping `"low" \| "medium" \| "high" \| "xhigh" \| "max" \| "none"` → provider-native budget. Mohdel translates the caller's `outputEffort: 'medium'` to whatever the provider accepts (Anthropic budget tokens, OpenAI reasoning_effort, Gemini thinkingBudget, …). Set to `null` to disable thinking on this model. |
 | `defaultThinkingEffort` | The level used when the envelope omits `outputEffort`. |
 | `tags` | Free-form strings. `[a-zA-Z][a-zA-Z0-9._-]{0,31}`. Used by `mo bench --tag X`, `mo rank --tag X`, and your application's own model selection. |

@@ -4,6 +4,51 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.115.0] — Fix: NDJSON stdin framing is `\n`-only / Chore: bump dependencies
+
+### Fixed
+
+- The session stdin reader used Node's `readline`, which treats U+2028/U+2029
+  (Unicode line/paragraph separators) as line terminators. Both are legal
+  *unescaped* inside JSON strings — `JSON.stringify` and `serde_json` emit them
+  raw — so a CallEnvelope whose prompt contained a pasted separator arrived as
+  several fragments, none valid JSON. The driver skipped them silently and the
+  supervisor waited on a stream that would never produce a terminal event,
+  camping its pool slot until an external timeout. The driver now splits stdin
+  on `\n` bytes only; separator code points inside strings are ordinary payload.
+
+### Changed
+
+- A stdin line that is not valid JSON is now terminal instead of
+  skip-and-continue: message boundaries can no longer be trusted once framing
+  is broken. The session writes a terminal `error` event
+  (`type: "SESSION_STDIN_MALFORMED"`) so the supervisor releases the call
+  immediately, then exits non-zero.
+- `@anthropic-ai/sdk` `^0.105.0` → `^0.110.0`.
+- `@google/genai` `^2.9.0` → `^2.10.0`.
+- `groq-sdk` `^1.2.1` → `^1.3.0`.
+- `openai` `^6.44.0` → `^6.45.0`.
+- `@clack/prompts` (optional) `^1.5.1` → `^1.7.0`.
+- `@opentelemetry/exporter-trace-otlp-grpc` / `@opentelemetry/sdk-node`
+  (optional) `^0.219.0` → `^0.220.0`.
+- `lint-staged` (dev) `^17.0.7` → `^17.0.8`.
+- `release-it` (dev) `^20.2.0` → `^20.2.1`.
+- `vitest` (dev) `^4.1.9` → `^4.1.10`.
+
+### Documentation
+
+- PROTOCOL.md §2 framing now mandates `\n` (0x0A) as the only line delimiter,
+  names the U+2028/U+2029 trap (Node `readline` is not a conforming reader),
+  and specifies the terminal-error-and-exit contract for malformed lines. Both
+  added to the compliance checklist.
+
+### Notes
+
+- Behavior change for supervisors that relied on malformed lines being skipped:
+  the session now fails the call and exits. thin-gate's existing supervision
+  (terminal error → release slot; EOF → discard + respawn) handles this
+  without changes.
+
 ## [0.114.1] — Docs: cache pricing fields / Chore: bump dependencies
 
 ### Changed

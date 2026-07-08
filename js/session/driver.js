@@ -12,8 +12,6 @@
  * @module session/driver
  */
 
-import readline from 'node:readline'
-
 import { run } from './run.js'
 import { runImage } from './run_image.js'
 import { runTranscription } from './run_transcription.js'
@@ -29,8 +27,6 @@ const PRECANCEL_CAP = 128
  * @returns {Promise<void>}
  */
 export async function drive (stdin, stdout) {
-  const rl = readline.createInterface({ input: stdin, crlfDelay: Infinity })
-
   /** @type {{callId: string, controller: AbortController} | null} */
   let currentCall = null
   /** @type {import('#core/envelope.js').CallEnvelope[]} */
@@ -38,6 +34,7 @@ export async function drive (stdin, stdout) {
   /** @type {(() => void) | null} */
   let queueNotify = null
   let stdinClosed = false
+  let framingError = null
   /** Cancel messages received before their envelope was dequeued.
    *  JS Sets are insertion-ordered, so `values().next()` is the
    *  oldest entry — cheap FIFO eviction at cap. */
@@ -51,7 +48,8 @@ export async function drive (stdin, stdout) {
     precancelled.add(callId)
   }
 
-  rl.on('line', (line) => {
+  const onLine = (line) => {
+    if (framingError) return
     const trimmed = line.trim()
     if (!trimmed) return
 
@@ -59,7 +57,17 @@ export async function drive (stdin, stdout) {
     try {
       obj = JSON.parse(trimmed)
     } catch (e) {
-      process.stderr.write(`session: failed to parse stdin line: ${e.message}\n`)
+      process.stderr.write(`session: malformed stdin line, exiting: ${e.message}\n`)
+      const error = {
+        message: 'SESSION_STDIN_MALFORMED',
+        detail: `stdin line is not valid JSON: ${e.message}`,
+        severity: 'error',
+        retryable: false,
+        type: 'SESSION_STDIN_MALFORMED'
+      }
+      stdout.write(JSON.stringify({ type: 'error', error }) + '\n')
+      framingError = Object.assign(new Error(error.message), { detail: error.detail })
+      if (queueNotify) { queueNotify(); queueNotify = null }
       return
     }
 
@@ -113,22 +121,35 @@ export async function drive (stdin, stdout) {
 
     envelopeQueue.push(obj)
     if (queueNotify) { queueNotify(); queueNotify = null }
-  })
+  }
 
-  rl.on('close', () => {
+  let stdinBuf = ''
+  stdin.setEncoding('utf8')
+  stdin.on('data', (chunk) => {
+    stdinBuf += chunk
+    let nl
+    while ((nl = stdinBuf.indexOf('\n')) !== -1) {
+      const line = stdinBuf.slice(0, nl)
+      stdinBuf = stdinBuf.slice(nl + 1)
+      onLine(line)
+    }
+  })
+  stdin.on('end', () => {
+    if (stdinBuf) onLine(stdinBuf)
     stdinClosed = true
     if (queueNotify) { queueNotify(); queueNotify = null }
   })
 
   while (true) {
-    // `stdinClosed` flips asynchronously inside the `rl.on('close')`
+    // `stdinClosed` flips asynchronously inside the `stdin.on('end')`
     // callback above, which also signals `queueNotify`. The linter's
     // no-unmodified-loop-condition rule can't see callback mutation,
     // so it false-positives here.
     // eslint-disable-next-line no-unmodified-loop-condition
-    while (envelopeQueue.length === 0 && !stdinClosed) {
+    while (envelopeQueue.length === 0 && !stdinClosed && !framingError) {
       await new Promise(resolve => { queueNotify = resolve })
     }
+    if (framingError) throw framingError
     if (envelopeQueue.length === 0) return
 
     const envelope = envelopeQueue.shift()

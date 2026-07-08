@@ -32,6 +32,17 @@ stdin; the session writes events to stdout.
   input.
 - **Framing:** one JSON document per line (NDJSON). Empty lines on
   input are ignored; output MUST NOT produce empty lines.
+  Lines are delimited by `\n` (0x0A) **only**. Readers MUST NOT treat
+  any other code point as a line terminator — in particular
+  U+2028/U+2029, which JSON serializers (JSON.stringify, serde_json)
+  legally emit *unescaped* inside strings, so they are ordinary
+  payload bytes. Node's `readline` splits on U+2028/U+2029 and is
+  therefore not a conforming reader; use a byte-level `\n` splitter.
+- **Malformed lines:** a stdin line that is not valid JSON means the
+  framing itself is broken; recovery is not possible because message
+  boundaries can no longer be trusted. The session MUST emit a
+  terminal `error` event (`type: "SESSION_STDIN_MALFORMED"`) and exit
+  non-zero rather than skip the line and wait silently.
 - **Field names:** camelCase.
 - **Stderr:** diagnostics only; no protocol semantics.
 
@@ -328,6 +339,8 @@ Frozen at 0.90. Post-release:
 ## 9. Compliance checklist
 
 - [ ] Reads NDJSON from stdin; tolerates empty lines and CRLF
+- [ ] Splits stdin on `\n` bytes only (U+2028/U+2029 are payload, not terminators)
+- [ ] Emits terminal `SESSION_STDIN_MALFORMED` + exits non-zero on an unparseable stdin line
 - [ ] Writes NDJSON events with LF
 - [ ] Uses camelCase field names on the wire
 - [ ] Emits exactly one terminal (`done` or `error`) per envelope

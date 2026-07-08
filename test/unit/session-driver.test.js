@@ -57,16 +57,27 @@ describe('session/driver', () => {
     expect(dones.length).toBe(3)
   })
 
-  test('unparseable envelope is skipped; subsequent envelopes still process', async () => {
+  test('unparseable stdin line emits a terminal framing error and rejects', async () => {
     const stdin = inputStream(
       'not json',
       JSON.stringify(envelope({ callId: 'valid' }))
     )
     const { stream: stdout, output } = capturingStdout()
 
+    await expect(drive(stdin, stdout)).rejects.toThrow('SESSION_STDIN_MALFORMED')
+    const events = parseNDJSON(output())
+    expect(events.length).toBe(1)
+    expect(events[0].type).toBe('error')
+    expect(events[0].error.type).toBe('SESSION_STDIN_MALFORMED')
+  })
+
+  test('envelope containing raw U+2028/U+2029 in a string stays one line', async () => {
+    const stdin = inputStream(JSON.stringify(envelope({ prompt: 'a\u2028b\u2029c' })))
+    const { stream: stdout, output } = capturingStdout()
+
     await drive(stdin, stdout)
     const events = parseNDJSON(output())
-    expect(events.filter(e => e.type === 'done').length).toBe(1)
+    expect(events.at(-1).type).toBe('done')
   })
 
   test('unknown provider produces an error event', async () => {

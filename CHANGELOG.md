@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.116.1] — Fix: publish workflow pins npm 11
+
+### Fixed
+
+- The publish workflow upgraded npm with `npm install -g npm@latest`; npm
+  12.0.0 (2026-07-08) installs without `libnpmpublish`'s `sigstore` dependency,
+  so `npm publish --provenance` fails with `MODULE_NOT_FOUND`. Pinned to
+  `npm@11` (trusted publishing needs ≥ 11.5.1). Revisit when npm 12.x fixes
+  its bundle manifest.
+
+### Notes
+
+- v0.116.0 never reached the registry (its publish job hit the bug above);
+  0.116.1 is the first published release carrying the 0.116.0 changes.
+
 ## [0.116.0] — Feat: OpenAI cache-write billing (GPT-5.6) / Chore: bump openai SDK
 
 ### Added

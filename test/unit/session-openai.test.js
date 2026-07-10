@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest'
 import { openai } from '../../js/session/adapters/openai.js'
+import { setCatalog } from '../../js/session/adapters/_catalog.js'
 import { setPricing } from '../../js/session/adapters/_pricing.js'
 import { STATUS_COMPLETED, STATUS_INCOMPLETE } from '#core'
 
@@ -129,5 +130,43 @@ describe('session/adapters/openai', () => {
       const done = (await collect(openai(envelope({ model: 'openai/unknown-xyz' }), { client }))).at(-1)
       expect(done.result.cost).toBe(0)
     }
+  })
+
+  test('identifier maps to safety_identifier and prompt_cache_key', async () => {
+    const { client, captured } = makeClient({
+      events: [{ type: 'response.completed', response: { usage: {} } }]
+    })
+    await collect(openai(envelope({ identifier: 'u-1' }), { client }))
+    expect(captured.request.safety_identifier).toBe('u-1')
+    expect(captured.request.prompt_cache_key).toBe('u-1')
+  })
+
+  test('cache read + write tokens are subtracted from input and priced separately', async () => {
+    setCatalog({
+      'openai/gpt-5.6-luna': {
+        inputPrice: 1,
+        cacheReadPrice: 0.1,
+        cacheWritePrice: 1.25,
+        outputPrice: 6
+      }
+    })
+    const { client } = makeClient({
+      events: [{
+        type: 'response.completed',
+        response: {
+          usage: {
+            input_tokens: 100,
+            output_tokens: 10,
+            input_tokens_details: { cached_tokens: 50, cache_write_tokens: 40 }
+          }
+        }
+      }]
+    })
+    const done = (await collect(openai(envelope({ model: 'openai/gpt-5.6-luna' }), { client }))).at(-1)
+    expect(done.result.inputTokens).toBe(10)
+    expect(done.result.cacheReadInputTokens).toBe(50)
+    expect(done.result.cacheWriteInputTokens).toBe(40)
+    expect(done.result.outputTokens).toBe(10)
+    expect(done.result.cost).toBe(0.000125)
   })
 })

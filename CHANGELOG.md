@@ -4,6 +4,40 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.116.0] — Feat: OpenAI cache-write billing (GPT-5.6) / Chore: bump openai SDK
+
+### Added
+
+- The OpenAI Responses adapter reads `usage.input_tokens_details.cache_write_tokens`
+  (new on GPT-5.6 models, which bill cache writes at 1.25× the input rate) and
+  reports it as `cacheWriteInputTokens` on the AnswerResult. Like `cached_tokens`,
+  the write count is a subset of `input_tokens`; the adapter subtracts both into
+  mohdel's additive convention so regular input, cache reads, and cache writes
+  each price at their own catalog rate (`inputPrice` / `cacheReadPrice` /
+  `cacheWritePrice`). No pricing-engine change — `cacheWritePrice` support
+  already existed for the Anthropic path, including tiered `{">N", default}`
+  rates.
+- Requests to the `openai` provider now send `prompt_cache_key`, set to the
+  envelope `identifier` (the same value as `safety_identifier`). GPT-5.6
+  requires it for reliable prefix matching on implicit and explicit caching;
+  earlier models accept it harmlessly.
+
+### Changed
+
+- `openai` `^6.45.0` → `^6.46.0`. Brings the `cache_write_tokens` usage types
+  and fixes the streaming crash on the server's new `keepalive` event
+  (`OpenAIError: Unhandled response stream event`), which killed in-flight
+  calls whose reasoning pauses exceeded OpenAI's keepalive threshold.
+
+### Notes
+
+- Explicit cache breakpoints (`prompt_cache_breakpoint`,
+  `prompt_cache_options.mode: 'explicit'`) are not sent yet. GPT-5.6 implicit
+  caching applies; writes are billed either way, and this release accounts for
+  them.
+- Cache-key granularity is per-user (`identifier`), not per-conversation. A
+  session-scoped key needs a new envelope field and is deferred.
+
 ## [0.115.0] — Fix: NDJSON stdin framing is `\n`-only / Chore: bump dependencies
 
 ### Fixed

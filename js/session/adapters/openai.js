@@ -77,6 +77,7 @@ export async function * openai (envelope, deps = {}) {
   let outputTokens = 0
   let thinkingTokens = 0
   let cachedInputTokens = 0
+  let cacheWriteTokens = 0
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
@@ -132,6 +133,7 @@ export async function * openai (envelope, deps = {}) {
             outputTokens = event.response.usage.output_tokens ?? 0
             thinkingTokens = event.response.usage.output_tokens_details?.reasoning_tokens ?? 0
             cachedInputTokens = event.response.usage.input_tokens_details?.cached_tokens ?? 0
+            cacheWriteTokens = event.response.usage.input_tokens_details?.cache_write_tokens ?? 0
           }
           if (toolItems.size > 0) {
             status = STATUS_TOOL_USE
@@ -148,6 +150,7 @@ export async function * openai (envelope, deps = {}) {
             outputTokens = event.response.usage.output_tokens ?? 0
             thinkingTokens = event.response.usage.output_tokens_details?.reasoning_tokens ?? 0
             cachedInputTokens = event.response.usage.input_tokens_details?.cached_tokens ?? 0
+            cacheWriteTokens = event.response.usage.input_tokens_details?.cache_write_tokens ?? 0
           }
           break
 
@@ -177,11 +180,12 @@ export async function * openai (envelope, deps = {}) {
   // one from the other for the message-only count.
   const messageOutputTokens = Math.max(0, outputTokens - thinkingTokens)
 
-  // OpenAI counts cached_tokens as a SUBSET of input_tokens. Convert to
-  // mohdel's additive convention (cacheReadInputTokens is separate from
-  // inputTokens) by subtracting the cached portion before pricing. Both
-  // adapters and computeCost stay simpler with the additive shape.
-  const regularInputTokens = Math.max(0, inputTokens - cachedInputTokens)
+  // OpenAI counts cached_tokens and cache_write_tokens as SUBSETS of
+  // input_tokens. Convert to mohdel's additive convention (cacheRead/
+  // cacheWriteInputTokens are separate from inputTokens) by subtracting
+  // both portions before pricing. Both adapters and computeCost stay
+  // simpler with the additive shape.
+  const regularInputTokens = Math.max(0, inputTokens - cachedInputTokens - cacheWriteTokens)
 
   /** @type {import('#core/events.js').DoneEvent} */
   const done = {
@@ -192,6 +196,7 @@ export async function * openai (envelope, deps = {}) {
       inputTokens: regularInputTokens,
       outputTokens: messageOutputTokens,
       thinkingTokens,
+      ...(cacheWriteTokens > 0 && { cacheWriteInputTokens: cacheWriteTokens }),
       ...(cachedInputTokens > 0 && { cacheReadInputTokens: cachedInputTokens }),
       cost: costFor(
         catalogKey(envelope.model),
@@ -199,6 +204,7 @@ export async function * openai (envelope, deps = {}) {
           inputTokens: regularInputTokens,
           outputTokens: messageOutputTokens,
           thinkingTokens,
+          cacheWriteInputTokens: cacheWriteTokens,
           cacheReadInputTokens: cachedInputTokens
         }
       ),
@@ -273,6 +279,7 @@ function buildRequest (envelope, input, instructions) {
   if (envelope.identifier) {
     if (provider === 'openai') {
       request.safety_identifier = envelope.identifier
+      request.prompt_cache_key = envelope.identifier
     } else {
       request.user = envelope.identifier
     }

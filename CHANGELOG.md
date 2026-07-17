@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.117.1] — Chore: bump provider SDK dependencies
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.110.0` → `^0.112.2`
+- `@cerebras/cerebras_cloud_sdk` `^1.61.1` → `^1.91.0`
+- `@google/genai` `^2.11.0` → `^2.12.0`
+- `openai` `^6.46.0` → `^6.48.0`
+
+### Notes
+
+- Dependency maintenance only; no adapter or protocol changes.
+
 ## [0.117.0] — Feat: Anthropic conversation-prefix caching
 
 ### Added

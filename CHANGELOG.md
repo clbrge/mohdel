@@ -4,6 +4,37 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.117.0] — Feat: Anthropic conversation-prefix caching
+
+### Added
+
+- A `cache: '5m' | '1h'` marker on any non-system message part now opts the
+  conversation into prefix caching on the Anthropic adapter. Two
+  `cache_control` breakpoints are placed: one on the last content block (so
+  the next request's prefix covers the whole conversation) and one at the
+  last stable milestone position (block indices ≡ 15 mod 16), which keeps a
+  readable entry within Anthropic's 20-block cache lookback even when a
+  single request appends a large batch of blocks. Replayed history then
+  bills at the cache-read rate instead of full input price on every call.
+  The marker field was already part of the wire protocol
+  (`MessagePart::Text.cache`); providers with automatic caching ignore it.
+
+### Fixed
+
+- Anthropic requests now enforce the provider's 4-breakpoint cap. Over-cap
+  system breakpoints are dropped middle-first (the first and last survive
+  longest), instead of letting a 5-marker system prompt fail the request
+  with a 400. Dropping a breakpoint never changes prompt content — only
+  cache eligibility.
+
+### Notes
+
+- `envelope.cache` stays a boolean (the thin-gate protocol types it
+  `Option<bool>`); the per-part marker carries the TTL.
+- Callers decide when to tag: mark only conversations whose history will be
+  replayed — a tagged single-shot call pays the cache-write premium with
+  nothing ever reading it back.
+
 ## [0.116.1] — Fix: publish workflow pins npm 11
 
 ### Fixed

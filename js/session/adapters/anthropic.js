@@ -90,7 +90,7 @@ export async function * anthropic (envelope, deps = {}) {
   const start = String(process.hrtime.bigint())
   let first = null
 
-  const { system, conversation } = splitPrompt(envelope.prompt)
+  const { system, conversation, conversationCacheTtl } = splitPrompt(envelope.prompt)
 
   // Attach images to the last user message before building the request.
   if (envelope.images?.length) {
@@ -105,7 +105,7 @@ export async function * anthropic (envelope, deps = {}) {
     }
   }
 
-  const request = buildRequest(envelope, conversation, system)
+  const request = buildRequest(envelope, conversation, system, conversationCacheTtl)
 
   // F53: accumulate via array + join to avoid per-delta V8 cons-string
   // churn. Materialized at each exit point.
@@ -303,8 +303,11 @@ function safeParseJson (s) {
  * @param {string | Array<{type: string, text: string, cache_control?: object}>} system
  *   Either a flat string (legacy) or an array of typed blocks with optional
  *   `cache_control` for prompt caching. The Anthropic SDK accepts both shapes.
+ * @param {'5m'|'1h'|null} [conversationCacheTtl]
+ *   When set, place conversation-prefix breakpoints (see
+ *   `applyCacheBreakpoints`).
  */
-function buildRequest (envelope, conversation, system) {
+function buildRequest (envelope, conversation, system, conversationCacheTtl = null) {
   const spec = getSpec(catalogKey(envelope.model))
   const outputTokenLimit = spec?.outputTokenLimit
 
@@ -347,22 +350,106 @@ function buildRequest (envelope, conversation, system) {
     }
   }
 
+  applyCacheBreakpoints(request, conversationCacheTtl)
+
   return request
+}
+
+/** Anthropic caps `cache_control` breakpoints at 4 per request. */
+const MAX_CACHE_BREAKPOINTS = 4
+
+/**
+ * Conversation breakpoints sit at stable block positions (indices
+ * ≡ 15 mod 16) so that consecutive requests share entry positions
+ * even when one request appends more blocks than Anthropic's
+ * 20-block cache lookback covers.
+ */
+const MILESTONE_INTERVAL = 16
+
+/** @param {'5m'|'1h'} ttl */
+function cacheControlFor (ttl) {
+  return ttl === '1h'
+    ? { type: 'ephemeral', ttl: '1h' }
+    : { type: 'ephemeral' }
+}
+
+/**
+ * A `cache: '5m'|'1h'` marker on any non-system message part opts the
+ * conversation into prefix caching. Over-cap system breakpoints are
+ * dropped middle-first: the first one is the most stable read fallback
+ * (volatile blocks like session memory sit later), the last covers the
+ * full system prompt. Dropping a breakpoint never changes prompt
+ * content — only cache eligibility.
+ *
+ * @param {{system?: any, messages: Array<{role: string, content: any}>}} request
+ * @param {'5m'|'1h'|null} conversationTtl
+ */
+function applyCacheBreakpoints (request, conversationTtl) {
+  let messageBreakpoints = 0
+  if (conversationTtl && request.messages.length) {
+    messageBreakpoints = placeConversationBreakpoints(request.messages, conversationTtl)
+  }
+  if (Array.isArray(request.system)) {
+    const marked = request.system.filter(b => b.cache_control)
+    const budget = MAX_CACHE_BREAKPOINTS - messageBreakpoints
+    while (marked.length > budget && marked.length > 0) {
+      const drop = marked.length > 1 ? marked.splice(1, 1)[0] : marked.shift()
+      delete drop.cache_control
+    }
+  }
+}
+
+/**
+ * @param {Array<{role: string, content: any}>} messages
+ * @param {'5m'|'1h'} ttl
+ * @returns {number} breakpoints placed
+ */
+function placeConversationBreakpoints (messages, ttl) {
+  const blockCount = messages.reduce(
+    (n, m) => n + (Array.isArray(m.content) ? m.content.length : 1), 0)
+  if (blockCount === 0) return 0
+  const trailing = blockCount - 1
+  const targets = [trailing]
+  const milestone = MILESTONE_INTERVAL * Math.floor(trailing / MILESTONE_INTERVAL) - 1
+  if (milestone >= 0 && milestone !== trailing) targets.unshift(milestone)
+  let placed = 0
+  let idx = 0
+  for (const m of messages) {
+    const len = Array.isArray(m.content) ? m.content.length : 1
+    for (const t of targets) {
+      if (t >= idx && t < idx + len) {
+        if (!Array.isArray(m.content)) {
+          m.content = [{ type: 'text', text: m.content }]
+        }
+        m.content[t - idx].cache_control = cacheControlFor(ttl)
+        placed++
+      }
+    }
+    idx += len
+  }
+  return placed
 }
 
 /** @param {string | import('#core/envelope.js').Message[]} prompt */
 function splitPrompt (prompt) {
   if (typeof prompt === 'string') {
-    return { system: '', conversation: [{ role: 'user', content: prompt }] }
+    return { system: '', conversation: [{ role: 'user', content: prompt }], conversationCacheTtl: null }
   }
   /** @type {string[]} */
   const systemParts = []
   /** @type {Array<{type: string, text: string, cache_control?: object}>} */
   const systemBlocks = []
   let hasCacheMarkers = false
+  /** @type {'5m'|'1h'|null} */
+  let conversationCacheTtl = null
   /** @type {Array<{role: string, content: any}>} */
   const conversation = []
   for (const m of prompt) {
+    if (m.role !== 'system' && Array.isArray(m.content)) {
+      for (const p of m.content) {
+        if (p?.cache === '5m' || p?.cache === '1h') conversationCacheTtl = p.cache
+      }
+    }
     if (m.role === 'system') {
       // Translate spore-style cache markers ({text, cache: '5m'|'1h'}) into
       // Anthropic's cache_control. Preserves the block boundary that spore
@@ -429,7 +516,7 @@ function splitPrompt (prompt) {
   const system = hasCacheMarkers
     ? systemBlocks
     : systemParts.filter(Boolean).join('\n\n')
-  return { system, conversation }
+  return { system, conversation, conversationCacheTtl }
 }
 
 /** @param {string | import('#core/envelope.js').MessagePart[]} content */

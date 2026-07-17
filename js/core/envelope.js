@@ -113,6 +113,11 @@
  * @typedef {object} MessagePart
  * @property {('text'|'reasoning')} type
  * @property {string} text
+ * @property {('5m'|'1h')} [cache]
+ *   Prompt-cache marker. On system parts: a breakpoint at this block.
+ *   On non-system parts: opts the whole conversation into prefix
+ *   caching (adapter places the breakpoints). Providers with
+ *   automatic caching ignore it.
  */
 
 /**

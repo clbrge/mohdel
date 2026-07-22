@@ -72,6 +72,46 @@ fn done_event_carries_answer_result_in_camel_case() {
 }
 
 #[test]
+fn done_event_accepts_cache_write_1h_input_tokens() {
+    let line = serde_json::to_string(&json!({
+        "type": "done",
+        "result": {
+            "status": "completed",
+            "output": "Hi.",
+            "inputTokens": 10,
+            "outputTokens": 5,
+            "thinkingTokens": 0,
+            "cacheWriteInputTokens": 200,
+            "cacheWrite1hInputTokens": 120,
+            "cacheReadInputTokens": 40,
+            "cost": 0.001,
+            "timestamps": { "start": "1", "first": "2", "end": "3" }
+        }
+    })).unwrap();
+
+    let e: Event = serde_json::from_str(&line).unwrap();
+    let Event::Done { result } = e else { panic!("expected done") };
+    assert_eq!(result.cache_write1h_input_tokens, Some(120));
+    assert_eq!(result.cache_write_input_tokens, Some(200));
+
+    let v = serde_json::to_value(&result).unwrap();
+    assert_eq!(v["cacheWrite1hInputTokens"], 120);
+}
+
+#[test]
+fn done_event_omits_cache_write_1h_when_absent() {
+    let result = AnswerResult {
+        input_tokens: 10,
+        output_tokens: 5,
+        cost: 0.001,
+        timestamps: Timestamps { start: "1".into(), first: "2".into(), end: "3".into() },
+        ..Default::default()
+    };
+    let v = serde_json::to_value(&result).unwrap();
+    assert!(v.get("cacheWrite1hInputTokens").is_none());
+}
+
+#[test]
 fn typed_error_uses_type_on_wire_via_kind_rename() {
     let e = TypedError {
         message: "rpm".into(),

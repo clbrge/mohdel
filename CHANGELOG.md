@@ -4,6 +4,34 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.117.2] — Fix: thin-gate rejected the 1h cache-write counter
+
+### Fixed
+
+- The thin-gate `AnswerResult` deserializer (`rust/thin-gate/src/protocol.rs`)
+  is `deny_unknown_fields` and had no field for `cacheWrite1hInputTokens`. The
+  Anthropic session adapter emits that key on the done result whenever a
+  `cache: '1h'` marker produces a 1h cache write (added in 0.114.0). The gate
+  therefore rejected every such done event as a "session emitted non-Event
+  line", terminating the whole call. This surfaced in production once callers
+  began setting 1h TTL markers on chat prefixes: warm-cache turns failed hard.
+- `AnswerResult` now carries `cacheWrite1hInputTokens` (optional, serialized
+  only when present). Cost is unaffected — it is resolved session-side and
+  already prices the 1h tier; the gate only needed to accept the counter.
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.112.2` → `^0.112.5`
+- `@google/genai` `^2.12.0` → `^2.13.0`
+- `@opentelemetry/exporter-trace-otlp-grpc` `^0.220.0` → `^0.221.0`
+- `@opentelemetry/sdk-node` `^0.220.0` → `^0.221.0`
+- `lint-staged` `^17.0.8` → `^17.1.1` (dev)
+
+### Notes
+
+- No behavior change for callers not using 1h cache markers: the field is
+  absent from those results exactly as before.
+
 ## [0.117.1] — Chore: bump provider SDK dependencies
 
 ### Changed

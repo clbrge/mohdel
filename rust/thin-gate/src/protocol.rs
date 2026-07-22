@@ -294,6 +294,9 @@ pub struct AnswerResult {
     /// counter omit this field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_write_input_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "cacheWrite1hInputTokens")]
+    pub cache_write1h_input_tokens: Option<u32>,
     /// Input tokens served from prompt cache, billed at `cacheReadPrice`.
     /// Optional — providers without prompt caching omit this field.
     #[serde(default, skip_serializing_if = "Option::is_none")]

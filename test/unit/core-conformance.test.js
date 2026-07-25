@@ -18,7 +18,7 @@ const fixturesDir = path.join(here, '..', 'conformance')
 // shape evolves.
 
 const ENVELOPE_ALLOWED = new Set(ENVELOPE_FIELDS)
-const AUTH_ALLOWED = new Set(['key'])
+const AUTH_ALLOWED = new Set(['key', 'baseUrl'])
 const MEDIA_ALLOWED = new Set(['fileUri', 'mimeType'])
 const TOOL_SPEC_ALLOWED = new Set(['name', 'description', 'parameters'])
 const MESSAGE_ALLOWED = new Set(['role', 'content', 'toolCallId', 'toolName', 'toolCalls'])
@@ -28,11 +28,11 @@ const EVENT_ALLOWED = new Set(['type', 'delta', 'result', 'error', 'sinceMs'])
 const DELTA_CHUNK_ALLOWED = new Set(['type', 'delta'])
 const ANSWER_RESULT_ALLOWED = new Set([
   'status', 'output', 'inputTokens', 'outputTokens', 'thinkingTokens',
-  'cacheWriteInputTokens', 'cacheReadInputTokens',
-  'cost', 'timestamps', 'warning', 'toolCalls'
+  'cacheWriteInputTokens', 'cacheWrite1hInputTokens', 'cacheReadInputTokens',
+  'cost', 'timestamps', 'warning', 'toolCalls', 'maxInterFrameMs', 'reasoning'
 ])
 const TIMESTAMPS_ALLOWED = new Set(['start', 'first', 'end'])
-const TOOL_CALL_ALLOWED = new Set(['id', 'name', 'arguments'])
+const TOOL_CALL_ALLOWED = new Set(['id', 'name', 'arguments', 'thoughtSignature'])
 const TYPED_ERROR_ALLOWED = new Set([
   'message', 'detail', 'severity', 'retryable', 'type'
 ])
@@ -287,4 +287,129 @@ describe('unknown-field parity', () => {
     expect(() => assertOnlyKnownKeys(rogue, ANSWER_RESULT_ALLOWED, 'result'))
       .toThrow(/ghostField/)
   })
+})
+
+// ---------- Field-name parity: JS allowlists <-> Rust protocol ----------
+//
+// The allowlists above are a hand-maintained mirror of the
+// `#[serde(deny_unknown_fields)]` structs in
+// `rust/thin-gate/src/protocol.rs`. When the two drift, the JS side
+// stops catching a field the gate will reject (or vice versa) and the
+// mismatch only surfaces as a terminal "non-Event line" in production.
+// This block reparses the Rust source and asserts each allowlist is
+// exactly the set of wire keys its struct accepts, so a drift fails
+// here — before release — instead of in the field.
+
+const protocolSrc = fs.readFileSync(
+  path.join(here, '..', '..', 'rust', 'thin-gate', 'src', 'protocol.rs'),
+  'utf8'
+)
+
+function stripRustComments (src) {
+  return src.split('\n').map(line => {
+    if (line.trim().startsWith('//')) return ''
+    const i = line.indexOf(' //')
+    return i >= 0 ? line.slice(0, i) : line
+  }).join('\n')
+}
+
+function toCamel (s) {
+  return s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase())
+}
+
+function wireName (rustName, attrText, renameAll) {
+  const explicit = (attrText.match(/rename\s*=\s*"([^"]+)"/) || [])[1]
+  if (explicit) return explicit
+  const bare = rustName.replace(/^r#/, '')
+  return renameAll === 'camelCase' ? toCamel(bare) : bare
+}
+
+function braceBody (src, declIdx) {
+  const open = src.indexOf('{', declIdx)
+  let depth = 0
+  for (let k = open; k < src.length; k++) {
+    if (src[k] === '{') depth++
+    else if (src[k] === '}' && --depth === 0) return src.slice(open + 1, k)
+  }
+  throw new Error('unbalanced braces')
+}
+
+function structKeys (body, renameAll) {
+  const keys = new Set()
+  const re = /((?:#\[[\s\S]*?\]\s*)*)pub\s+((?:r#)?\w+)\s*:/g
+  let m
+  while ((m = re.exec(body))) keys.add(wireName(m[2], m[1], renameAll))
+  return keys
+}
+
+function enumKeys (body, containerAttr) {
+  const keys = new Set()
+  const tag = (containerAttr.match(/tag\s*=\s*"([^"]+)"/) || [])[1]
+  if (tag) keys.add(tag)
+  const re = /((?:#\[[\s\S]*?\]\s*)*)((?:r#)?\w+)\s*:/g
+  let m
+  while ((m = re.exec(body))) keys.add(wireName(m[2], m[1], null))
+  return keys
+}
+
+function parseProtocol (src) {
+  const clean = stripRustComments(src)
+  const lines = clean.split('\n')
+  const items = {}
+  let attrs = []
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim()
+    if (t === '') continue
+    if (t.startsWith('#[')) { attrs.push(t); continue }
+    const m = t.match(/^pub (struct|enum) (\w+)/)
+    if (m) {
+      const [, kind, name] = m
+      const attrText = attrs.join(' ')
+      const declIdx = clean.indexOf(lines[i])
+      const body = braceBody(clean, declIdx)
+      const renameAll = (attrText.match(/rename_all\s*=\s*"([^"]+)"/) || [])[1]
+      items[name] = {
+        deny: attrText.includes('deny_unknown_fields'),
+        keys: kind === 'struct' ? structKeys(body, renameAll) : enumKeys(body, attrText)
+      }
+    }
+    attrs = []
+  }
+  return items
+}
+
+describe('field-name parity: JS allowlists <-> Rust protocol', () => {
+  const rust = parseProtocol(protocolSrc)
+
+  const MAP = {
+    CallEnvelope: ENVELOPE_ALLOWED,
+    Auth: AUTH_ALLOWED,
+    MediaRef: MEDIA_ALLOWED,
+    ToolSpec: TOOL_SPEC_ALLOWED,
+    Message: MESSAGE_ALLOWED,
+    Event: EVENT_ALLOWED,
+    DeltaChunk: DELTA_CHUNK_ALLOWED,
+    AnswerResult: ANSWER_RESULT_ALLOWED,
+    Timestamps: TIMESTAMPS_ALLOWED,
+    ToolCall: TOOL_CALL_ALLOWED,
+    TypedError: TYPED_ERROR_ALLOWED,
+    ImageEnvelope: IMAGE_ENVELOPE_ALLOWED,
+    ImageResult: IMAGE_RESULT_ALLOWED,
+    ImageData: IMAGE_DATA_ALLOWED,
+    TranscriptionEnvelope: TRANSCRIPTION_ENVELOPE_ALLOWED,
+    TranscriptionResult: TRANSCRIPTION_RESULT_ALLOWED
+  }
+
+  for (const [rustType, jsAllowed] of Object.entries(MAP)) {
+    test(`${rustType} wire fields match JS allowlist`, () => {
+      const item = rust[rustType]
+      expect(item, `${rustType} not found in protocol.rs`).toBeDefined()
+      expect(item.deny, `${rustType} is not deny_unknown_fields`).toBe(true)
+      const rustKeys = [...item.keys].sort()
+      const jsKeys = [...jsAllowed].sort()
+      const missingInJs = rustKeys.filter(k => !jsAllowed.has(k))
+      const extraInJs = jsKeys.filter(k => !item.keys.has(k))
+      expect({ missingInJs, extraInJs }).toEqual({ missingInJs: [], extraInJs: [] })
+    })
+  }
 })

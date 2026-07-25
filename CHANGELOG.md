@@ -4,6 +4,37 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.117.3] — Test: cross-language field-parity guard for the gate protocol / Chore: bump dependencies
+
+### Added
+
+- Cross-language field-parity test (`test/unit/core-conformance.test.js`) that
+  reparses every `deny_unknown_fields` struct in `protocol.rs` and asserts the
+  JS-side allowlists are exactly the set of wire keys each struct accepts. The
+  0.117.2 outage was exactly this drift — the Anthropic adapter emitted a field
+  the gate struct lacked — so the guard now fails at the pre-release test gate
+  instead of in production.
+
+### Fixed
+
+- Three JS conformance allowlists that had silently drifted from their Rust
+  structs: `Auth` (missing `baseUrl`), `AnswerResult` (missing
+  `cacheWrite1hInputTokens`, `maxInterFrameMs`, `reasoning`), and `ToolCall`
+  (missing `thoughtSignature`). Test-side strictness checks only — no runtime
+  behavior change.
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.112.5` → `^0.115.0`
+- `groq-sdk` `^1.3.0` → `^1.4.0`
+- `openai` `^6.48.0` → `^6.49.0`
+- `lint-staged` (dev) `^17.1.1` → `^17.2.0`
+
+### Notes
+
+- Dependency maintenance plus test-side strictness only; no protocol or
+  adapter changes.
+
 ## [0.117.2] — Fix: thin-gate rejected the 1h cache-write counter
 
 ### Fixed

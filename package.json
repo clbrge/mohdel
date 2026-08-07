@@ -97,7 +97,7 @@
     "env-paths": "^4.0.0",
     "groq-sdk": "^1.4.0",
     "openai": "^6.49.0",
-    "undici": "^7.24.5"
+    "undici": "^7.29.0"
   },
   "lint-staged": {
     "*.{js,cjs}": "standard"

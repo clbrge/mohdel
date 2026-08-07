@@ -74,18 +74,7 @@ const providers = {
   openrouter: {
     sdk: 'openrouter',
     apiKeyEnv: 'OPENROUTER_API_SK',
-    createConfiguration: apiKey => {
-      // Optional OpenRouter attribution headers — only sent when the
-      // embedder opts in via env. No defaults.
-      const defaultHeaders = {}
-      if (process.env.OPENROUTER_REFERER) defaultHeaders['HTTP-Referer'] = process.env.OPENROUTER_REFERER
-      if (process.env.OPENROUTER_TITLE) defaultHeaders['X-Title'] = process.env.OPENROUTER_TITLE
-      return {
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey,
-        defaultHeaders
-      }
-    },
+    createConfiguration: apiKey => ({ baseURL: 'https://openrouter.ai/api/v1', apiKey }),
     creators: []
   },
   qwen: {

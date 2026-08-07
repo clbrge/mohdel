@@ -4,6 +4,46 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.118.1] — Fix: every factory-path OpenRouter call threw before the network / Security: clear dependency advisories
+
+### Security
+
+- Cleared all three high-severity advisories in the production dependency
+  tree; `npm audit --omit=dev` now reports zero.
+  - **`undici` `^7.24.5` → `^7.29.0`** (5 CVEs: downstream response
+    desynchronization via the retry interceptor, cross-user information
+    disclosure and parse-time crash on degenerate private cache directives,
+    CRLF injection via a blob-like body `type`, cross-user disclosure via
+    whitespace in `Cache-Control`, cookie attribute injection). This is the
+    one that needed a declared-range change: `undici` is a direct dependency
+    driving `js/session/adapters/_dispatcher.js`, so it carries every
+    streaming provider call, and a consumer resolving `^7.24.5` could land on
+    a vulnerable 7.28.0 regardless of this repo's lockfile.
+  - `ws` 8.20.0 → 8.21.2 (uninitialized memory disclosure, memory-exhaustion
+    DoS) and `form-data` 4.0.5 → 4.0.6 (CRLF injection), both transitive and
+    both already permitted by their parents' ranges — lockfile only.
+
+### Fixed
+
+- `providers.openrouter.createConfiguration()` returned a `defaultHeaders` key
+  unconditionally — the `OPENROUTER_REFERER` / `OPENROUTER_TITLE` guards chose
+  what went *inside* the object, not whether it existed. The factory bridge
+  allowlists `apiKey` and `baseURL` only, so **every** `mohdel().use('openrouter/…')
+  .answer()` and `mo ask` against an OpenRouter model threw
+  `CONFIGURATION_UNSUPPORTED` before reaching the network, whether or not the
+  attribution vars were set. The gate/client path was unaffected.
+  `js/session/adapters/openrouter.js` already builds these headers from the
+  same env vars and additionally runs them through `sanitizeHeader()`, so the
+  removed copy was both unreachable and the less safe of the two.
+
+### Added
+
+- `test/unit/provider-config-bridge.test.js` — feeds every provider's
+  `createConfiguration()` output through the bridge's real `configToAuth()`.
+  Both sides of this join were already tested in isolation, which is why the
+  break shipped; the new test fails the moment any provider emits a config key
+  the bridge does not accept.
+
 ## [0.118.0] — Security: local-media confinement, bounded enforcer state / Breaking: one error type
 
 ### Security

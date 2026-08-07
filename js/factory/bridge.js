@@ -281,7 +281,7 @@ function newCallId () {
  */
 const ALLOWED_CONFIG_KEYS = new Set(['apiKey', 'baseURL'])
 
-function configToAuth (configuration) {
+export function configToAuth (configuration) {
   if (!configuration) return { key: '' }
   const unsupported = Object.keys(configuration).filter(k => !ALLOWED_CONFIG_KEYS.has(k))
   if (unsupported.length > 0) {

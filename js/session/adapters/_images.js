@@ -11,10 +11,16 @@
  * provider. Errors are surfaced — file IO failures bubble up so the
  * adapter can emit a typed error rather than silently skipping.
  *
+ * Local paths are resolved through `_media.js`, which owns symlink
+ * resolution, the `MOHDEL_MEDIA_ROOTS` confinement check and the read
+ * cap.
+ *
  * @module session/adapters/_images
  */
 
-import { readFile } from 'node:fs/promises'
+import { dataUriPayload, mediaError, mediaScheme, readLocalMedia } from './_media.js'
+
+const IMAGE_ERROR = 'SESSION_INVALID_IMAGE'
 
 /**
  * @typedef {object} LoadedImage
@@ -25,36 +31,39 @@ import { readFile } from 'node:fs/promises'
 
 /**
  * @param {Array<{fileUri: string, mimeType: string}>} images
+ * @param {{trusted?: boolean}} [opts]
  * @returns {Promise<LoadedImage[]>}
  */
-export async function loadImages (images) {
+export async function loadImages (images, opts = {}) {
   if (!images || !Array.isArray(images)) return []
   const out = []
   for (const img of images) {
     if (!img?.fileUri || !img?.mimeType) continue
-    out.push(await loadImage(img))
+    out.push(await loadImage(img, opts))
   }
   return out
 }
 
 /**
  * @param {{fileUri: string, mimeType: string}} image
+ * @param {{trusted?: boolean}} [opts]
  * @returns {Promise<LoadedImage>}
  */
-export async function loadImage (image) {
+export async function loadImage (image, opts = {}) {
   const { fileUri, mimeType } = image
-  if (fileUri.startsWith('file://')) {
-    const path = fileUri.replace(/^file:\/\//, '')
-    const buf = await readFile(path)
-    return { mimeType, base64: buf.toString('base64') }
+  switch (mediaScheme(fileUri)) {
+    case 'file': {
+      const { bytes } = await readLocalMedia(fileUri, { type: IMAGE_ERROR, trusted: opts.trusted })
+      return { mimeType, base64: bytes.toString('base64') }
+    }
+    case 'data':
+      return { mimeType, base64: dataUriPayload(fileUri, IMAGE_ERROR) }
+    case 'remote':
+      return { mimeType, url: fileUri }
+    default:
+      throw mediaError(
+        `unsupported image URI scheme: ${fileUri.slice(0, 32)}…`,
+        IMAGE_ERROR
+      )
   }
-  if (fileUri.startsWith('data:')) {
-    const parts = fileUri.split(',')
-    if (parts.length > 1) return { mimeType, base64: parts[1] }
-    throw new Error(`malformed data URI: ${fileUri.slice(0, 32)}…`)
-  }
-  if (fileUri.startsWith('https://') || fileUri.startsWith('http://')) {
-    return { mimeType, url: fileUri }
-  }
-  throw new Error(`unsupported image URI scheme: ${fileUri.slice(0, 32)}…`)
 }

@@ -24,12 +24,39 @@ pub struct CooldownInfo {
 struct Entry {
     fail_count: u32,
     until_ms: u64,
+    updated_ms: u64,
     reason: &'static str,
 }
 
 #[derive(Debug, Default)]
 pub struct CooldownTracker {
     entries: Mutex<HashMap<String, Entry>>,
+}
+
+/// Cap on distinct keys held at once. `key` embeds the caller-supplied
+/// `authId`, so without a cap a caller rotating it grows the map for
+/// the process lifetime.
+pub const MAX_TRACKED_KEYS: usize = 100_000;
+
+/// How long an entry survives with no further failures. Entries below
+/// the trigger threshold have no `until_ms` to expire against, so
+/// nothing else would ever remove them.
+const IDLE_TTL_MS: u64 = 15 * 60 * 1_000;
+
+fn admit(entries: &mut HashMap<String, Entry>, key: &str, now: u64) -> bool {
+    if entries.contains_key(key) || entries.len() < MAX_TRACKED_KEYS {
+        return true;
+    }
+    entries.retain(|_, e| {
+        let expired = e.until_ms != 0 && now >= e.until_ms;
+        let idle = now.saturating_sub(e.updated_ms) > IDLE_TTL_MS;
+        !expired && !idle
+    });
+    if entries.len() >= MAX_TRACKED_KEYS {
+        crate::metrics::enforcer_keyspace_full("cooldown");
+        return false;
+    }
+    true
 }
 
 impl CooldownTracker {
@@ -74,11 +101,15 @@ impl CooldownTracker {
         immediate: bool,
     ) -> bool {
         let mut entries = self.entries.lock().expect("cooldown mutex poisoned");
+        let now = now_ms();
+        if !admit(&mut entries, key, now) {
+            return false;
+        }
         let entry = entries.entry(key.to_string()).or_default();
         entry.fail_count = entry.fail_count.saturating_add(1);
+        entry.updated_ms = now;
         let should_trigger = immediate || entry.fail_count >= threshold;
         if should_trigger {
-            let now = now_ms();
             if entry.until_ms == 0 || now >= entry.until_ms {
                 entry.until_ms = now + duration.as_millis() as u64;
                 entry.reason = if immediate { "auth" } else { "consecutive_failures" };
@@ -153,7 +184,7 @@ mod tests {
         assert!(cd.cooling_down("u|p").is_none());
     }
 
-    /// F5 regression: late failures during an active cooldown must
+    /// Regression: late failures during an active cooldown must
     /// not push the deadline forward. Without this freeze, concurrent
     /// calls racing past the pre-dispatch check would keep extending
     /// the window and the user would effectively never recover.
@@ -217,5 +248,67 @@ mod tests {
         // New deadline is set (non-zero and in the future)
         let info = cd.cooling_down("u|p").expect("freshly active");
         assert!(info.seconds_left <= 1);
+    }
+
+    fn fill(cd: &CooldownTracker, entry: Entry) {
+        let mut entries = cd.entries.lock().unwrap();
+        for i in 0..MAX_TRACKED_KEYS {
+            entries.insert(format!("k{i}|p"), entry.clone());
+        }
+    }
+
+    /// Entries below the trigger threshold never get an `until_ms`,
+    /// so idle age is the only thing that can retire them.
+    #[test]
+    fn cap_sweeps_idle_entries() {
+        let cd = CooldownTracker::new();
+        let stale = now_ms().saturating_sub(IDLE_TTL_MS + 1);
+        fill(&cd, Entry { fail_count: 1, until_ms: 0, updated_ms: stale, reason: "" });
+
+        assert!(!cd.record_failure("fresh|p", 3, Duration::from_secs(60), false));
+        assert_eq!(cd.entries.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn cap_sweeps_expired_cooldowns() {
+        let cd = CooldownTracker::new();
+        let now = now_ms();
+        fill(
+            &cd,
+            Entry { fail_count: 9, until_ms: now - 1, updated_ms: now, reason: "auth" },
+        );
+
+        assert!(cd.record_failure("fresh|p", 1, Duration::from_secs(60), true));
+        assert_eq!(cd.entries.lock().unwrap().len(), 1);
+    }
+
+    /// Full of live, recently-touched entries: the new key goes
+    /// untracked rather than evicting someone else's active cooldown.
+    #[test]
+    fn cap_refuses_new_key_when_nothing_is_sweepable() {
+        let cd = CooldownTracker::new();
+        let now = now_ms();
+        fill(
+            &cd,
+            Entry { fail_count: 1, until_ms: now + 60_000, updated_ms: now, reason: "auth" },
+        );
+
+        assert!(!cd.record_failure("fresh|p", 1, Duration::from_secs(60), true));
+        assert_eq!(cd.entries.lock().unwrap().len(), MAX_TRACKED_KEYS);
+        assert!(cd.cooling_down("fresh|p").is_none());
+    }
+
+    #[test]
+    fn cap_does_not_affect_already_tracked_keys() {
+        let cd = CooldownTracker::new();
+        let now = now_ms();
+        fill(
+            &cd,
+            Entry { fail_count: 0, until_ms: now + 60_000, updated_ms: now, reason: "auth" },
+        );
+
+        assert!(cd.cooling_down("k0|p").is_some());
+        cd.reset("k0|p");
+        assert!(cd.cooling_down("k0|p").is_none());
     }
 }

@@ -27,6 +27,7 @@ import { cancelledDone } from './_cancelled.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
+import { isTrustedMedia } from './_media.js'
 import { costFor } from './_pricing.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 import {
@@ -95,19 +96,20 @@ export async function * anthropic (envelope, deps = {}) {
   // Attach images to the last user message before building the request.
   if (envelope.images?.length) {
     try {
-      const loaded = await loadImages(envelope.images)
+      const loaded = await loadImages(envelope.images, { trusted: isTrustedMedia(envelope) })
       const blocks = loaded.map(toAnthropicImageBlock).filter(Boolean)
       if (blocks.length) injectImageBlocks(conversation, blocks)
     } catch (e) {
       log?.warn({ err: e }, '[mohdel:anthropic] image load failed')
-      yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: 'anthropic' }) }
+      const typed = /** @type {any} */(e).typed
+      yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'anthropic' }) }
       return
     }
   }
 
   const request = buildRequest(envelope, conversation, system, conversationCacheTtl)
 
-  // F53: accumulate via array + join to avoid per-delta V8 cons-string
+  // Accumulate via array + join to avoid per-delta V8 cons-string
   // churn. Materialized at each exit point.
   const outputParts = []
   const currentOutput = () => outputParts.join('')

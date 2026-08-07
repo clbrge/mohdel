@@ -179,7 +179,7 @@ Every call emits:
 
 - **OpenTelemetry span** (`mohdel.session.answer`) under the caller's `traceparent`, with GenAI semantic-convention attributes (`gen_ai.request.model`, `gen_ai.system`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`) plus mohdel's own (`mohdel.status`, `mohdel.cost`, `mohdel.thinking_tokens`, `mohdel.time_to_first_token_ms`, `mohdel.cooldown` on fast-fail).
 - **Trace-linked logs** — every stderr log line carries `{traceId, spanId, callId, authId, provider, model}`. Dump logs + traces into the same collector (SigNoz, Honeycomb, Jaeger + Loki) and they're correlated for free. No per-call instrumentation code.
-- **Gate-side OTLP metrics** (when running `thin-gate`): `mohdel.sessions.{alive,respawned,spawn_failures}`, `mohdel.calls{provider,status}`, `mohdel.call.duration_ms`, `mohdel.cooldown.rejections`, `mohdel.quota.rejections`, `mohdel.policy.errors`.
+- **Gate-side OTLP metrics** (when running `thin-gate`): `mohdel.sessions.{alive,respawned,spawn_failures}`, `mohdel.calls{provider,status}`, `mohdel.call.duration_ms`, `mohdel.cooldown.rejections`, `mohdel.quota.rejections`, `mohdel.policy.errors`, `mohdel.enforcer.keyspace_full{map}`. The `provider` attribute is folded to `other` for anything outside mohdel's provider set, so a caller can't mint metric series by varying the model prefix.
 
 One endpoint for everything: set `OTEL_EXPORTER_OTLP_ENDPOINT` and spans + metrics flow to it over gRPC. No-op when unset — zero overhead for callers who aren't wired. See [INTEGRATION.md §OpenTelemetry](INTEGRATION.md#opentelemetry) and [LOGGING.md](LOGGING.md) for details.
 
@@ -240,7 +240,7 @@ Wire format is JSON over NDJSON frames, camelCase. Types are defined in `js/core
 - **`AnswerResult`** — `status`, `output`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cost` (single number), `timestamps`, `warning?`, `toolCalls?`.
 - **`Status`** — `'completed' | 'tool_use' | 'incomplete'`.
 - **`Warning`** — additive string union: `'insufficientOutputBudget'`, `'cancelled'`, ...
-- **`TypedError`** — `{ message, detail?, severity, retryable, type }`. `message` is a stable machine key; `detail` is user-facing context; `severity` is `'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'`; `type` is an optional canonical tag (e.g. `'AUTH_INVALID'`, `'PROVIDER_COOLDOWN'`).
+- **`TypedError`** — `{ message, detail?, severity, retryable, type }`. `type` is the canonical tag callers branch on (e.g. `'AUTH_INVALID'`, `'PROVIDER_COOLDOWN'`), optional on the wire; `message` is a short human-readable label; `detail` is the provider's own rejection text; `severity` is `'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'`.
 
 A `cancel` control message `{ op: "cancel", callId }` on session stdin aborts the matching in-flight call.
 

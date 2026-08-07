@@ -1,7 +1,8 @@
 //! Unit tests on serde formatting for the 3-event protocol.
 
 use mohdel_thin_gate::protocol::{
-    AnswerResult, DeltaChunk, DeltaKind, Event, Severity, Status, Timestamps, TypedError,
+    validate_ids, AnswerResult, DeltaChunk, DeltaKind, Event, Severity, Status, Timestamps,
+    TypedError, MAX_ID_BYTES, MAX_MODEL_BYTES, MAX_PROVIDER_BYTES,
 };
 use serde_json::json;
 
@@ -141,4 +142,39 @@ fn error_event_wire_shape() {
     assert_eq!(v["type"], "error");
     assert_eq!(v["error"]["message"], "bad");
     assert_eq!(v["error"]["detail"], "more info");
+}
+
+#[test]
+fn validate_ids_accepts_ordinary_envelopes() {
+    assert!(validate_ids("call-1", "user-1", "anthropic/claude-opus-4:high").is_ok());
+    assert!(validate_ids("", "", "openai/gpt-5").is_ok());
+}
+
+#[test]
+fn validate_ids_rejects_oversized_identity_fields() {
+    let long = "x".repeat(MAX_ID_BYTES + 1);
+    assert!(validate_ids(&long, "u", "openai/gpt-5").is_err());
+    assert!(validate_ids("c", &long, "openai/gpt-5").is_err());
+
+    let long_model = format!("openai/{}", "x".repeat(MAX_MODEL_BYTES));
+    assert!(validate_ids("c", "u", &long_model).is_err());
+
+    let long_provider = format!("{}/gpt-5", "p".repeat(MAX_PROVIDER_BYTES + 1));
+    assert!(validate_ids("c", "u", &long_provider).is_err());
+}
+
+#[test]
+fn validate_ids_rejects_malformed_model_ids() {
+    assert!(validate_ids("c", "u", "gpt-5").is_err());
+    assert!(validate_ids("c", "u", "openai/").is_err());
+    assert!(validate_ids("c", "u", "/gpt-5").is_err());
+}
+
+/// The reason is echoed into an error `detail`, so it must stay within
+/// the caps rather than reflecting an unbounded body back at the caller.
+#[test]
+fn validate_ids_reason_is_bounded() {
+    let long_model = format!("openai/{}", "x".repeat(1_000_000));
+    let reason = validate_ids("c", "u", &long_model).unwrap_err();
+    assert!(reason.len() < 200, "reason was {} bytes", reason.len());
 }

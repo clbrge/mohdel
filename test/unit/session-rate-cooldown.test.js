@@ -130,7 +130,7 @@ describe('session/run — cooldown enforcement', () => {
     expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
   })
 
-  // F9 regression: a cancelled `done` terminal must NOT wipe an
+  // Regression: a cancelled `done` terminal must NOT wipe an
   // accumulated failure streak. Cancel is caller-side; it says
   // nothing about provider recovery.
   test('cancelled done does not reset cooldown failure count', async () => {
@@ -291,7 +291,7 @@ describe('session/run — rate-limit enforcement', () => {
     expect(fx.limiter.check('acme', { tpmLimit: 1 })).toBe(0)
   })
 
-  // F6: `0` is a killswitch (deny all), not "unset".
+  // `0` is a killswitch (deny all), not "unset".
   test('spec.rpmLimit=0 denies the very first call (killswitch)', async () => {
     const fx = fixtures({ spec: { rpmLimit: 0 } })
     await collect(run(envelope(), {
@@ -334,7 +334,7 @@ describe('session/run — rate-limit enforcement', () => {
   })
 })
 
-describe('createCooldownTracker — window freeze (F5 regression)', () => {
+describe('createCooldownTracker — window freeze (regression)', () => {
   afterEach(() => { vi.useRealTimers() })
 
   test('late failures during active window do not push deadline forward', () => {

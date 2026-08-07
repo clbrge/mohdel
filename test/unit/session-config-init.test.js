@@ -11,7 +11,7 @@ import {
   initProvidersFromDefault
 } from '../../js/session/adapters/_providers.js'
 
-// F17: eager async init from bin.js must be idempotent and must not
+// Eager async init from bin.js must be idempotent and must not
 // clobber a prior setCatalog/setProviders (tests).
 
 describe('catalog eager init', () => {

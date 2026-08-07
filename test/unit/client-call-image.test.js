@@ -6,7 +6,7 @@ import os from 'node:os'
 
 import { callImage } from '../../js/client/call_image.js'
 
-// F25: one-shot image path: POST /v1/image → single JSON body.
+// One-shot image path: POST /v1/image → single JSON body.
 
 /** @type {http.Server} */
 let server

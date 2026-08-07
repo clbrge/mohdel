@@ -8,7 +8,7 @@
  */
 
 import { requestUnix } from './transport.js'
-import { MohdelTypedError } from '#core'
+import { MohdelError } from '#core'
 
 /**
  * @param {import('#core/image.js').ImageEnvelope} envelope
@@ -30,21 +30,21 @@ export async function callImage (envelope, { socketPath, signal, path = '/v1/ima
   const body = await readAll(res)
 
   if (res.statusCode !== 200) {
-    throw MohdelTypedError.fromJSON(parseErrorBody(body, res.statusCode ?? 0))
+    throw MohdelError.fromJSON(parseErrorBody(body, res.statusCode ?? 0))
   }
 
   let parsed
   try {
     parsed = JSON.parse(body)
   } catch (e) {
-    throw new MohdelTypedError(
+    throw new MohdelError(
       'thin-gate returned non-JSON image response',
       { type: 'PROTOCOL_INVALID_EVENT', retryable: false }
     )
   }
 
   if (!parsed || typeof parsed !== 'object' || parsed.status !== 'completed' || !Array.isArray(parsed.images)) {
-    throw new MohdelTypedError(
+    throw new MohdelError(
       'thin-gate returned malformed ImageResult',
       { type: 'PROTOCOL_INVALID_EVENT', retryable: false }
     )
@@ -77,6 +77,7 @@ function parseErrorBody (body, status) {
   return {
     type: 'PROTOCOL_HTTP_ERROR',
     message: `thin-gate returned HTTP ${status}`,
+    severity: 'error',
     retryable: status >= 500
   }
 }

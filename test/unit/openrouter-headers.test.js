@@ -2,12 +2,12 @@ import { describe, test, expect } from 'vitest'
 
 import { sanitizeHeader } from '../../js/session/adapters/openrouter.js'
 
-// F47: `HTTP-Referer` and `X-Title` are env-sourced. Node rejects
+// `HTTP-Referer` and `X-Title` are env-sourced. Node rejects
 // CRLF in header values at send time (throws TypeError), but that
 // failure mode is "adapter crashes" not "adapter works safely."
 // Strip CRLF before passing to the SDK.
 
-describe('openrouter sanitizeHeader (F47)', () => {
+describe('openrouter sanitizeHeader', () => {
   test('passes through a clean value unchanged', () => {
     expect(sanitizeHeader('https://example.com')).toBe('https://example.com')
   })

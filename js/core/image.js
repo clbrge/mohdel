@@ -17,7 +17,7 @@
  * @property {string} [traceparent]
  * @property {string} [baggage]
  *
- * @property {import('./model-id.js').ModelId} model
+ * @property {string} model
  *   Full mohdel id — `"<provider>/<bare>"`. Same shape as
  *   `CallEnvelope.model` (see `envelope.js`). No separate `provider`
  *   field.

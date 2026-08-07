@@ -79,9 +79,9 @@ describe('_logger', () => {
   })
 
   test('Error instances are flattened to {message, name, status?} — no stack at warn', () => {
-    // F22: at warn and higher-severity levels (production default),
-    // drop err.stack because some SDKs synthesize Errors carrying
-    // request bodies / auth tokens in the stack trace.
+    // At warn and higher-severity levels (production default), drop
+    // err.stack because some SDKs synthesize Errors carrying request
+    // bodies / auth tokens in the stack trace.
     const { lines, stream } = captureStream()
     const logger = createLogger({ level: 'warn', stream })
     const e = Object.assign(new Error('boom'), { status: 500 })
@@ -91,7 +91,7 @@ describe('_logger', () => {
     expect(lines[0].err.stack).toBeUndefined()
   })
 
-  test('F22: stack is kept at debug/trace (opt-in verbose levels)', () => {
+  test('stack is kept at debug/trace (opt-in verbose levels)', () => {
     const { lines, stream } = captureStream()
     const logger = createLogger({ level: 'trace', stream })
     const e = new Error('debug-me')
@@ -109,7 +109,7 @@ describe('_logger', () => {
     expect(byMsg['error-line'].err.stack).toBeUndefined()
   })
 
-  test('F22: a stack carrying a fake Bearer token is not emitted at warn', () => {
+  test('a stack carrying a fake Bearer token is not emitted at warn', () => {
     // Regression fixture: simulate an SDK that synthesizes an error
     // whose stack includes an auth header.
     const { lines, stream } = captureStream()

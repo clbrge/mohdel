@@ -18,11 +18,11 @@
  * @module session/adapters/transcription/openai_compatible
  */
 
-import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 
 import { getSpec } from '../_catalog.js'
 import { classifyProviderError } from '../_errors.js'
+import { dataUriPayload, isTrustedMedia, mediaScheme, readLocalMedia } from '../_media.js'
 import { computeTranscriptionCost } from '../_pricing.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 
@@ -39,7 +39,7 @@ export function createTranscriptionAdapter ({ baseURL, responseFormat }) {
     const spec = deps.spec ?? getSpec(catalogKey(envelope.model)) ?? {}
     const start = String(process.hrtime.bigint())
 
-    const audio = await loadAudio(envelope.audio)
+    const audio = await loadAudio(envelope.audio, { trusted: isTrustedMedia(envelope) })
 
     const form = new FormData()
     form.append('model', spec.model ?? bareOf(envelope.model))
@@ -124,30 +124,25 @@ const EXT_BY_MIME = {
  * downloading arbitrary URLs; the caller owns that step.
  *
  * @param {import('#core/transcription.js').AudioRef} audio
+ * @param {{trusted?: boolean}} [opts]
  * @returns {Promise<{bytes: Buffer, mimeType: string, filename: string}>}
  */
-export async function loadAudio (audio) {
+export async function loadAudio (audio, opts = {}) {
   if (!audio?.fileUri || !audio?.mimeType) {
     throw typedError('transcription requires audio {fileUri, mimeType}', 'SESSION_INVALID_AUDIO', false)
   }
   const { fileUri, mimeType } = audio
-  if (fileUri.startsWith('file://')) {
-    const path = fileUri.replace(/^file:\/\//, '')
-    let bytes
-    try {
-      bytes = await readFile(path)
-    } catch (e) {
-      throw typedError('audio file unreadable', 'SESSION_INVALID_AUDIO', false, messageOf(e))
-    }
+  if (mediaScheme(fileUri) === 'file') {
+    const { path, bytes } = await readLocalMedia(fileUri, {
+      type: 'SESSION_INVALID_AUDIO',
+      trusted: opts.trusted
+    })
     return { bytes, mimeType, filename: basename(path) }
   }
-  if (fileUri.startsWith('data:')) {
-    const parts = fileUri.split(',')
-    if (parts.length < 2) {
-      throw typedError('malformed audio data URI', 'SESSION_INVALID_AUDIO', false)
-    }
+  if (mediaScheme(fileUri) === 'data') {
     const ext = EXT_BY_MIME[mimeType] || mimeType.split('/').pop() || 'bin'
-    return { bytes: Buffer.from(parts[1], 'base64'), mimeType, filename: `audio.${ext}` }
+    const payload = dataUriPayload(fileUri, 'SESSION_INVALID_AUDIO')
+    return { bytes: Buffer.from(payload, 'base64'), mimeType, filename: `audio.${ext}` }
   }
   throw typedError(
     `unsupported audio URI scheme: ${fileUri.slice(0, 32)}…`,
@@ -159,7 +154,7 @@ export async function loadAudio (audio) {
 function fromHttpStatus (status, message, detail) {
   const typed = classifyProviderError({ status })
   // Keep the classifier's message (stable/machine-readable); response
-  // body snippets go to `detail` only (F45).
+  // body snippets go to `detail` only.
   return typedError(typed.message, typed.type, typed.retryable, detail ? `${message}: ${detail}` : message)
 }
 
@@ -169,9 +164,4 @@ function typedError (message, type, retryable, detail) {
   if (detail) typed.detail = detail
   err.typed = typed
   return err
-}
-
-/** @param {unknown} e */
-function messageOf (e) {
-  return e instanceof Error ? e.message : String(e)
 }

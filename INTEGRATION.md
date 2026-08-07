@@ -58,6 +58,9 @@ Env overrides:
 - `MOHDEL_SESSION_POOL_SIZE` — pre-warmed subprocess count (default 2)
 - `MOHDEL_LOG_LEVEL` — `trace|debug|info|warn|error|silent` (session stderr)
 - `MOHDEL_VERBOSITY` — 0/1/2 per LOGGING.md
+- `MOHDEL_MEDIA_ROOTS` — `PATH`-style list of directories that `file://`
+  media may be read from. Unset means any readable path. Set this on any
+  gate whose callers you don't fully trust — see [Local media](#local-media)
 - `OTEL_EXPORTER_OTLP_ENDPOINT` — enables span + metric export to your OTel collector
 
 Without a session-bin configured, the data plane returns a synthetic event sequence (demo mode — useful for health-checking the HTTP layer without Node).
@@ -233,7 +236,16 @@ curl --unix-socket /tmp/mohdel-admin.sock http://unix/v1/health
 # {"status":"ok","version":"0.90.0","uptime_ms":12345}
 ```
 
-With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the gate pushes OTLP metrics alongside session spans. Operators see `mohdel.sessions.alive`, `mohdel.calls{provider,status}`, `mohdel.call.duration_ms`, `mohdel.cooldown.rejections`, and `mohdel.quota.rejections` in the same collector as their trace data.
+With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the gate pushes OTLP metrics alongside session spans. Operators see `mohdel.sessions.alive`, `mohdel.calls{provider,status}`, `mohdel.call.duration_ms`, `mohdel.cooldown.rejections`, `mohdel.quota.rejections`, and `mohdel.enforcer.keyspace_full{map}` in the same collector as their trace data.
+
+`provider` is derived from the caller's `model`, so it is folded to `other` for anything outside mohdel's provider set — otherwise a caller could mint one metric series per request by varying the prefix. A provider added to `src/lib/providers.js` shows up as `other` until it is added to `KNOWN_PROVIDERS` in `rust/thin-gate/src/metrics.rs`; `test/unit/gate-provider-labels.test.js` fails when the two drift.
+
+## Envelope limits
+
+The gate rejects an envelope with `PROTOCOL_INVALID_ENVELOPE` (400) when `callId` or `authId` exceeds 128 bytes, `model` exceeds 256 bytes, or the provider half of `model` exceeds 32 bytes. `model` must be `<provider>/<id>` with both halves non-empty.
+
+These fields become rate-limiter keys, cooldown keys, and telemetry attributes, so they are bounded well below the 16 MB body cap. The enforcer additionally holds at most 100,000 distinct keys per map. On reaching that cap it sweeps stale minute-buckets and expired or idle cooldowns; if nothing is reclaimable, a *new* key is refused (rate-limit responses say retry next minute, when the buckets roll over) rather than evicting a live one. Already-tracked keys are unaffected. Each refusal increments `mohdel.enforcer.keyspace_full`.
+
 ---
 
 # Factory (in-process) — shortcut for single-process consumers
@@ -495,7 +507,7 @@ All adapters emit delta events. The factory bridge pipes them into the handler i
 
 ```js
 const response = await model.answer('Describe this image.', {
-  images: [{ fileUri: '/absolute/path/to/image.jpg', mimeType: 'image/jpeg' }]
+  images: [{ fileUri: 'file:///absolute/path/to/image.jpg', mimeType: 'image/jpeg' }]
 })
 ```
 
@@ -503,6 +515,9 @@ URI schemes:
 - `file:///absolute/path` — read from disk, base64-encoded
 - `data:image/png;base64,...` — inline
 - `https://...` — passed through for the provider to fetch
+
+A scheme is required. Bare filesystem paths are rejected — see
+[Local media](#local-media) for how `file://` reads are bounded.
 
 Supported by: Anthropic, OpenAI, Gemini, xAI, Cerebras, OpenRouter (model-dependent).
 
@@ -542,7 +557,9 @@ Effort levels are per-model — look at the curated spec's `thinkingEffortLevels
 
 ## Error handling
 
-Errors surface as `MohdelError` with typed `message`, `detail`, `severity`, `retryable`:
+Errors surface as `MohdelError` — the same error the gate serializes as a
+`TypedError`. Branch on `type`; `message` is a short label and `detail` carries
+the provider's own rejection text:
 
 ```js
 import { MohdelError } from 'mohdel/errors'
@@ -551,9 +568,9 @@ try {
   const response = await model.answer(prompt)
 } catch (err) {
   if (err instanceof MohdelError) {
-    if (err.message === 'PROVIDER_COOLDOWN') {
+    if (err.type === 'PROVIDER_COOLDOWN') {
       // backed off after consecutive failures; err.retryable === true
-    } else if (err.message === 'AUTH_INVALID') {
+    } else if (err.type === 'AUTH_INVALID') {
       // 401/403; err.retryable === false
     } else if (err.retryable) {
       // transient — network error, 5xx, rate limit
@@ -561,6 +578,9 @@ try {
   }
 }
 ```
+
+`err.toJSON()` emits exactly the `TypedError` wire shape. `err.context`
+(`{provider, model, modelKey}`) is in-process only and never serialized.
 
 Common error types: `AUTH_INVALID`, `RATE_LIMIT`, `QUOTA_EXHAUSTED`, `PROVIDER_UNAVAILABLE`, `PROVIDER_ERROR`, `CONTEXT_OVERFLOW`, `CONTENT_BLOCKED`, `NET_ERROR`, `PROVIDER_COOLDOWN`.
 
@@ -632,6 +652,49 @@ const result = await callTranscription({
 share a filesystem with whatever produced the path. `data:` URIs carry
 the bytes inline instead, subject to the gate's 16 MiB body cap —
 fine for short clips, not for long recordings.
+
+## Local media
+
+`images[]`, `videos[]` and transcription `audio` all accept a `fileUri`,
+and a `file://` one is read by the **session process**, with that
+process's filesystem privileges. In-process (factory, `mo`) the caller
+is you, so this is just reading your own disk. Behind a gate, the
+`fileUri` came off the data socket — treat it as untrusted input.
+
+Every local read is resolved through one path, which:
+
+- requires an explicit scheme; bare filesystem paths are rejected
+- follows symlinks, then confines the **resolved** path to
+  `MOHDEL_MEDIA_ROOTS` when that variable is set
+- rejects anything that isn't a regular file, so a character device
+  such as `/dev/zero` can't be read without end
+- rejects files over 64 MiB (the video upload path streams instead, so
+  large clips are unaffected)
+
+Whether a `file://` read is permitted at all depends on where the
+envelope came from:
+
+|                          | `MOHDEL_MEDIA_ROOTS` unset | set                  |
+|--------------------------|----------------------------|----------------------|
+| In-process (factory, CLI)| any readable path          | inside a root only   |
+| Envelope off the wire    | **denied**                 | inside a root only   |
+
+An envelope built in-process is marked as trusted with a JS `Symbol`.
+`JSON.parse` cannot produce a symbol key, so an envelope arriving over
+a socket can never carry that mark however it is crafted — there is no
+field a caller can set to grant itself local reads.
+
+To serve `file://` media through a gate, name the directories:
+
+```bash
+MOHDEL_MEDIA_ROOTS=/srv/media:/var/uploads ./mohdel-thin-gate
+```
+
+Otherwise gate callers should send `data:` URIs, which carry the bytes
+inline and are bounded by the 16 MiB body cap.
+
+Failures surface as `SESSION_INVALID_IMAGE` / `SESSION_INVALID_VIDEO` /
+`SESSION_INVALID_AUDIO` typed errors rather than provider errors.
 
 ## Rate limiting
 

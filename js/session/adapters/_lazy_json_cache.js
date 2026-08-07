@@ -1,8 +1,7 @@
 /**
  * Shared lazy-load-once JSON cache for config files under
  * `~/.config/mohdel/`. `_catalog.js` and `_providers.js` both had
- * byte-similar implementations before F62; this helper owns the
- * pattern.
+ * byte-similar implementations; this helper owns the pattern.
  *
  * Contract:
  *   - `loadSync(path?)` — synchronous read; used as the lazy

@@ -115,6 +115,23 @@ describe('classifyProviderError — status-driven fallback', () => {
     expect(out.retryable).toBe(true)
   })
 
+  test('NET_ERROR message is scrubbed of the API key', () => {
+    const key = 'sk-ant-api03-very-long-secret-value-12345'
+    const err = new Error(`socket hang up while sending ${key}`)
+    const out = classifyProviderError(err, key)
+    expect(out.type).toBe('NET_ERROR')
+    expect(out.message).toBe('socket hang up while sending sk-a…2345')
+    expect(out.message).not.toContain(key)
+  })
+
+  test('NET_ERROR scrubs before truncating, so no key prefix survives', () => {
+    const key = 'sk-ant-api03-very-long-secret-value-12345'
+    const err = new Error(`${'x'.repeat(190)}${key}`)
+    const out = classifyProviderError(err, key)
+    expect(out.message.length).toBeLessThanOrEqual(200)
+    expect(out.message).not.toContain(key.slice(0, 10))
+  })
+
   test('null/undefined → NET_ERROR fallback', () => {
     expect(classifyProviderError(null).type).toBe('NET_ERROR')
     expect(classifyProviderError(undefined).type).toBe('NET_ERROR')

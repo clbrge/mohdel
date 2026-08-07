@@ -38,11 +38,3 @@ export const STATUSES = Object.freeze([
 
 export const WARNING_INSUFFICIENT_OUTPUT_BUDGET = 'insufficientOutputBudget'
 export const WARNING_CANCELLED = 'cancelled'
-
-/**
- * @param {unknown} x
- * @returns {x is Status}
- */
-export function isStatus (x) {
-  return typeof x === 'string' && STATUSES.includes(/** @type {Status} */(x))
-}

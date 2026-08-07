@@ -4,15 +4,19 @@
  * shape).
  *
  * Three code paths per envelope video ref:
- *   1. `file://` / local path, ≤20MB, no cache flag → read + base64
- *      inline as `inlineData`.
- *   2. `file://` / local path, >20MB or `cache: true` → upload via
- *      the provider SDK (Gemini `ai.files.upload`), poll until the
- *      file is ACTIVE, return a `fileData` part. Content-hash +
- *      mtime-keyed cache at `~/.cache/mohdel/uploaded-files.json`
- *      short-circuits repeat uploads.
+ *   1. `file://`, ≤20MB, no cache flag → read + base64 inline as
+ *      `inlineData`.
+ *   2. `file://`, >20MB or `cache: true` → upload via the provider
+ *      SDK (Gemini `ai.files.upload`), poll until the file is ACTIVE,
+ *      return a `fileData` part. Content-hash + mtime-keyed cache at
+ *      `~/.cache/mohdel/uploaded-files.json` short-circuits repeat
+ *      uploads.
  *   3. `https://` → passthrough as `fileData.fileUri` (Gemini fetches
  *      it directly).
+ *
+ * Local paths resolve through `_media.js`. Bare filesystem paths are
+ * not accepted — the scheme is required, matching `_images.js` and the
+ * transcription loader.
  *
  * @module session/adapters/_videos
  */
@@ -24,9 +28,12 @@ import { join } from 'node:path'
 
 import envPaths from 'env-paths'
 
+import { dataUriPayload, mediaError, mediaScheme, resolveLocalMedia } from './_media.js'
+
 const CACHE_DIR = envPaths('mohdel', { suffix: null }).cache
 const CACHE_PATH = join(CACHE_DIR, 'uploaded-files.json')
 
+const VIDEO_ERROR = 'SESSION_INVALID_VIDEO'
 const INLINE_MAX_BYTES = 20 * 1024 * 1024
 const VIDEO_UPLOAD_POLL_INTERVAL_MS = 5_000
 /** Hard deadline on the PROCESSING → ACTIVE wait. Videos occasionally
@@ -144,7 +151,8 @@ export async function setCachedFile (filePath, data, provider = 'gemini') {
  *   readFile?: (path: string) => Promise<Buffer>,
  *   stat?: (path: string) => Promise<{size: number}>,
  *   signal?: AbortSignal,
- *   provider?: string
+ *   provider?: string,
+ *   trusted?: boolean
  * }} deps
  * @returns {Promise<VideoPart[]>}
  */
@@ -159,7 +167,8 @@ export async function loadVideos (videos, deps) {
     readFileFn: deps.readFile ?? fs.readFile,
     statFn: deps.stat ?? fs.stat,
     signal: deps.signal,
-    provider: deps.provider ?? 'gemini'
+    provider: deps.provider ?? 'gemini',
+    trusted: !!deps.trusted
   }
 
   for (const v of videos) {
@@ -174,28 +183,30 @@ export async function loadVideos (videos, deps) {
 async function toPart (ref, ctx) {
   const { fileUri, mimeType } = ref
 
-  // https:// → Gemini fetches it directly
-  if (/^https?:\/\//i.test(fileUri)) {
+  const scheme = mediaScheme(fileUri)
+  if (scheme === 'remote') {
     return { fileData: { fileUri, mimeType } }
   }
-
-  // data: URI → inline the base64 payload
-  if (fileUri.startsWith('data:')) {
-    const comma = fileUri.indexOf(',')
-    if (comma < 0) return null
-    return { inlineData: { data: fileUri.slice(comma + 1), mimeType } }
+  if (scheme === 'data') {
+    return { inlineData: { data: dataUriPayload(fileUri, VIDEO_ERROR), mimeType } }
+  }
+  if (scheme !== 'file') {
+    throw mediaError(
+      `unsupported video URI scheme: ${fileUri.slice(0, 32)}…`,
+      VIDEO_ERROR
+    )
   }
 
-  // file:// or local path
-  const filePath = fileUri.replace(/^file:\/\//, '')
-  let stats
-  try {
-    stats = await ctx.statFn(filePath)
-  } catch {
-    return null
-  }
+  // The upload path streams from the path rather than buffering, so
+  // only the inline branch is bounded here — by INLINE_MAX_BYTES.
+  const { path: filePath, size } = await resolveLocalMedia(fileUri, {
+    type: VIDEO_ERROR,
+    trusted: ctx.trusted,
+    maxBytes: Number.POSITIVE_INFINITY,
+    stat: ctx.statFn
+  })
 
-  if (stats.size > INLINE_MAX_BYTES || ctx.useCache) {
+  if (size > INLINE_MAX_BYTES || ctx.useCache) {
     const uri = await uploadFile(filePath, mimeType, ctx)
     return { fileData: { fileUri: uri, mimeType } }
   }

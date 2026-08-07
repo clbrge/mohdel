@@ -282,12 +282,12 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
 
     let mut envelope: CallEnvelope = match serde_json::from_slice::<CallEnvelope>(&body) {
         Ok(e) => {
-            if crate::protocol::split_model_id(&e.model).is_none() {
+            if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
                 return typed_error_response(
                     StatusCode::BAD_REQUEST,
                     Severity::Error,
                     "invalid envelope",
-                    &format!("model must be '<provider>/<id>' (got: {})", e.model),
+                    &reason,
                     "PROTOCOL_INVALID_ENVELOPE",
                     false,
                 );
@@ -295,7 +295,7 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
             e
         }
         Err(e) => {
-            // F48: `format!("{e}")` here is safe *because* stock serde
+            // `format!("{e}")` here is safe *because* stock serde
             // errors carry field names + line/column but not the
             // offending values. If this parse is ever routed through
             // `serde_path_to_error` or a custom deserializer that
@@ -639,7 +639,7 @@ async fn pool_stream_next(
             ))
         }
         Ok(_) => {
-            // F51: strip trailing CRLF in place instead of allocating
+            // Strip trailing CRLF in place instead of allocating
             // `trimmed.to_string()`. The buffer is then reused as the
             // outgoing frame (zero-copy via `Bytes::from(String)`).
             while buf.ends_with('\r') || buf.ends_with('\n') {
@@ -649,7 +649,7 @@ async fn pool_stream_next(
                 return Some((Ok(Frame::data(Bytes::new())), state));
             }
 
-            // F52: delta fast-path. Most events in a streaming call
+            // Delta fast-path. Most events in a streaming call
             // are deltas, and the gate does nothing with delta
             // content (`apply_enforcer_feedback` has an empty Delta
             // arm). Skip the full serde parse when we can identify
@@ -847,12 +847,12 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
 
     let envelope: ImageEnvelope = match serde_json::from_slice::<ImageEnvelope>(&body) {
         Ok(e) => {
-            if crate::protocol::split_model_id(&e.model).is_none() {
+            if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
                 return typed_error_response(
                     StatusCode::BAD_REQUEST,
                     Severity::Error,
                     "invalid envelope",
-                    &format!("model must be '<provider>/<id>' (got: {})", e.model),
+                    &reason,
                     "PROTOCOL_INVALID_ENVELOPE",
                     false,
                 );
@@ -860,7 +860,7 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
             e
         }
         Err(e) => {
-            // F48: see note at the matching `CallEnvelope` parse site
+            // See note at the matching `CallEnvelope` parse site
             // above — do not switch to a value-echoing deserializer
             // without sanitizing detail here.
             return typed_error_response(
@@ -911,12 +911,12 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
 
     let envelope: TranscriptionEnvelope = match serde_json::from_slice::<TranscriptionEnvelope>(&body) {
         Ok(e) => {
-            if crate::protocol::split_model_id(&e.model).is_none() {
+            if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
                 return typed_error_response(
                     StatusCode::BAD_REQUEST,
                     Severity::Error,
                     "invalid envelope",
-                    &format!("model must be '<provider>/<id>' (got: {})", e.model),
+                    &reason,
                     "PROTOCOL_INVALID_ENVELOPE",
                     false,
                 );
@@ -924,7 +924,7 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
             e
         }
         Err(e) => {
-            // F48: see note at the matching `CallEnvelope` parse site
+            // See note at the matching `CallEnvelope` parse site
             // above — do not switch to a value-echoing deserializer
             // without sanitizing detail here.
             return typed_error_response(
@@ -1306,7 +1306,7 @@ mod tests {
         assert!(!done_signals_provider_recovery(&make_result(Some("cancelled"))));
     }
 
-    // F18: per-line cap on session NDJSON reads.
+    // Per-line cap on session NDJSON reads.
 
     #[tokio::test]
     async fn read_capped_line_reads_normal_line() {

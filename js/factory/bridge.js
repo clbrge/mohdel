@@ -23,7 +23,8 @@
 import { run } from '../session/run.js'
 import { runImage } from '../session/run_image.js'
 import { runTranscription } from '../session/run_transcription.js'
-import { MohdelError, Severity } from '../../src/lib/errors.js'
+import { markTrustedMedia } from '../session/adapters/_media.js'
+import { MohdelError, validateIds } from '#core'
 import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
 
 /**
@@ -60,20 +61,20 @@ import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
  * | `configuration.apiKey`                            | envelope.auth.key                                    |
  * | **`parentSpan`**                                  | **dropped** — use `traceparent` instead              |
  * | **`maybeThrowHandler`**                           | **dropped** — no factory-side validation hook        |
- * | **`configuration.baseURL` / `defaultHeaders` / …**| **rejected** — adapters own baseURL (F24)            |
+ * | **`configuration.baseURL` / `defaultHeaders` / …**| **rejected** — adapters own baseURL                  |
  *
  * @param {object} args
  * @param {string} args.provider      Resolved provider name (e.g. 'openai').
  * @param {string} args.model         Provider-native model id (no provider prefix).
  * @param {string} args.modelKey      Catalog key `<provider>/<model>` — for spec/pricing.
- * @param {any} args.configuration    Provider config. Only `apiKey` is threaded; other fields are rejected (F24).
+ * @param {any} args.configuration    Provider config. Only `apiKey` is threaded; other fields are rejected.
  * @param {string | any[] | {system?: any, messages: any[]}} args.prompt
  * @param {any} [args.options]        Factory `answer()` options.
  * @param {BridgeDeps} [deps]
  * @returns {Promise<any>}            AnswerResult (matches the factory's return shape).
  */
 export async function runAnswer ({ provider, model, modelKey, configuration, prompt, options = {} }, deps = {}) {
-  const envelope = toEnvelope({ modelKey, configuration, prompt, options })
+  const envelope = markTrustedMedia(toEnvelope({ modelKey, configuration, prompt, options }))
 
   // If the caller passed a `realtimeHandler`, feed every `delta`
   // event into a buffer that invokes the handler on batches matching
@@ -81,7 +82,7 @@ export async function runAnswer ({ provider, model, modelKey, configuration, pro
   // never fire — `mo ask --stream` and any integration that relies
   // on streaming callbacks stops working.
   //
-  // F54: skip the buffer allocation entirely when no handler was
+  // Skip the buffer allocation entirely when no handler was
   // supplied — the common case.
   const deltaBuffer = options.realtimeHandler
     ? createRealtimeDeltaBuffer(options.realtimeHandler, options.bufferOpts)
@@ -105,15 +106,14 @@ export async function runAnswer ({ provider, model, modelKey, configuration, pro
   }
 
   if (!terminal) {
-    throw new MohdelError('SESSION_NO_TERMINAL', {
-      severity: Severity.ERROR,
-      detail: 'session run produced no terminal event',
+    throw new MohdelError('session run produced no terminal event', {
+      type: 'SESSION_NO_TERMINAL',
       retryable: false
     })
   }
 
   if (terminal.type === 'error') {
-    throw fromTypedError(terminal.error, { provider, model, modelKey })
+    throw MohdelError.fromJSON(terminal.error, { provider, model, modelKey })
   }
 
   return terminal.result
@@ -135,9 +135,13 @@ export async function runAnswer ({ provider, model, modelKey, configuration, pro
  * @returns {Promise<any>}
  */
 export async function runAnswerImage ({ provider, model, configuration, prompt, options = {}, spec }) {
+  const callId = options.callId || newCallId()
+  const authId = options.authId || 'local'
+  assertValidIds(callId, authId, `${provider}/${model}`)
+
   const envelope = {
-    callId: options.callId || newCallId(),
-    authId: options.authId || 'local',
+    callId,
+    authId,
     auth: configToAuth(configuration),
     model: `${provider}/${model}`,
     prompt
@@ -145,8 +149,8 @@ export async function runAnswerImage ({ provider, model, configuration, prompt, 
   if (options.size) envelope.size = options.size
   if (options.seed != null) envelope.seed = options.seed
 
-  const out = await runImage(envelope, spec ? { spec } : {})
-  if (!out.ok) throw fromTypedError(out.error, { provider, model })
+  const out = await runImage(markTrustedMedia(envelope), spec ? { spec } : {})
+  if (!out.ok) throw MohdelError.fromJSON(out.error, { provider, model })
   return out.result
 }
 
@@ -168,9 +172,13 @@ export async function runAnswerImage ({ provider, model, configuration, prompt, 
  * @returns {Promise<any>}
  */
 export async function runAnswerTranscription ({ provider, model, configuration, audio, options = {}, spec }) {
+  const callId = options.callId || newCallId()
+  const authId = options.authId || 'local'
+  assertValidIds(callId, authId, `${provider}/${model}`)
+
   const envelope = {
-    callId: options.callId || newCallId(),
-    authId: options.authId || 'local',
+    callId,
+    authId,
     auth: configToAuth(configuration),
     model: `${provider}/${model}`,
     audio
@@ -178,8 +186,8 @@ export async function runAnswerTranscription ({ provider, model, configuration, 
   if (options.language) envelope.language = options.language
   if (options.prompt) envelope.prompt = options.prompt
 
-  const out = await runTranscription(envelope, spec ? { spec } : {})
-  if (!out.ok) throw fromTypedError(out.error, { provider, model })
+  const out = await runTranscription(markTrustedMedia(envelope), spec ? { spec } : {})
+  if (!out.ok) throw MohdelError.fromJSON(out.error, { provider, model })
   return out.result
 }
 
@@ -196,12 +204,16 @@ export async function runAnswerTranscription ({ provider, model, configuration, 
  * @returns {import('#core/envelope.js').CallEnvelope}
  */
 function toEnvelope ({ modelKey, configuration, prompt, options }) {
+  const callId = options.callId || newCallId()
+  const authId = options.authId || 'local'
+  assertValidIds(callId, authId, modelKey)
+
   /** @type {import('#core/envelope.js').CallEnvelope} */
   const envelope = {
-    callId: options.callId || newCallId(),
-    authId: options.authId || 'local',
+    callId,
+    authId,
     auth: configToAuth(configuration),
-    model: /** @type {import('#core/model-id.js').ModelId} */ (modelKey),
+    model: modelKey,
     prompt: toEnvelopePrompt(prompt)
   }
 
@@ -237,36 +249,18 @@ function toEnvelope ({ modelKey, configuration, prompt, options }) {
 }
 
 /**
- * Re-throw a TypedError as a MohdelError so factory-API caller catch
- * blocks — which duck-type on `.detail` / `.retryable` — keep
- * working without knowing about the session event-stream shape.
- *
- * @param {import('#core/errors.js').TypedError} err
- * @param {{provider: string, model: string, modelKey?: string}} ctx
- * @returns {MohdelError}
+ * @param {string} callId
+ * @param {string} authId
+ * @param {string} model
  */
-function fromTypedError (err, ctx) {
-  // TypedError `message` is the machine-key label (e.g. "provider error
-  // 400"); `detail` carries the provider's own rejection text when it
-  // was safe to surface. Prefer the detail so callers see what to fix.
-  return new MohdelError(err.type || 'PROVIDER_ERROR', {
-    severity: toSeveritySymbol(err.severity),
-    detail: err.detail || err.message,
-    retryable: !!err.retryable,
-    context: { provider: ctx.provider, model: ctx.model }
-  })
-}
-
-/** @param {string | undefined} s */
-function toSeveritySymbol (s) {
-  switch (s) {
-    case 'trace': return Severity.TRACE
-    case 'debug': return Severity.DEBUG
-    case 'info': return Severity.INFO
-    case 'warn': return Severity.WARN
-    case 'error': return Severity.ERROR
-    case 'fatal': return Severity.FATAL
-    default: return Severity.ERROR
+function assertValidIds (callId, authId, model) {
+  const reason = validateIds(callId, authId, model)
+  if (reason) {
+    throw new MohdelError('invalid envelope', {
+      type: 'PROTOCOL_INVALID_ENVELOPE',
+      detail: reason,
+      retryable: false
+    })
   }
 }
 
@@ -291,8 +285,8 @@ function configToAuth (configuration) {
   if (!configuration) return { key: '' }
   const unsupported = Object.keys(configuration).filter(k => !ALLOWED_CONFIG_KEYS.has(k))
   if (unsupported.length > 0) {
-    throw new MohdelError('CONFIGURATION_UNSUPPORTED', {
-      severity: Severity.ERROR,
+    throw new MohdelError('unsupported per-call configuration', {
+      type: 'CONFIGURATION_UNSUPPORTED',
       detail:
         'per-call SDK configuration is limited to `apiKey` and `baseURL`. ' +
         `Unsupported keys: ${unsupported.join(', ')}. ` +
@@ -372,8 +366,8 @@ function toEnvelopePrompt (prompt) {
   // fall through would land a raw non-iterable in the envelope and
   // produce a confusing `prompt.map is not a function` deep inside
   // the adapter.
-  throw new MohdelError('SESSION_INVALID_PROMPT', {
-    severity: Severity.ERROR,
+  throw new MohdelError('invalid prompt shape', {
+    type: 'SESSION_INVALID_PROMPT',
     retryable: false,
     detail:
       'prompt must be a string, a Message[] array, ' +

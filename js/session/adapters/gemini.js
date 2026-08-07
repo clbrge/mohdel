@@ -28,6 +28,7 @@ import { cancelledDone } from './_cancelled.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
+import { isTrustedMedia } from './_media.js'
 import { loadVideos } from './_videos.js'
 import { costFor } from './_pricing.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
@@ -53,12 +54,13 @@ export async function * gemini (envelope, deps = {}) {
 
   if (envelope.images?.length) {
     try {
-      const loaded = await loadImages(envelope.images)
+      const loaded = await loadImages(envelope.images, { trusted: isTrustedMedia(envelope) })
       const parts = loaded.map(toGeminiImagePart).filter(Boolean)
       if (parts.length) injectParts(contents, parts)
     } catch (e) {
       log?.warn({ err: e }, '[mohdel:gemini] image load failed')
-      yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: 'gemini' }) }
+      const typed = /** @type {any} */(e).typed
+      yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'gemini' }) }
       return
     }
   }
@@ -68,6 +70,7 @@ export async function * gemini (envelope, deps = {}) {
       const parts = await loadVideos(envelope.videos, {
         client,
         useCache: !!envelope.cache,
+        trusted: isTrustedMedia(envelope),
         signal
       })
       if (parts.length) injectParts(contents, parts)
@@ -97,7 +100,7 @@ export async function * gemini (envelope, deps = {}) {
     request.config = { ...(request.config ?? {}), abortSignal: signal }
   }
 
-  // F53: accumulate via array + join to avoid per-delta V8 cons-string
+  // Accumulate via array + join to avoid per-delta V8 cons-string
   // churn. Materialized at each exit point.
   const outputParts = []
   const currentOutput = () => outputParts.join('')

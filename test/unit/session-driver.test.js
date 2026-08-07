@@ -115,7 +115,7 @@ describe('session/driver', () => {
   })
 
   test('ping arriving mid-call is ignored (no pong written mid-stream)', async () => {
-    // F10 regression. If a supervisor pings a busy session, emitting
+    // Regression. If a supervisor pings a busy session, emitting
     // `{op:"pong"}` on stdout would confuse the gate's event-stream
     // reader and kill the session. Session must drop mid-call pings.
     const { PassThrough } = await import('node:stream')
@@ -215,14 +215,14 @@ describe('session/driver', () => {
     expect(events.filter(e => e.type === 'done').length).toBe(1)
   })
 
-  // F19: cancels arriving before the envelope was dequeued must still
+  // Cancels arriving before the envelope was dequeued must still
   // abort the call.
 
   test('pre-dequeue cancel aborts the matching envelope on dispatch', async () => {
     // Cancel for 'c-pre' arrives FIRST, then the envelope for 'c-pre'.
-    // Before F19, driver dropped the cancel (no currentCall match).
-    // Now: envelope dispatches with a pre-aborted controller → run()
-    // yields a cancelled done immediately.
+    // Without the pre-dequeue path the driver drops the cancel (no
+    // currentCall match). Envelope must dispatch with a pre-aborted
+    // controller → run() yields a cancelled done immediately.
     const stdin = inputStream(
       JSON.stringify({ op: 'cancel', callId: 'c-pre' }),
       JSON.stringify(envelope({ callId: 'c-pre' }))
@@ -252,7 +252,7 @@ describe('session/driver', () => {
     expect(dones[1].result.warning).not.toBe('cancelled')
   })
 
-  // F25: image envelopes — `op: "image"` dispatches to runImage()
+  // Image envelopes — `op: "image"` dispatches to runImage()
   // and emits a single `image_done` line.
 
   test('image envelope emits single image_done line', async () => {

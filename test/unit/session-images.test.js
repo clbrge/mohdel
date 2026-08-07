@@ -53,12 +53,19 @@ describe('_images loadImage', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  test('file:// URI loads from disk and base64-encodes', async () => {
+  test('file:// URI loads from disk and base64-encodes for a trusted caller', async () => {
     const loaded = await loadImage({
       fileUri: `file://${tmpFile}`,
       mimeType: 'image/png'
-    })
+    }, { trusted: true })
     expect(loaded).toEqual({ mimeType: 'image/png', base64: PNG_BASE64 })
+  })
+
+  test('file:// URI is refused for an untrusted caller with no roots configured', async () => {
+    await expect(loadImage({
+      fileUri: `file://${tmpFile}`,
+      mimeType: 'image/png'
+    })).rejects.toThrow(/not permitted/)
   })
 
   test('data: URI extracts base64 payload', async () => {

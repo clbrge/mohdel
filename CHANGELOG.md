@@ -4,6 +4,138 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.118.0] — Security: local-media confinement, bounded enforcer state / Breaking: one error type
+
+### Security
+
+- **Arbitrary local file read via `fileUri`.** `_images.js`, `_videos.js` and
+  `transcription/openai_compatible.js` read any `file://` path with no
+  allowlist, canonicalization or size cap and shipped it to the provider;
+  `_videos.js` accepted a bare path with no scheme. All three now resolve
+  through `js/session/adapters/_media.js`: scheme required, `fileURLToPath` →
+  `realpath` → confinement check on the resolved path (via `path.relative`, so
+  `/srv/media-evil` fails for root `/srv/media`), `isFile()` before the size
+  check (`/dev/zero` reports `size: 0`), 64 MiB cap. The streaming video
+  upload path is exempt.
+  Default is deny. In-process envelopes (factory, CLI) are marked trusted with
+  a module-private `Symbol`, which `JSON.parse` cannot produce, so no wire
+  envelope can grant itself local reads. `MOHDEL_MEDIA_ROOTS` confines every
+  caller, in-process included.
+  Residual: `realpath` and the following `stat`/`readFile` are separate
+  syscalls, so a symlink swapped between them wins the race. Closing it needs
+  `O_NOFOLLOW`/`openat2`, which Node does not expose.
+- **Unbounded, caller-keyed enforcer state.** `RateLimiter` and
+  `CooldownTracker` are keyed by caller-supplied `authId`; `RateLimiter` had
+  no removal path, and the raw strings reached metric attributes as unbounded
+  cardinality. Now: `protocol::validate_ids()` at all three parse sites
+  (`callId`/`authId` ≤ 128 B, `model` ≤ 256 B, provider half ≤ 32 B, both
+  halves non-empty); `MAX_TRACKED_KEYS = 100_000` per map behind an `admit()`
+  gate, with `RateLimiter` sweeping earlier-minute buckets and
+  `CooldownTracker` sweeping expired windows plus entries idle over 15 min;
+  `metrics::provider_label()` clamps `provider` to a 13-name allowlist,
+  everything else aggregating under `other`.
+  Exhaustion fails closed — a new key is refused rather than evicting a live
+  one, since failing open would let `authId` rotation evade rpm/tpm entirely.
+  Already-tracked keys are unaffected. `mohdel.enforcer.keyspace_full{map}`
+  counts refusals.
+- **Provider API key echoed in `NET_ERROR` messages.** The network fallback in
+  `classifyProviderError` put the raw SDK message on `error.message`;
+  `scrubKey` was applied to `detail` only. It now scrubs before truncating —
+  the reverse order leaves a key prefix at the 200-char boundary that exact
+  substring matching cannot catch.
+
+### Changed
+
+- **One error kind.** `MohdelError` and `MohdelTypedError` were two classes
+  with inverted conventions: the former put the machine key in `message`, the
+  wire type puts it in `type`. There is now one class, `MohdelError` in
+  `js/core/errors.js`, whose serialized form is the frozen `TypedError`.
+  `toJSON()` whitelists the wire fields, so in-process state cannot reach the
+  wire.
+- `mohdel/errors` resolves to `js/core/errors.js`; exports are `MohdelError`
+  and `SEVERITY_TAGS`.
+- `MohdelError.context` — `{provider, model, modelKey}` set by the bridge,
+  excluded from `toJSON()`.
+- Ingress rejects `"anthropic/"` and `"/gpt-5"`, previously accepted —
+  `split_once('/')` only checked that a slash existed. `"/gpt-5"` failed at
+  adapter resolution and produced an empty `provider` metric label;
+  `"anthropic/"` resolved and reached the provider with an empty model,
+  spending an rpm/tpm slot and a cooldown failure on a request that could
+  only 400. The in-process factory applies the same validation via
+  `validateIds()`, so both transports reject identically instead of only the
+  gate path being covered.
+- Wire envelopes cannot read local files unless `MOHDEL_MEDIA_ROOTS` is set.
+  In-process callers are unaffected when it is unset.
+
+### Removed
+
+- `src/lib/errors.js`, folded into `js/core/errors.js`.
+- The `Severity` symbol table and `getSeverityNumber()`. Severity is the
+  lowercase string tag everywhere; the symbols did not survive
+  `JSON.stringify` and compared unequal across duplicate installs.
+- `MohdelError`'s `cause`, `component` and `silent` — all write-only.
+- `fromTypedError()` and `toSeveritySymbol()` in `js/factory/bridge.js`.
+- `src/lib/cooldown.js`, superseded by `js/session/_cooldown.js`.
+- `parseModelId()`, `MODEL_ID_RE` and the branded `ModelId` type from
+  `js/core/model-id.js`. The validator had no call site anywhere; validation is `validateIds()`.
+- `isStatus()` from `js/core/status.js` — no caller in shipped code; the
+  status constants and `STATUSES` are unchanged.
+- Six unreferenced exports: `loadProviders`
+  (`_providers.js`), `isTranscriptionProvider` (`transcription/index.js`),
+  `getDefaultModelId` (`common.js`), and `expandModelAlias`,
+  `overwriteCuratedCache`, `reloadCuratedCache` (`curated-cache.js`). Each was
+  a leaf with no caller anywhere including tests. `expandModelAliasSync` is
+  live and unchanged.
+
+### Fixed
+
+- The bridge synthesized `detail` from `message` when the wire carried none
+  (`err.detail || err.message`). Wire fields now carry over untouched.
+- `TypedError`'s field semantics were documented backwards in PROTOCOL.md,
+  ARCHITECTURE.md, README.md and docs/GLOSSARY.md.
+- `extractDetail()`'s JSDoc in `_errors.js` was attached to `scrubKey()`.
+- Three `parseErrorBody()` copies in `js/client/` omitted the required
+  `severity` on `PROTOCOL_HTTP_ERROR`.
+
+### Added
+
+- `js/session/adapters/_media.js` — local-media resolver, `markTrustedMedia()`
+  / `isTrustedMedia()`, `MOHDEL_MEDIA_ROOTS`.
+- `protocol::validate_ids()` with `MAX_ID_BYTES` / `MAX_MODEL_BYTES` /
+  `MAX_PROVIDER_BYTES`; `mohdel.enforcer.keyspace_full{map}` counter.
+- `validateIds()` in `js/core/envelope.js` — the JS mirror, applied by the
+  factory bridge on all three in-process entry points. Reason strings match
+  the gate's exactly. `test/unit/core-validate-ids.test.js` parses the caps
+  out of `protocol.rs` and fails when the two sides drift.
+- `test/unit/session-media.test.js` — 30 tests: `/dev/zero`, symlink escape,
+  `..` traversal, prefix-sibling, percent-decoding, multi-root, mark
+  unforgeability and survival across the `run.js` spread.
+- `test/unit/gate-provider-labels.test.js` — fails when the Rust allowlist and
+  `src/lib/providers.js` drift.
+- Rust coverage for the caps, `validate_ids`, and a socket test asserting a
+  4 KB `authId` returns 400.
+
+### Documentation
+
+- INTEGRATION.md: **Local media** and **Envelope limits** sections; the error
+  example branches on `err.type`.
+
+### Migration
+
+- `err.message === 'AUTH_INVALID'` → `err.type === 'AUTH_INVALID'`. `message`
+  is now a short human-readable label.
+- `Severity.ERROR` → `'error'`. `import { Severity } from 'mohdel/errors'` no
+  longer resolves.
+- Operators serving `file://` media through a gate must set
+  `MOHDEL_MEDIA_ROOTS`.
+- `"provider/"` and `"/model"` ids now 400 at ingress.
+
+### Notes
+
+- `rust/thin-gate/src/protocol.rs::TypedError` and PROTOCOL.md §4.4 are
+  unchanged: the wire shape was chosen as the survivor of the error merge so
+  the frozen contract would not move.
+
 ## [0.117.3] — Test: cross-language field-parity guard for the gate protocol / Chore: bump dependencies
 
 ### Added

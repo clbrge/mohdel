@@ -33,13 +33,6 @@
 const DETAIL_CAP = 500
 
 /**
- * Extract a short human-readable detail from an SDK error. Trimmed
- * to `DETAIL_CAP` chars so a verbose provider body doesn't blow up
- * log pipelines.
- * @param {any} err
- * @returns {string | undefined}
- */
-/**
  * Replace verbatim occurrences of `key` in `detail` with a masked
  * form. Long keys (≥ 16 chars) become `<first4>…<last4>` so a caller
  * with multiple keys can still tell them apart from the masked
@@ -60,6 +53,13 @@ function scrubKey (detail, key) {
   return detail.split(key).join(mask)
 }
 
+/**
+ * Extract a short human-readable detail from an SDK error. Trimmed
+ * to `DETAIL_CAP` chars so a verbose provider body doesn't blow up
+ * log pipelines.
+ * @param {any} err
+ * @returns {string | undefined}
+ */
 function extractDetail (err) {
   if (!err) return undefined
   const nested = err.error?.message || err.response?.data?.error?.message
@@ -410,7 +410,7 @@ export function classifyProviderError (e, key, opts = {}) {
     }
   }
   return {
-    message: message ? String(message).slice(0, 200) : 'network error',
+    message: message ? scrubKey(String(message), key).slice(0, 200) : 'network error',
     severity: 'warn',
     retryable: true,
     type: 'NET_ERROR',

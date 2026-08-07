@@ -122,8 +122,8 @@ async function pollTaskResult (fetchFn, sleep, now, taskId, apiKey) {
 function fromHttpStatus (status, message, detail) {
   const typed = classifyProviderError({ status })
   // Keep the classifier's message (stable/machine-readable); put the
-  // caller's context + any response-body snippet into `detail`. F45:
-  // never echo provider response bodies into `TypedError.message`.
+  // caller's context + any response-body snippet into `detail`. Never
+  // echo provider response bodies into `TypedError.message`.
   return typedError(typed.message, typed.type, typed.retryable, detail ? `${message}: ${detail}` : message)
 }
 

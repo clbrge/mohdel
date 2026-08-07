@@ -10,7 +10,7 @@
 
 import { requestUnix } from './transport.js'
 import { parseNDJSON } from './ndjson.js'
-import { isEvent, MohdelTypedError } from '#core'
+import { isEvent, MohdelError } from '#core'
 
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
@@ -31,12 +31,12 @@ export async function * call (envelope, { socketPath, signal, path = '/v1/call' 
 
   if (res.statusCode !== 200) {
     const body = await readAll(res)
-    throw MohdelTypedError.fromJSON(parseErrorBody(body, res.statusCode ?? 0))
+    throw MohdelError.fromJSON(parseErrorBody(body, res.statusCode ?? 0))
   }
 
   for await (const obj of parseNDJSON(res)) {
     if (!isEvent(obj)) {
-      throw new MohdelTypedError(
+      throw new MohdelError(
         'received non-Event object from thin-gate',
         { type: 'PROTOCOL_INVALID_EVENT', retryable: false }
       )
@@ -70,6 +70,7 @@ function parseErrorBody (body, status) {
   return {
     type: 'PROTOCOL_HTTP_ERROR',
     message: `thin-gate returned HTTP ${status}`,
+    severity: 'error',
     retryable: status >= 500
   }
 }

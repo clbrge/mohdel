@@ -96,6 +96,40 @@ pub fn split_model_id(model: &str) -> Option<(&str, &str)> {
     model.split_once('/')
 }
 
+pub const MAX_ID_BYTES: usize = 128;
+pub const MAX_MODEL_BYTES: usize = 256;
+pub const MAX_PROVIDER_BYTES: usize = 32;
+
+/// Bound the envelope fields that become long-lived map keys and
+/// telemetry attributes. Without this they are limited only by the
+/// body cap, which is measured in megabytes.
+///
+/// Returns a reason suitable for an error `detail` — the values are
+/// the caller's own input, echoed back within the caps above.
+pub fn validate_ids(call_id: &str, auth_id: &str, model: &str) -> Result<(), String> {
+    if call_id.len() > MAX_ID_BYTES {
+        return Err(format!("callId exceeds {MAX_ID_BYTES} bytes"));
+    }
+    if auth_id.len() > MAX_ID_BYTES {
+        return Err(format!("authId exceeds {MAX_ID_BYTES} bytes"));
+    }
+    if model.len() > MAX_MODEL_BYTES {
+        return Err(format!("model exceeds {MAX_MODEL_BYTES} bytes"));
+    }
+    let Some((provider, bare)) = split_model_id(model) else {
+        return Err(format!("model must be '<provider>/<id>' (got: {model})"));
+    };
+    if provider.is_empty() || bare.is_empty() {
+        return Err(format!("model must be '<provider>/<id>' (got: {model})"));
+    }
+    if provider.len() > MAX_PROVIDER_BYTES {
+        return Err(format!(
+            "model provider exceeds {MAX_PROVIDER_BYTES} bytes"
+        ));
+    }
+    Ok(())
+}
+
 /// Return the provider part of a model id. Empty string if malformed
 /// (no `/`). Callers that need to reject malformed ids should check
 /// `split_model_id` directly.

@@ -115,7 +115,7 @@ Mohdel uses standard severity levels:
 
 **User-caused errors:** failures originating from user input (bad model ID, missing API key, malformed prompt) are `warn`, not `error`. The library rejected the request correctly — there is nothing to address on the library side.
 
-**"Should never happen":** violated invariants (unknown severity symbol, unexpected enum value) are `fatal` — they signal a bug that needs immediate investigation. Mohdel currently throws on these instead of logging, since they indicate corrupted state where continuing is unsafe.
+**"Should never happen":** violated invariants (unexpected enum value, malformed wire event) are `fatal` — they signal a bug that needs immediate investigation. Mohdel currently throws on these instead of logging, since they indicate corrupted state where continuing is unsafe.
 
 ## Prefix Convention
 
@@ -138,7 +138,7 @@ Contributors adding new subsystems should follow this format.
 ## What Mohdel Logs at Each Level
 
 ### fatal
-Currently none — invariant violations throw instead (`getSeverityNumber`, etc.).
+Currently none — invariant violations throw instead.
 
 ### error
 - File I/O failures during config save (`[mohdel:cache]`, `[mohdel:common]`)

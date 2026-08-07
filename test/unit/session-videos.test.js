@@ -1,7 +1,28 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, beforeEach, afterEach } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
+import os from 'node:os'
 
 import { loadVideos } from '../../js/session/adapters/_videos.js'
 import { gemini } from '../../js/session/adapters/gemini.js'
+
+// `_media.resolveLocalMedia` realpaths before any stat, so a local-file
+// case needs a file that actually exists; `stat` stays stubbed to drive
+// the inline-vs-upload branch without writing 100MB.
+let tmpDir
+let videoPath
+
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mohdel-videos-'))
+  videoPath = path.join(tmpDir, 'clip.mp4')
+  fs.writeFileSync(videoPath, Buffer.from([0x00, 0x01, 0x02, 0x03]))
+})
+
+afterEach(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true })
+})
+
+const videoUri = () => `file://${videoPath}`
 
 // ---------- _videos loader ----------
 
@@ -27,11 +48,12 @@ describe('_videos loadVideos', () => {
   test('small local file is inlined as base64', async () => {
     const { client } = stubClient({ failIfCalled: true })
     const parts = await loadVideos(
-      [{ fileUri: 'file:///tmp/clip.mp4', mimeType: 'video/mp4' }],
+      [{ fileUri: videoUri(), mimeType: 'video/mp4' }],
       {
         client,
+        trusted: true,
         readFile: async () => Buffer.from([0x01, 0x02, 0x03, 0x04]),
-        stat: async () => ({ size: 4 })
+        stat: async () => ({ size: 4, isFile: () => true })
       }
     )
     expect(parts).toEqual([
@@ -51,17 +73,18 @@ describe('_videos loadVideos', () => {
       }
     }
     const parts = await loadVideos(
-      [{ fileUri: 'file:///tmp/big.mp4', mimeType: 'video/mp4' }],
+      [{ fileUri: videoUri(), mimeType: 'video/mp4' }],
       {
         client,
+        trusted: true,
         readFile: async () => { throw new Error('should not read bytes for upload path') },
-        stat: async () => ({ size: 100 * 1024 * 1024 })
+        stat: async () => ({ size: 100 * 1024 * 1024, isFile: () => true })
       }
     )
     expect(parts).toEqual([
       { fileData: { fileUri: 'https://gen/files/xyz', mimeType: 'video/mp4' } }
     ])
-    expect(captured.upload.file).toBe('/tmp/big.mp4')
+    expect(captured.upload.file).toBe(fs.realpathSync(videoPath))
     expect(captured.upload.config.mimeType).toBe('video/mp4')
   })
 
@@ -73,12 +96,13 @@ describe('_videos loadVideos', () => {
       }
     }
     const parts = await loadVideos(
-      [{ fileUri: 'file:///tmp/tiny.mp4', mimeType: 'video/mp4' }],
+      [{ fileUri: videoUri(), mimeType: 'video/mp4' }],
       {
         client,
+        trusted: true,
         useCache: true,
         readFile: async () => Buffer.from([1]),
-        stat: async () => ({ size: 1 })
+        stat: async () => ({ size: 1, isFile: () => true })
       }
     )
     expect(parts[0]).toEqual({
@@ -100,12 +124,13 @@ describe('_videos loadVideos', () => {
       }
     }
     const parts = await loadVideos(
-      [{ fileUri: 'file:///tmp/x.mp4', mimeType: 'video/mp4' }],
+      [{ fileUri: videoUri(), mimeType: 'video/mp4' }],
       {
         client,
+        trusted: true,
         sleep: async () => {}, // skip the 5s wait
         readFile: async () => Buffer.from([]),
-        stat: async () => ({ size: 100 * 1024 * 1024 })
+        stat: async () => ({ size: 100 * 1024 * 1024, isFile: () => true })
       }
     )
     expect(getCalls).toBe(3)
@@ -120,12 +145,13 @@ describe('_videos loadVideos', () => {
       }
     }
     await expect(loadVideos(
-      [{ fileUri: 'file:///tmp/x.mp4', mimeType: 'video/mp4' }],
+      [{ fileUri: videoUri(), mimeType: 'video/mp4' }],
       {
         client,
+        trusted: true,
         sleep: async () => {},
         readFile: async () => Buffer.from([]),
-        stat: async () => ({ size: 100 * 1024 * 1024 })
+        stat: async () => ({ size: 100 * 1024 * 1024, isFile: () => true })
       }
     )).rejects.toThrow(/file processing failed/i)
   })
@@ -147,13 +173,14 @@ describe('_videos loadVideos', () => {
     }
 
     await expect(loadVideos(
-      [{ fileUri: 'file:///tmp/stuck.mp4', mimeType: 'video/mp4' }],
+      [{ fileUri: videoUri(), mimeType: 'video/mp4' }],
       {
         client,
+        trusted: true,
         sleep: async () => {}, // don't actually wait
         now,
         readFile: async () => Buffer.from([]),
-        stat: async () => ({ size: 100 * 1024 * 1024 })
+        stat: async () => ({ size: 100 * 1024 * 1024, isFile: () => true })
       }
     )).rejects.toMatchObject({
       typed: { type: 'PROVIDER_UNAVAILABLE', retryable: true }
@@ -178,13 +205,14 @@ describe('_videos loadVideos', () => {
     }
 
     await expect(loadVideos(
-      [{ fileUri: 'file:///tmp/a.mp4', mimeType: 'video/mp4' }],
+      [{ fileUri: videoUri(), mimeType: 'video/mp4' }],
       {
         client,
+        trusted: true,
         sleep,
         signal: controller.signal,
         readFile: async () => Buffer.from([]),
-        stat: async () => ({ size: 100 * 1024 * 1024 })
+        stat: async () => ({ size: 100 * 1024 * 1024, isFile: () => true })
       }
     )).rejects.toThrow(/aborted/)
     // Exactly one poll happened; the abort interrupted the loop.
@@ -202,13 +230,14 @@ describe('_videos loadVideos', () => {
       }
     }
     await expect(loadVideos(
-      [{ fileUri: 'file:///tmp/a.mp4', mimeType: 'video/mp4' }],
+      [{ fileUri: videoUri(), mimeType: 'video/mp4' }],
       {
         client,
+        trusted: true,
         sleep: async () => {},
         signal: controller.signal,
         readFile: async () => Buffer.from([]),
-        stat: async () => ({ size: 100 * 1024 * 1024 })
+        stat: async () => ({ size: 100 * 1024 * 1024, isFile: () => true })
       }
     )).rejects.toThrow(/aborted/)
     expect(uploadCalled).toBe(false)

@@ -76,10 +76,10 @@ describe('client/call — happy path', () => {
   })
 })
 
-// ---------- F2: non-Event body ----------
+// ---------- non-Event body ----------
 
 describe('client/call — non-Event object in stream', () => {
-  test('throws MohdelTypedError with PROTOCOL_INVALID_EVENT type', async () => {
+  test('throws MohdelError with PROTOCOL_INVALID_EVENT type', async () => {
     handler = (_req, res) => {
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
       // Valid JSON, but not an Event shape (no `type` discriminator).
@@ -90,7 +90,7 @@ describe('client/call — non-Event object in stream', () => {
       await collect(call(envelope(), { socketPath: sockPath }))
       expect.unreachable('should have thrown')
     } catch (err) {
-      expect(err.name).toBe('MohdelTypedError')
+      expect(err.name).toBe('MohdelError')
       expect(err.message).toBe('received non-Event object from thin-gate')
       expect(err.type).toBe('PROTOCOL_INVALID_EVENT')
       expect(err.retryable).toBe(false)
@@ -98,7 +98,7 @@ describe('client/call — non-Event object in stream', () => {
   })
 })
 
-// ---------- F26: HTTP-error vocabulary ----------
+// ---------- HTTP-error vocabulary ----------
 
 describe('client/call — HTTP error paths', () => {
   test('5xx with unparseable body → PROTOCOL_HTTP_ERROR retryable', async () => {

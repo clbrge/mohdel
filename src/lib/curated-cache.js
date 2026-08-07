@@ -115,11 +115,6 @@ export const expandModelAliasSync = (modelId) => {
   return expandModelAliasInternal(modelId)
 }
 
-export const expandModelAlias = async (modelId) => {
-  await ensureCuratedCache()
-  return expandModelAliasInternal(modelId)
-}
-
 export const persistCuratedCache = async () => {
   if (!curatedCache) {
     await ensureCuratedCache()
@@ -128,17 +123,6 @@ export const persistCuratedCache = async () => {
   rebuildAliasMap()
   await saveCuratedModels(curatedCache)
   return curatedCache
-}
-
-export const overwriteCuratedCache = async (nextCache) => {
-  curatedCache = nextCache || {}
-  return persistCuratedCache()
-}
-
-export const reloadCuratedCache = async () => {
-  curatedCache = null
-  aliasMapCache = null
-  return ensureCuratedCache()
 }
 
 export const clearCuratedCache = () => {

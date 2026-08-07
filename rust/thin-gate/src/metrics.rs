@@ -53,6 +53,36 @@ struct Metrics {
     cooldown_rejections: Counter<u64>,
     quota_rejections: Counter<u64>,
     policy_errors: Counter<u64>,
+    enforcer_keyspace_full: Counter<u64>,
+}
+
+/// Provider names that may appear verbatim as a metric attribute.
+/// `provider` is caller-derived, so an unfiltered attribute mints one
+/// new metric series per distinct prefix sent.
+///
+/// Kept in sync with `src/lib/providers.js` by
+/// `test/unit/gate-provider-labels.test.js`.
+const KNOWN_PROVIDERS: [&str; 13] = [
+    "anthropic",
+    "cerebras",
+    "deepseek",
+    "fireworks",
+    "gemini",
+    "groq",
+    "mistral",
+    "novita",
+    "openai",
+    "openrouter",
+    "qwen",
+    "xai",
+    "xiaomi",
+];
+
+pub fn provider_label(provider: &str) -> &'static str {
+    match KNOWN_PROVIDERS.iter().find(|p| **p == provider) {
+        Some(p) => p,
+        None => "other",
+    }
 }
 
 static METRICS: OnceLock<Metrics> = OnceLock::new();
@@ -84,7 +114,7 @@ pub fn init() {
         }
     };
 
-    // F56: export interval is env-tunable for short-lived processes
+    // Export interval is env-tunable for short-lived processes
     // (tests, benchmarks) and operators who want tighter SLO windows.
     // Clamped to [50 ms, 600 s] to keep pathological values from
     // flooding the collector or effectively disabling exports.
@@ -147,6 +177,10 @@ pub fn init() {
             .u64_counter("mohdel.policy.errors")
             .with_description("Errors raised from RoutePolicy or QuotaPolicy")
             .build(),
+        enforcer_keyspace_full: meter
+            .u64_counter("mohdel.enforcer.keyspace_full")
+            .with_description("Enforcer key cap reached; new keys untracked until the sweep frees room")
+            .build(),
     };
     let _ = METRICS.set(metrics);
     let _ = PROVIDER.set(provider);
@@ -189,6 +223,20 @@ fn metrics_export_interval() -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provider_label_passes_known_providers_through() {
+        for p in KNOWN_PROVIDERS {
+            assert_eq!(provider_label(p), p);
+        }
+    }
+
+    #[test]
+    fn provider_label_folds_everything_else_into_other() {
+        assert_eq!(provider_label("attacker-controlled-0001"), "other");
+        assert_eq!(provider_label(""), "other");
+        assert_eq!(provider_label("Anthropic"), "other");
+    }
 
     // Cargo runs unit tests in parallel; mutating a process-global
     // env var in separate tests would race. Consolidated into one
@@ -266,7 +314,7 @@ pub fn pool_acquire_wait(ms: f64) {
 pub fn record_call(provider: &str, status: &str, duration_ms: f64) {
     if let Some(m) = METRICS.get() {
         let attrs = [
-            KeyValue::new("provider", provider.to_string()),
+            KeyValue::new("provider", provider_label(provider)),
             KeyValue::new("status", status.to_string()),
         ];
         m.calls.add(1, &attrs);
@@ -277,7 +325,14 @@ pub fn record_call(provider: &str, status: &str, duration_ms: f64) {
 pub fn cooldown_rejected(provider: &str) {
     if let Some(m) = METRICS.get() {
         m.cooldown_rejections
-            .add(1, &[KeyValue::new("provider", provider.to_string())]);
+            .add(1, &[KeyValue::new("provider", provider_label(provider))]);
+    }
+}
+
+pub fn enforcer_keyspace_full(map: &'static str) {
+    if let Some(m) = METRICS.get() {
+        m.enforcer_keyspace_full
+            .add(1, &[KeyValue::new("map", map)]);
     }
 }
 

@@ -75,7 +75,7 @@ Wire format is JSON-over-NDJSON, camelCase. Types are authored in `js/core/*.js`
 - **`AnswerResult`** — `status`, `output`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cost` (single number), `timestamps`, `warning?`, `toolCalls?`.
 - **`Status`** — `'completed' | 'tool_use' | 'incomplete'`.
 - **`Warning`** — additive string union: `'insufficientOutputBudget'`, `'cancelled'`, ...
-- **`TypedError`** — `{message, detail?, severity, retryable, type}`. `message` is a stable machine key; `detail` is user-facing context; `type` is an optional canonical tag.
+- **`TypedError`** — `{message, detail?, severity, retryable, type}`. `type` is the canonical tag callers branch on; `message` is a short human-readable label; `detail` is the provider's own rejection text.
 - **Control messages** — `{op: 'cancel', callId}` on session stdin aborts the matching in-flight call. `{op: 'ping'}` → `{op: 'pong'}` is the pool readiness handshake.
 
 ### Enforcement of the freeze
@@ -210,12 +210,12 @@ The `mohdel()` factory, `.use().answer()`, `.image()` surface is the library's P
 }, { cooldown, limiter, resolveProviderLimits })
 ```
 
-The bridge (`runAnswer`) builds a `CallEnvelope` from the prompt + options, drives `run()` from `js/session/` in-process (no subprocess, no gate — the factory still runs in the caller's process), drains events (piping `delta` payloads through `createRealtimeDeltaBuffer` when a `realtimeHandler` is set), and assembles the final `AnswerResult`. Error events become thrown `MohdelError`. OTel spans and lifecycle callbacks stay in the factory layer.
+The bridge (`runAnswer`) builds a `CallEnvelope` from the prompt + options, drives `run()` from `js/session/` in-process (no subprocess, no gate — the factory still runs in the caller's process), drains events (piping `delta` payloads through `createRealtimeDeltaBuffer` when a `realtimeHandler` is set), and assembles the final `AnswerResult`. Error events become thrown `MohdelError` via `MohdelError.fromJSON()` — the wire fields carry over untouched, plus an in-process `context` of `{provider, model, modelKey}`. OTel spans and lifecycle callbacks stay in the factory layer.
 
 Three factory-era options are deliberately not carried into the envelope:
 - **`parentSpan`** — replaced by `traceparent` (a W3C string is serializable across process boundaries; an OTel Span object isn't).
 - **`maybeThrowHandler`** — removed as dead API.
-- **`configuration.baseURL` / `defaultHeaders` / …** — adapters bake in baseURL. Only `configuration.apiKey` is threaded through. Non-apiKey configuration keys throw `CONFIGURATION_UNSUPPORTED` rather than silently dropping, since a dropped baseURL could leak traffic to an unintended provider (see AUDIT2 F24).
+- **`configuration.baseURL` / `defaultHeaders` / …** — adapters bake in baseURL. Only `configuration.apiKey` is threaded through. Non-apiKey configuration keys throw `CONFIGURATION_UNSUPPORTED` rather than silently dropping, since a dropped baseURL could leak traffic to an unintended provider.
 
 The full option mapping is documented in the `runAnswer` docstring so a future auditor doesn't re-open these as regressions.
 

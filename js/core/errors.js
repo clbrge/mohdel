@@ -1,7 +1,13 @@
 /**
- * `TypedError` — wire-format error. Carries `message` (machine key),
- * optional `detail` (user-facing context), `severity` (lowercase
- * string), `retryable`, and optional `type` (canonical tag).
+ * `MohdelError` — the one error kind. `TypedError` is its serialized
+ * form: `type` is the canonical machine tag callers branch on,
+ * `message` is a short human-readable label, `detail` carries the
+ * provider's own rejection text, plus `severity` (lowercase string)
+ * and `retryable`.
+ *
+ * Thrown in-process by the factory and serialized over the gate are
+ * two transports for the same error. `toJSON()` whitelists the wire
+ * fields, so in-process-only state (`context`) cannot reach the wire.
  *
  * Rust mirror: `rust/thin-gate/src/protocol.rs::TypedError`.
  *
@@ -15,36 +21,44 @@
 /**
  * @typedef {object} TypedError
  * @property {string} message
- *   Top-level message. Never echo provider response bodies.
+ *   Short human-readable label (e.g. `'provider error 400'`). Never
+ *   echo provider response bodies.
  * @property {string} [detail]
- *   User-facing error detail (mirrors `MohdelError.detail`).
+ *   Provider rejection text, capped and API-key-scrubbed by
+ *   `classifyProviderError`. Whether to surface, log, or redact it
+ *   further is the caller's policy.
  * @property {SeverityTag} severity
  * @property {boolean} retryable
  * @property {string} [type]
- *   Optional canonical tag (e.g. `'PROVIDER_COOLDOWN'`, `'AUTH_INVALID'`).
+ *   Canonical tag callers branch on (e.g. `'PROVIDER_COOLDOWN'`,
+ *   `'AUTH_INVALID'`). Optional on the wire; every
+ *   `classifyProviderError` result sets it.
  */
 
 export const SEVERITY_TAGS = Object.freeze([
   'trace', 'debug', 'info', 'warn', 'error', 'fatal'
 ])
 
-export class MohdelTypedError extends Error {
+export class MohdelError extends Error {
   /**
    * @param {string} message
    * @param {{
    *   severity?: SeverityTag,
    *   retryable?: boolean,
    *   detail?: string,
-   *   type?: string
+   *   type?: string,
+   *   context?: object
    * }} [options]
+   *   `context` is in-process only and never serialized.
    */
-  constructor (message, { severity = 'error', retryable = false, detail, type } = {}) {
+  constructor (message, { severity = 'error', retryable = false, detail, type, context } = {}) {
     super(message)
-    this.name = 'MohdelTypedError'
+    this.name = 'MohdelError'
     this.severity = severity
     this.retryable = retryable
     if (detail) this.detail = detail
     if (type) this.type = type
+    if (context) this.context = context
   }
 
   /** @returns {TypedError} */
@@ -62,14 +76,16 @@ export class MohdelTypedError extends Error {
 
   /**
    * @param {TypedError} data
-   * @returns {MohdelTypedError}
+   * @param {object} [context]  In-process only; not part of `data`.
+   * @returns {MohdelError}
    */
-  static fromJSON (data) {
-    return new MohdelTypedError(data.message, {
+  static fromJSON (data, context) {
+    return new MohdelError(data.message, {
       severity: data.severity,
       retryable: data.retryable,
       detail: data.detail,
-      type: data.type
+      type: data.type,
+      context
     })
   }
 }

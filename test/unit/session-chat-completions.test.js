@@ -406,7 +406,7 @@ describe('openrouter adapter', () => {
     expect(done.result.toolCalls[0].arguments).toEqual({ x: 1 })
   })
 
-  // F7 regression: multi-tool streams, and chunks missing `index`.
+  // Regression: multi-tool streams, and chunks missing `index`.
 
   test('two tool calls streamed with `index` on every chunk → two distinct slots', async () => {
     const { client } = mockChatStream([
@@ -449,7 +449,7 @@ describe('openrouter adapter', () => {
     expect(done.result.toolCalls[0]).toEqual({ id: 't1', name: 'f', arguments: { x: 42 } })
   })
 
-  // F40: streaming iterator throws mid-stream (upstream disconnect,
+  // Streaming iterator throws mid-stream (upstream disconnect,
   // 502 from server, ...). Adapter must convert to a single `error`
   // event — not swallow the throw or leave the call terminal-less.
   test('streaming error mid-stream yields a terminal error event', async () => {
@@ -664,13 +664,13 @@ describe('qwen adapter', () => {
   })
 })
 
-// ---------- F15: signal propagation through wrappers ----------
+// ---------- signal propagation through wrappers ----------
 //
 // Each wrapper must forward deps.signal as requestOptions (second arg) to the
 // SDK's chat.completions.create. Without it, AbortController.abort() can't
 // cancel an in-flight HTTP request — it only stops event iteration.
 
-describe('signal propagation (F15)', () => {
+describe('signal propagation', () => {
   test('groq forwards deps.signal to SDK', async () => {
     const { client, captured } = mockChat(basicResponse())
     const controller = new AbortController()

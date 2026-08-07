@@ -148,6 +148,34 @@ async fn invalid_envelope_returns_400_with_typed_error() {
 }
 
 #[tokio::test]
+async fn oversized_identity_fields_return_400_with_typed_error() {
+    let path = temp_sock_path("oversized-ids");
+    let _guard = SocketGuard(path.clone());
+
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = mohdel_thin_gate::serve_data(&serve_path, None).await;
+    });
+
+    wait_for_socket(&path).await;
+    let env = json!({
+        "callId": "c1",
+        "authId": "a".repeat(4096),
+        "auth": { "key": "sk-test" },
+        "model": "openai/gpt-5",
+        "prompt": "hi"
+    });
+    let body = Bytes::from(serde_json::to_vec(&env).unwrap());
+    let res = send_request(&path, "POST", "/v1/call", body).await;
+    let (status, err) = read_typed_error(res).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(err.kind.as_deref(), Some("PROTOCOL_INVALID_ENVELOPE"));
+
+    server.abort();
+}
+
+#[tokio::test]
 async fn oversized_body_returns_413_with_payload_too_large() {
     let path = temp_sock_path("oversized");
     let _guard = SocketGuard(path.clone());

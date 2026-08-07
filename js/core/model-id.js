@@ -7,39 +7,16 @@
  * object form; when the provider or bare part is needed, these
  * helpers return it as a substring.
  *
- * `parseModelId` validates + brands at the boundary (factory input,
- * wire deserialize, admin endpoints). After that every `ModelId` in
- * memory is known-valid; adapters and core code call the accessors
- * freely without re-validating.
+ * Ids are validated at ingress by the gate
+ * (`rust/thin-gate/src/protocol.rs::validate_ids`); these accessors
+ * assume a well-formed id and do not re-validate.
  *
  * @module core/model-id
  */
 
 /**
- * Branded string type. Only `parseModelId` produces one.
- * @typedef {string & { __brand: 'ModelId' }} ModelId
- */
-
-const MODEL_ID_RE = /^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9._-]*(?::[a-z]+)?$/i
-
-/**
- * Validate and brand a raw string. Throws on malformed input so the
- * boundary layer fails loudly instead of letting a bad id flow
- * through.
- *
- * @param {string} raw
- * @returns {ModelId}
- */
-export function parseModelId (raw) {
-  if (typeof raw !== 'string' || !MODEL_ID_RE.test(raw)) {
-    throw new TypeError(`invalid model id: ${JSON.stringify(raw)} (expected "<provider>/<bare>[:<effort>]")`)
-  }
-  return /** @type {ModelId} */ (raw)
-}
-
-/**
  * Provider segment of a model id.
- * @param {ModelId | string} model
+ * @param {string} model
  * @returns {string}
  */
 export function providerOf (model) {
@@ -52,7 +29,7 @@ export function providerOf (model) {
  * `:effort` suffix. Callers that want effort stripped use
  * `catalogKey()` instead.
  *
- * @param {ModelId | string} model
+ * @param {string} model
  * @returns {string}
  */
 export function bareOf (model) {
@@ -66,7 +43,7 @@ export function bareOf (model) {
  * output limits etc. are stored — per-effort variants do not get
  * their own entry.
  *
- * @param {ModelId | string} model
+ * @param {string} model
  * @returns {string}
  */
 export function catalogKey (model) {
@@ -81,7 +58,7 @@ export function catalogKey (model) {
 /**
  * Effort suffix, without the `:`, or `undefined` if absent.
  *
- * @param {ModelId | string} model
+ * @param {string} model
  * @returns {string | undefined}
  */
 export function effortOf (model) {

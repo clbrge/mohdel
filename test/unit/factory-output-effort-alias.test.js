@@ -2,7 +2,7 @@ import { describe, test, expect } from 'vitest'
 
 import mohdel from '../../src/lib/index.js'
 
-// F31: `:effort` alias parser used to hardcode `['none','low','medium','high']`,
+// `:effort` alias parser used to hardcode `['none','low','medium','high']`,
 // dropping provider-specific levels like Anthropic Opus `minimal`/`max`.
 // The fix is spec-aware: split on the last colon iff `base` resolves to
 // a known spec, then validate the candidate against the spec's own
@@ -32,7 +32,7 @@ function libraryFactory ({ levels = { minimal: 2048, low: 8192, medium: 16384, h
   return mohdel({ models, configurations, logger: { trace () {}, debug () {}, info () {}, warn () {}, error () {}, fatal () {} } })
 }
 
-describe('factory `:effort` alias (F31)', () => {
+describe('factory `:effort` alias', () => {
   test('accepts a per-spec level not in the old hardcoded list (`:max`)', async () => {
     const m = await libraryFactory()
     // If this throws, the old hardcoded-list filter is still in place.

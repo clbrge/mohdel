@@ -52,7 +52,7 @@ describe('client/ndjson parseNDJSON', () => {
     await expect(collect(parseNDJSON(s))).rejects.toThrow()
   })
 
-  // F37: tail branch (no trailing newline) hits a different JSON.parse
+  // Tail branch (no trailing newline) hits a different JSON.parse
   // site than mid-stream lines. Needed independently of the mid-stream
   // malformed-JSON test above.
   test('throws on malformed JSON in the un-newlined tail', async () => {
@@ -60,7 +60,7 @@ describe('client/ndjson parseNDJSON', () => {
     await expect(collect(parseNDJSON(s))).rejects.toThrow()
   })
 
-  // F18: cap runaway lines to prevent OOM from malformed streams.
+  // Cap runaway lines to prevent OOM from malformed streams.
   test('throws when a line without newline exceeds the cap', async () => {
     const CAP = 16 * 1024 * 1024
     // 4 MiB chunks, yielded 5× = 20 MiB without \n → must throw before OOM

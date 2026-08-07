@@ -224,7 +224,7 @@ describe('novita image adapter', () => {
     ).rejects.toMatchObject({ typed: { type: 'AUTH_INVALID' } })
   })
 
-  // F45: TypedError.message must stay stable + machine-readable;
+  // TypedError.message must stay stable + machine-readable;
   // provider response bodies belong in `detail`.
   test('submit failure: body goes to detail, not message', async () => {
     const fetchFn = async () => ({

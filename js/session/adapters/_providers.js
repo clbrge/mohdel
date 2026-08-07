@@ -29,14 +29,6 @@ const cache = createLazyJsonFileCache(
 )
 
 /**
- * @param {string} path
- * @returns {Record<string, ProviderLimits>}
- */
-export function loadProviders (path) {
-  return cache.loadSync(path)
-}
-
-/**
  * Eager async initialization from the default providers path. Called
  * from `bin.js::main` before `drive()` so `getProviderLimits` doesn't
  * stall the event loop on a sync read mid-call. Idempotent; respects

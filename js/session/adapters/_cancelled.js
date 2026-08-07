@@ -3,7 +3,7 @@
  * a terminal `done` event on `signal.aborted` mid-stream.
  *
  * Three adapters (openai, anthropic, gemini) had byte-identical
- * copies of this before F58; consolidated here. `_chat_completions.js`
+ * copies of this; consolidated here. `_chat_completions.js`
  * and `run.js` have their own cancel paths — don't migrate them
  * here unless you're certain the shape matches (thinkingTokens,
  * cost, tool_calls semantics can all differ).

@@ -145,7 +145,7 @@ describe('session/adapters/gemini', () => {
     expect(events[0].error.retryable).toBe(true)
   })
 
-  // F14 regression. @google/genai reads abortSignal from
+  // Regression. @google/genai reads abortSignal from
   // params.config.abortSignal only — a second positional {signal}
   // arg is dropped. This test pins the actual wiring: the SDK gets
   // our AbortController.signal on the request's `config` field.

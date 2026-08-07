@@ -70,7 +70,7 @@ fn regular_file_is_refused() {
     assert_eq!(body, b"do-not-delete", "regular file contents mutated");
 }
 
-// F46: sockets are chmod'd to 0o600 (owner-only) regardless of
+// Sockets are chmod'd to 0o600 (owner-only) regardless of
 // the process umask, so a shared-host local user can't connect.
 #[tokio::test]
 async fn bind_applies_owner_only_mode() {

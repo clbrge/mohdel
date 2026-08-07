@@ -130,7 +130,7 @@ describe('conformance events (JS side)', () => {
     expect(values.some(e => e.type === 'error')).toBe(true)
   })
 
-  // F52: delta fast-path in thin-gate scans `{"type":"delta"` prefix.
+  // Delta fast-path in thin-gate scans `{"type":"delta"` prefix.
   // Every event fixture MUST serialize with `type` as its first key.
   test('every event serializes with `type` as the first JSON key', () => {
     for (const [name, ev] of Object.entries(events)) {
@@ -161,7 +161,7 @@ describe('conformance events (JS side)', () => {
   }
 })
 
-// ---------- Image fixtures (F25) ----------
+// ---------- Image fixtures ----------
 
 const IMAGE_ENVELOPE_ALLOWED = new Set(IMAGE_ENVELOPE_FIELDS)
 const IMAGE_RESULT_ALLOWED = new Set(['status', 'images', 'seed', 'timestamps'])

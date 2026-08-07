@@ -142,7 +142,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
   args.stream = true
   args.stream_options = { include_usage: true }
 
-  // F53: accumulate via array + join to avoid per-delta V8 cons-string
+  // Accumulate via array + join to avoid per-delta V8 cons-string
   // churn on long streams.
   const contentParts = []
   const reasoningParts = []

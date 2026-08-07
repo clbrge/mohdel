@@ -23,7 +23,7 @@
  * @property {string} [traceparent]  W3C tracecontext header.
  * @property {string} [baggage]      W3C baggage header.
  *
- * @property {import('./model-id.js').ModelId} model
+ * @property {string} model
  *   Full mohdel id — `"<provider>/<bare>[:<effort>]"`. Same shape
  *   on the wire and in-process. See PROTOCOL §3. No separate
  *   `provider` field exists at any layer; callers that need the
@@ -155,3 +155,47 @@ export const ENVELOPE_FIELDS = Object.freeze([
   'idleHeartbeatMs',
   'providerOptions'
 ])
+
+export const MAX_ID_BYTES = 128
+export const MAX_MODEL_BYTES = 256
+export const MAX_PROVIDER_BYTES = 32
+
+const encoder = new TextEncoder()
+
+/**
+ * @param {string} s
+ * @returns {number}
+ */
+function byteLength (s) {
+  return encoder.encode(s).length
+}
+
+/**
+ * Bound the envelope fields that become long-lived map keys and
+ * telemetry attributes, and reject a model id with an empty half.
+ *
+ * Mirror of `rust/thin-gate/src/protocol.rs::validate_ids`, applied on
+ * the in-process factory path which does not cross the gate. Reason
+ * strings match the gate's byte for byte so both transports report a
+ * rejection identically.
+ *
+ * @param {string} callId
+ * @param {string} authId
+ * @param {string} model
+ * @returns {string | undefined}  Reason, or undefined when valid.
+ */
+export function validateIds (callId, authId, model) {
+  if (byteLength(callId) > MAX_ID_BYTES) return `callId exceeds ${MAX_ID_BYTES} bytes`
+  if (byteLength(authId) > MAX_ID_BYTES) return `authId exceeds ${MAX_ID_BYTES} bytes`
+  if (byteLength(model) > MAX_MODEL_BYTES) return `model exceeds ${MAX_MODEL_BYTES} bytes`
+
+  const slash = model.indexOf('/')
+  const provider = slash < 0 ? '' : model.slice(0, slash)
+  const bare = slash < 0 ? '' : model.slice(slash + 1)
+  if (slash < 0 || !provider || !bare) {
+    return `model must be '<provider>/<id>' (got: ${model})`
+  }
+  if (byteLength(provider) > MAX_PROVIDER_BYTES) {
+    return `model provider exceeds ${MAX_PROVIDER_BYTES} bytes`
+  }
+}

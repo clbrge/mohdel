@@ -1,13 +1,13 @@
 import { describe, test, expect } from 'vitest'
-import { MohdelTypedError, SEVERITY_TAGS } from '#core/errors.js'
+import { MohdelError, SEVERITY_TAGS } from '#core/errors.js'
 
-describe('core/errors MohdelTypedError', () => {
+describe('core/errors MohdelError', () => {
   test('SEVERITY_TAGS has the 6 mohdel levels', () => {
     expect([...SEVERITY_TAGS]).toEqual(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
   })
 
   test('basic construction with defaults', () => {
-    const e = new MohdelTypedError('bad key')
+    const e = new MohdelError('bad key')
     expect(e).toBeInstanceOf(Error)
     expect(e.message).toBe('bad key')
     expect(e.severity).toBe('error')
@@ -17,7 +17,7 @@ describe('core/errors MohdelTypedError', () => {
   })
 
   test('construction with full options', () => {
-    const e = new MohdelTypedError('rate limit', {
+    const e = new MohdelError('rate limit', {
       severity: 'warn',
       retryable: true,
       detail: 'API quota exceeded',
@@ -30,7 +30,7 @@ describe('core/errors MohdelTypedError', () => {
   })
 
   test('toJSON produces wire shape (optional fields omitted when unset)', () => {
-    const e = new MohdelTypedError('boom')
+    const e = new MohdelError('boom')
     expect(e.toJSON()).toEqual({
       message: 'boom',
       severity: 'error',
@@ -39,7 +39,7 @@ describe('core/errors MohdelTypedError', () => {
   })
 
   test('toJSON includes detail and type when set', () => {
-    const e = new MohdelTypedError('x', { severity: 'fatal', retryable: false, detail: 'y', type: 'Z' })
+    const e = new MohdelError('x', { severity: 'fatal', retryable: false, detail: 'y', type: 'Z' })
     expect(e.toJSON()).toEqual({
       message: 'x',
       severity: 'fatal',
@@ -56,7 +56,29 @@ describe('core/errors MohdelTypedError', () => {
       retryable: true,
       type: 'PROVIDER_COOLDOWN'
     }
-    const e = MohdelTypedError.fromJSON(wire)
+    const e = MohdelError.fromJSON(wire)
+    expect(e.toJSON()).toEqual(wire)
+  })
+
+  test('name is MohdelError', () => {
+    expect(new MohdelError('x').name).toBe('MohdelError')
+  })
+
+  test('context is carried in-process but never serialized', () => {
+    const e = new MohdelError('boom', { context: { provider: 'openai', model: 'gpt-5' } })
+    expect(e.context).toEqual({ provider: 'openai', model: 'gpt-5' })
+    expect(e.toJSON()).toEqual({
+      message: 'boom',
+      severity: 'error',
+      retryable: false
+    })
+    expect(JSON.parse(JSON.stringify(e))).not.toHaveProperty('context')
+  })
+
+  test('fromJSON attaches context without it reaching the wire', () => {
+    const wire = { message: 'rpm', severity: 'warn', retryable: true, type: 'RATE_LIMIT' }
+    const e = MohdelError.fromJSON(wire, { provider: 'groq', model: 'llama' })
+    expect(e.context).toEqual({ provider: 'groq', model: 'llama' })
     expect(e.toJSON()).toEqual(wire)
   })
 })

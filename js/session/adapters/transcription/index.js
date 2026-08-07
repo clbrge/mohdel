@@ -47,12 +47,3 @@ export function getTranscriptionAdapter (provider) {
   if (!adapter) throw new Error(`no transcription adapter for provider: ${provider}`)
   return adapter
 }
-
-/**
- * Whether the provider has a transcription adapter registered.
- *
- * @param {string} provider
- */
-export function isTranscriptionProvider (provider) {
-  return Object.prototype.hasOwnProperty.call(TRANSCRIPTION_ADAPTERS, provider)
-}

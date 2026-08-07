@@ -4,7 +4,7 @@ import { runAnswer, runAnswerImage, runAnswerTranscription } from '../../js/fact
 import { createCooldownTracker } from '../../js/session/_cooldown.js'
 import { createRateLimiter } from '../../js/session/_rate_limiter.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
-import { MohdelError } from '../../src/lib/errors.js'
+import { MohdelError } from '#core/errors.js'
 
 beforeEach(() => setCatalog({ 'echo/m': {} }))
 
@@ -56,17 +56,18 @@ describe('factory bridge — runAnswer', () => {
     await expect(runAnswer({ ...baseArgs, modelKey: 'nonesuch/m' }, deps))
       .rejects.toMatchObject({
         name: 'MohdelError',
-        message: 'SESSION_UNKNOWN_PROVIDER',
+        type: 'SESSION_UNKNOWN_PROVIDER',
         retryable: false
       })
   })
 
-  test('adapter error event is rethrown as MohdelError with typed detail', async () => {
+  test('adapter error event is rethrown as MohdelError preserving the wire fields', async () => {
     const capturing = async function * () {
       yield {
         type: 'error',
         error: {
-          message: 'bad key',
+          message: 'authentication failed',
+          detail: 'bad key',
           severity: 'error',
           retryable: false,
           type: 'AUTH_INVALID'
@@ -78,10 +79,34 @@ describe('factory bridge — runAnswer', () => {
       resolveAdapter: () => capturing
     })).rejects.toMatchObject({
       name: 'MohdelError',
-      message: 'AUTH_INVALID',
+      type: 'AUTH_INVALID',
+      message: 'authentication failed',
       detail: 'bad key',
+      severity: 'error',
       retryable: false
     })
+  })
+
+  test('rethrown MohdelError carries provider context off the wire', async () => {
+    const capturing = async function * () {
+      yield {
+        type: 'error',
+        error: { message: 'boom', severity: 'error', retryable: true, type: 'PROVIDER_ERROR' }
+      }
+    }
+    try {
+      await runAnswer(baseArgs, { ...deps, resolveAdapter: () => capturing })
+      expect.unreachable('should have thrown')
+    } catch (err) {
+      expect(err.context).toMatchObject({ provider: 'echo', model: 'm' })
+      expect(err.detail).toBeUndefined()
+      expect(JSON.parse(JSON.stringify(err))).toEqual({
+        message: 'boom',
+        severity: 'error',
+        retryable: true,
+        type: 'PROVIDER_ERROR'
+      })
+    }
   })
 
   test('envelope carries flat answer options (outputBudget, outputType, identifier, tools, traceparent)', async () => {
@@ -421,7 +446,7 @@ describe('compat bridge — runAnswerImage', () => {
       prompt: 'x'
     })).rejects.toMatchObject({
       name: 'MohdelError',
-      message: 'SESSION_UNKNOWN_PROVIDER'
+      type: 'SESSION_UNKNOWN_PROVIDER'
     })
   })
 })
@@ -463,12 +488,12 @@ describe('compat bridge — runAnswerTranscription', () => {
       audio: { fileUri: 'data:audio/wav;base64,aGk=', mimeType: 'audio/wav' }
     })).rejects.toMatchObject({
       name: 'MohdelError',
-      message: 'SESSION_UNKNOWN_PROVIDER'
+      type: 'SESSION_UNKNOWN_PROVIDER'
     })
   })
 })
 
-// F11 regression: bridge must reject invalid prompt shapes up-front
+// Regression: bridge must reject invalid prompt shapes up-front
 // instead of letting them propagate into the adapter.
 describe('compat bridge — invalid prompt shapes', () => {
   let deps
@@ -484,7 +509,7 @@ describe('compat bridge — invalid prompt shapes', () => {
       expect.unreachable('should have thrown SESSION_INVALID_PROMPT')
     } catch (err) {
       expect(err).toBeInstanceOf(MohdelError)
-      expect(err.message).toBe('SESSION_INVALID_PROMPT')
+      expect(err.type).toBe('SESSION_INVALID_PROMPT')
       expect(err.retryable).toBe(false)
       expect(err.detail).toContain(shapeHint)
     }
@@ -511,13 +536,37 @@ describe('compat bridge — invalid prompt shapes', () => {
   })
 })
 
-// F24: per-call `configuration` overrides (baseURL, defaultHeaders,
+// Per-call `configuration` overrides (baseURL, defaultHeaders,
 // organization, timeout) are no longer plumbed. Silent drop would
 // risk leaking prompts + keys to a provider the caller never
 // intended to reach (e.g. corporate proxy configs). Throw loudly.
-describe('compat bridge — configuration normalization (F24)', () => {
+describe('compat bridge — configuration normalization', () => {
   let deps
   beforeEach(() => { deps = freshDeps() })
+
+  test('malformed model id is rejected before the adapter', async () => {
+    const capturing = async function * () {
+      throw new Error('adapter should NOT be reached for a malformed model id')
+    }
+    for (const modelKey of ['anthropic/', '/gpt-5', 'gpt-5']) {
+      try {
+        await runAnswer({ ...baseArgs, modelKey }, { ...deps, resolveAdapter: () => capturing })
+        expect.unreachable(`should have rejected ${modelKey}`)
+      } catch (err) {
+        expect(err.type).toBe('PROTOCOL_INVALID_ENVELOPE')
+        expect(err.detail).toBe(`model must be '<provider>/<id>' (got: ${modelKey})`)
+        expect(err.retryable).toBe(false)
+      }
+    }
+  })
+
+  test('oversized authId is rejected before the adapter', async () => {
+    await expect(runAnswer({ ...baseArgs, options: { authId: 'a'.repeat(129) } }, deps))
+      .rejects.toMatchObject({
+        type: 'PROTOCOL_INVALID_ENVELOPE',
+        detail: 'authId exceeds 128 bytes'
+      })
+  })
 
   test('apiKey-only configuration is accepted', async () => {
     const result = await runAnswer({ ...baseArgs, configuration: { apiKey: 'k' } }, deps)
@@ -549,7 +598,7 @@ describe('compat bridge — configuration normalization (F24)', () => {
       throw new Error('should have thrown')
     } catch (e) {
       expect(e).toBeInstanceOf(MohdelError)
-      expect(e.message).toBe('CONFIGURATION_UNSUPPORTED')
+      expect(e.type).toBe('CONFIGURATION_UNSUPPORTED')
       expect(e.detail).toContain('defaultHeaders')
     }
   })
@@ -562,7 +611,7 @@ describe('compat bridge — configuration normalization (F24)', () => {
       }, deps)
       throw new Error('should have thrown')
     } catch (e) {
-      expect(e.message).toBe('CONFIGURATION_UNSUPPORTED')
+      expect(e.type).toBe('CONFIGURATION_UNSUPPORTED')
       expect(e.detail).toContain('baseURL')
       expect(e.detail).toContain('organization')
       expect(e.detail).toContain('timeout')

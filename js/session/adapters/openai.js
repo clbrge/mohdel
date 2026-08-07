@@ -28,6 +28,7 @@ import { cancelledDone } from './_cancelled.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
+import { isTrustedMedia } from './_media.js'
 import { costFor } from './_pricing.js'
 import { catalogKey, providerOf, bareOf } from '#core/model-id.js'
 import {
@@ -57,19 +58,20 @@ export async function * openai (envelope, deps = {}) {
 
   if (envelope.images?.length) {
     try {
-      const loaded = await loadImages(envelope.images)
+      const loaded = await loadImages(envelope.images, { trusted: isTrustedMedia(envelope) })
       const parts = loaded.map(toOpenAIImagePart).filter(Boolean)
       if (parts.length) injectImageParts(input, parts)
     } catch (e) {
       log?.warn({ err: e }, '[mohdel:openai] image load failed')
-      yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: 'openai' }) }
+      const typed = /** @type {any} */(e).typed
+      yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'openai' }) }
       return
     }
   }
 
   const request = buildRequest(envelope, input, instructions)
 
-  // F53: accumulate via array + join to avoid per-delta V8 cons-string
+  // Accumulate via array + join to avoid per-delta V8 cons-string
   // churn. Materialized at each exit point.
   const outputParts = []
   const currentOutput = () => outputParts.join('')

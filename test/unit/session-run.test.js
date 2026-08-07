@@ -36,8 +36,8 @@ describe('session/run', () => {
     expect(events[0].error.severity).toBe('error')
   })
 
-  // F29 (image-only provider via answer path) — the fallback exists in
-  // run.js but no provider in the current registry is image-only:
+  // Image-only provider via the answer path: the fallback exists in
+  // run.js but no provider in the current registry is image-only —
   // every entry in `IMAGE_ADAPTERS` (openai, novita, fake) also has a
   // text adapter. Re-add a concrete test here the next time a text-less
   // image provider is registered.

@@ -270,9 +270,10 @@ interface TypedError {
 }
 ```
 
-`message` is a stable machine key; `detail` carries user-facing
-context. `message` MUST NOT contain provider response bodies —
-some providers echo API keys back on 401.
+`type` is the canonical tag callers branch on; `message` is a short
+human-readable label, stable per classification; `detail` carries the
+provider's own rejection text. `message` MUST NOT contain provider
+response bodies — some providers echo API keys back on 401.
 
 ### 4.5 Emission invariants
 

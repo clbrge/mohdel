@@ -198,10 +198,19 @@ describe('loadAudio', () => {
     expect(out.filename).toBe('audio.mp3')
   })
 
-  test('file:// keeps the on-disk basename', async () => {
-    const out = await loadAudio({ fileUri: `file://${process.cwd()}/package.json`, mimeType: 'audio/wav' })
+  test('file:// keeps the on-disk basename for a trusted caller', async () => {
+    const out = await loadAudio(
+      { fileUri: `file://${process.cwd()}/package.json`, mimeType: 'audio/wav' },
+      { trusted: true }
+    )
     expect(out.filename).toBe('package.json')
     expect(out.bytes.length).toBeGreaterThan(0)
+  })
+
+  test('file:// is refused for an untrusted caller with no roots configured', async () => {
+    await expect(
+      loadAudio({ fileUri: `file://${process.cwd()}/package.json`, mimeType: 'audio/wav' })
+    ).rejects.toMatchObject({ typed: { type: 'SESSION_INVALID_AUDIO' } })
   })
 
   test('unreadable file throws SESSION_INVALID_AUDIO', async () => {

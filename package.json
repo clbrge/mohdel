@@ -25,7 +25,7 @@
     "./providers": "./src/lib/providers.js",
     "./creators": "./src/lib/creators.js",
     "./utils": "./src/lib/utils.js",
-    "./errors": "./src/lib/errors.js",
+    "./errors": "./js/core/errors.js",
     "./client": "./js/client/index.js",
     "./session": "./js/session/index.js",
     "./session/bin": "./js/session/bin.js"

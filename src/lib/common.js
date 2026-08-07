@@ -210,13 +210,3 @@ export const getExcludedModels = excludedOps.load
 export const saveExcludedModels = excludedOps.save
 export const getProvidersConfig = providersConfigOps.load
 export const saveProvidersConfig = providersConfigOps.save
-
-export const getDefaultModelId = async () => {
-  const config = await getConfig()
-
-  if (config.defaultModel) {
-    return config.defaultModel
-  }
-
-  throw new Error('No default model configured. Run \'mo default\' to set up a default model.')
-}

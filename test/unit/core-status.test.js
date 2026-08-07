@@ -5,8 +5,7 @@ import {
   STATUS_INCOMPLETE,
   STATUSES,
   WARNING_INSUFFICIENT_OUTPUT_BUDGET,
-  WARNING_CANCELLED,
-  isStatus
+  WARNING_CANCELLED
 } from '#core/status.js'
 
 describe('core/status', () => {
@@ -20,13 +19,5 @@ describe('core/status', () => {
   test('warning constants', () => {
     expect(WARNING_INSUFFICIENT_OUTPUT_BUDGET).toBe('insufficientOutputBudget')
     expect(WARNING_CANCELLED).toBe('cancelled')
-  })
-
-  test('isStatus', () => {
-    expect(isStatus('completed')).toBe(true)
-    expect(isStatus('tool_use')).toBe(true)
-    expect(isStatus('incomplete')).toBe(true)
-    expect(isStatus('done')).toBe(false)
-    expect(isStatus(null)).toBe(false)
   })
 })

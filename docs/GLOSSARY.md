@@ -86,11 +86,11 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 **`warning`** — non-fatal qualifier on a successful result. Examples: `'insufficientOutputBudget'`, `'cancelled'`. Additive string union — new warnings can be added without breaking the wire.
 
 **`TypedError`** — error event payload: `{ message, detail?, severity, retryable, type }`.
-- `message` — stable machine-readable key (snake/camel string).
-- `detail` — user-facing context, may include provider text.
+- `message` — short human-readable label, stable per classification (e.g. `'provider error 400'`, `'authentication failed'`). Not the branching key.
+- `detail` — the provider's own rejection text, capped and API-key-scrubbed. Whether to surface it is the caller's policy.
 - `severity` — `'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'`.
 - `retryable` — boolean hint for the caller's retry policy. Mohdel never retries on its own.
-- `type` — optional canonical tag (e.g. `'AUTH_INVALID'`, `'PROVIDER_COOLDOWN'`).
+- `type` — canonical tag callers branch on (e.g. `'AUTH_INVALID'`, `'PROVIDER_COOLDOWN'`). Optional on the wire; every classification sets it.
 
 **Cooldown** — provider-wide circuit-breaker state in `thin-gate`. After a string of failures from one provider, new calls fast-fail with `PROVIDER_COOLDOWN` instead of hitting the wire. Visible as `mohdel.cooldown.rejections` in metrics and `mohdel.cooldown` on the call span.
 

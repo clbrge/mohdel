@@ -289,3 +289,116 @@ async fn pooled_session_reports_its_seeded_version() {
     assert_eq!(sess.catalog_version(), 7);
     drop(sess);
 }
+
+/// Logs every raw stdin line, so the trace shows what actually reached
+/// the session rather than only what parsed. A frame split across lines
+/// is invisible to a parser-only trace: each fragment fails JSON.parse
+/// and is dropped.
+fn raw_echo_session_cfg(trace_file: &PathBuf) -> SessionConfig {
+    SessionConfig {
+        command: "node".to_string(),
+        args: vec![
+            "--input-type=module".to_string(),
+            "-e".to_string(),
+            r#"
+import { createInterface } from 'node:readline'
+import { appendFileSync } from 'node:fs'
+const tracePath = process.argv[1]
+const rl = createInterface({ input: process.stdin })
+rl.on('line', (line) => {
+  let o; try { o = JSON.parse(line) } catch { o = null }
+  if (o?.op === 'ping') {
+    process.stdout.write(JSON.stringify({ op: 'pong' }) + '\n')
+    return
+  }
+  appendFileSync(tracePath, line.slice(0, 40) + '\n')
+})
+"#
+            .to_string(),
+            "--".to_string(),
+            trace_file.to_string_lossy().into_owned(),
+        ],
+        catalog: None,
+    }
+}
+
+/// A pretty-printed snapshot would split the `set_catalog` frame across
+/// lines, and the session would reject the fragments with an error
+/// naming nothing the operator can act on. The pool rejects it instead,
+/// and — because the fault is the embedder's, not the session's —
+/// serves the stale catalog rather than destroying a session per
+/// acquire against a snapshot that will not improve.
+#[tokio::test]
+async fn multiline_catalog_snapshot_is_rejected_without_burning_sessions() {
+    let (guard, trace) = TraceGuard::new("multiline-catalog");
+    let cell: CatalogCell = std::sync::Arc::new(Mutex::new(Some(
+        r#"{"openai/gpt-5":{"inputPrice":1}}"#.to_string(),
+    )));
+    let mut cfg = raw_echo_session_cfg(&trace);
+    cfg.catalog = Some(make_source(cell.clone()));
+
+    let pool = SessionPool::new(cfg, 1).await.expect("pool");
+    wait_for_lines(&guard, 1, "initial seed").await;
+
+    // Pretty-printed: valid JSON, invalid as one NDJSON frame.
+    *cell.lock().unwrap() = Some("{\n  \"openai/gpt-5\": {\n    \"inputPrice\": 1\n  }\n}".to_string());
+    pool.notify_catalog_changed();
+
+    for _ in 0..3 {
+        let sess = pool.acquire().await.expect("session still served");
+        pool.release(sess);
+    }
+
+    // Only the boot-time injection ever reached the wire; the pool
+    // never spliced the multi-line snapshot into a frame.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        guard.lines().len(),
+        1,
+        "nothing beyond the boot frame should have reached stdin, saw {:?}",
+        guard.lines()
+    );
+
+    // A session survives and is still usable.
+    let sess = pool.acquire().await.expect("session available after rejection");
+    pool.release(sess);
+}
+
+/// `release` into a full channel used to drop the session on the floor:
+/// no replacement, no `session_alive_delta(-1)`, so the pool shrank
+/// permanently and the gauge drifted. It now routes through `discard`.
+///
+/// The replacement it queues cannot be asserted on: the channel is
+/// still full, so that session is refused and killed on drop, usually
+/// before its subprocess reads anything. What is observable — and what
+/// regressed the pool — is that the release neither wedges nor loses
+/// the pool's ability to serve.
+#[tokio::test]
+async fn release_into_a_full_channel_leaves_the_pool_serviceable() {
+    let (guard, trace) = TraceGuard::new("release-full");
+    let cell: CatalogCell = std::sync::Arc::new(Mutex::new(Some(
+        r#"{"openai/gpt-5":{"inputPrice":1}}"#.to_string(),
+    )));
+    let cfg = fake_session_cfg(&trace, Some(make_source(cell)));
+
+    let pool = SessionPool::new(cfg, 1).await.expect("pool");
+    wait_for_lines(&guard, 1, "initial spawn").await;
+
+    // Hold the only session, then refill the single channel slot so the
+    // release below lands on a full channel.
+    let sess = pool.acquire().await.expect("acquire");
+    pool.spawn_replacement();
+    wait_for_lines(&guard, 2, "replacement spawned").await;
+    // The trace line is written during readiness injection, which
+    // happens before the session is handed to the channel. Let that
+    // send land, otherwise the release below finds the slot empty.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    pool.release(sess);
+
+    let again = pool
+        .acquire()
+        .await
+        .expect("pool still serves after a full-channel release");
+    pool.release(again);
+}

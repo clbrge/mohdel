@@ -77,11 +77,39 @@ async function hashFile (filePath) {
   return h.digest('hex')
 }
 
+/**
+ * Provider file handles expire server-side — Gemini's Files API keeps
+ * an upload about 48h — while a cache entry would live forever. An
+ * entry outliving its handle is worse than a cache miss: the upload is
+ * skipped and the provider rejects a URI it no longer knows.
+ */
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000
+
+/** Bound on retained entries; the file is rewritten whole on each save. */
+const CACHE_MAX_ENTRIES = 500
+
+/**
+ * @param {Record<string, UploadedFileRecord>} cache
+ * @returns {Record<string, UploadedFileRecord>}
+ */
+function prune (cache) {
+  const cutoff = Date.now() - CACHE_TTL_MS
+  const live = Object.entries(cache).filter(([, e]) => {
+    const at = Date.parse(e?.cachedAt ?? '')
+    return Number.isFinite(at) && at >= cutoff
+  })
+  if (live.length <= CACHE_MAX_ENTRIES) return Object.fromEntries(live)
+  live.sort((a, b) => Date.parse(b[1].cachedAt) - Date.parse(a[1].cachedAt))
+  return Object.fromEntries(live.slice(0, CACHE_MAX_ENTRIES))
+}
+
 async function loadCache () {
   try {
     if (!existsSync(CACHE_PATH)) return {}
     const text = await fs.readFile(CACHE_PATH, 'utf8')
-    return JSON.parse(text)
+    const parsed = JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return prune(parsed)
   } catch {
     return {}
   }
@@ -90,7 +118,7 @@ async function loadCache () {
 async function saveCache (cache) {
   try {
     await ensureCacheDir()
-    await fs.writeFile(CACHE_PATH, JSON.stringify(cache, null, 2))
+    await fs.writeFile(CACHE_PATH, JSON.stringify(prune(cache), null, 2))
   } catch {
     // cache write failures shouldn't bring down a call
   }

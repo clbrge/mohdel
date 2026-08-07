@@ -3,10 +3,9 @@ import { loadDefaultEnv } from '../../src/lib/common.js'
 import mohdel from '../../src/lib/index.js'
 import providers from '../../src/lib/providers.js'
 import { getCuratedCacheSnapshot } from '../../src/lib/curated-cache.js'
+import { isImageModel, isTextModel } from './_model-types.js'
 
 loadDefaultEnv()
-
-const IMAGE_TYPES = new Set(['image'])
 
 const tagFilter = process.env.TAG || null
 
@@ -35,8 +34,8 @@ describe('provider integration', async () => {
     const api = providers[provider].api
 
     // Separate text and image models
-    const textModels = modelIds.filter(id => !IMAGE_TYPES.has(curated[id].type))
-    const imageModels = modelIds.filter(id => IMAGE_TYPES.has(curated[id].type))
+    const textModels = modelIds.filter(id => isTextModel(curated[id]))
+    const imageModels = modelIds.filter(id => isImageModel(curated[id]))
 
     if (textModels.length > 0) {
       const modelId = textModels[0]

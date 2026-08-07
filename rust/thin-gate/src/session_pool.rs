@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use thiserror::Error;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, Mutex};
 
@@ -104,10 +104,28 @@ impl PooledSession {
         // the child's stderr closes (i.e. child exits).
         if let Some(stderr) = child.stderr.take() {
             tokio::spawn(async move {
-                use tokio::io::AsyncBufReadExt;
-                let reader = BufReader::new(stderr);
-                let mut lines = reader.lines();
-                while let Ok(Some(line)) = lines.next_line().await {
+                let mut reader = BufReader::new(stderr);
+                // A session emitting a newline-less torrent on stderr
+                // would otherwise grow this task's buffer without bound.
+                // Over the cap, the line is dropped and reported rather
+                // than relayed, so the drain keeps running.
+                loop {
+                    let mut line = String::new();
+                    match crate::server::read_capped_line(
+                        &mut reader,
+                        &mut line,
+                        crate::server::MAX_NDJSON_LINE_BYTES,
+                    )
+                    .await
+                    {
+                        Ok(0) => break,
+                        Err(e) => {
+                            eprintln!("session stderr drain stopped: {e}");
+                            break;
+                        }
+                        Ok(_) => {}
+                    }
+                    let line = line.trim_end_matches(['\r', '\n']);
                     // Verbatim — mohdel session emits structured JSON;
                     // prefixing would break downstream log parsers
                     // (pino-pretty, fluent-bit, otel-collector).
@@ -172,6 +190,17 @@ impl PooledSession {
         // NDJSON line. `table_json` is trusted — comes from the
         // embedder, not the network — so we splice it in directly
         // instead of re-serializing.
+        //
+        // Trusted is not the same as well-formed: a pretty-printed
+        // snapshot splits this frame across lines, and the session
+        // rejects the fragments as `SESSION_STDIN_MALFORMED` pointing
+        // nowhere near the embedder that produced them.
+        if table_json.contains('\n') || table_json.contains('\r') {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "catalog snapshot contains a newline; CatalogSource must return single-line JSON",
+            ));
+        }
         self.stdin
             .write_all(br#"{"op":"set_catalog","table":"#)
             .await?;
@@ -189,7 +218,12 @@ impl PooledSession {
         let mut buf = String::new();
         loop {
             buf.clear();
-            let n = self.reader.read_line(&mut buf).await?;
+            let n = crate::server::read_capped_line(
+                &mut self.reader,
+                &mut buf,
+                crate::server::MAX_NDJSON_LINE_BYTES,
+            )
+            .await?;
             if n == 0 {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
@@ -246,7 +280,13 @@ impl PooledSession {
         let drain_result = tokio::time::timeout(timeout, async {
             loop {
                 let mut buf = String::new();
-                match self.reader.read_line(&mut buf).await {
+                match crate::server::read_capped_line(
+                    &mut self.reader,
+                    &mut buf,
+                    crate::server::MAX_NDJSON_LINE_BYTES,
+                )
+                .await
+                {
                     Ok(0) => return Err(()),
                     Err(_) => return Err(()),
                     Ok(_) => {
@@ -442,6 +482,17 @@ impl SessionPool {
                     sess.catalog_version = pool_ver;
                     return Some(sess);
                 }
+                Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                    // The snapshot was rejected before anything reached
+                    // stdin, so the session is healthy and the fault is
+                    // the embedder's. Discarding here would destroy a
+                    // session per acquire and never converge, since the
+                    // next snapshot is equally bad. Serve the stale
+                    // catalog and keep reporting.
+                    eprintln!("acquire: rejected catalog snapshot ({e}); serving stale catalog");
+                    sess.catalog_version = pool_ver;
+                    return Some(sess);
+                }
                 Err(e) => {
                     // Injection failed — stdin is now in an
                     // indeterminate state. Kill this session (drop
@@ -459,13 +510,32 @@ impl SessionPool {
         }
     }
 
-    /// Return a healthy session to the pool for reuse. If the
-    /// channel is full (shouldn't happen under normal flow), the
-    /// session is dropped. Balances the `pool_in_use_delta(+1)`
-    /// that `acquire` emitted.
+    /// Return a healthy session to the pool for reuse. Balances the
+    /// `pool_in_use_delta(+1)` that `acquire` emitted.
+    ///
+    /// The channel has one slot per session and a released session
+    /// came out of it, so a full channel means the pool's accounting
+    /// is already wrong. Dropping the session there shrinks the pool
+    /// permanently and leaves `sessions_alive` overstated, so route it
+    /// through `discard` instead: gauges stay balanced, a replacement
+    /// is queued, and the anomaly is reported rather than silent.
     pub fn release(&self, sess: PooledSession) {
-        let _ = self.inner.sender.try_send(sess);
-        metrics::pool_in_use_delta(-1);
+        match self.inner.sender.try_send(sess) {
+            Ok(()) => metrics::pool_in_use_delta(-1),
+            Err(mpsc::error::TrySendError::Full(sess)) => {
+                eprintln!(
+                    "release: pool channel full at capacity {}; discarding session and replacing",
+                    self.inner.sender.max_capacity()
+                );
+                self.discard(sess);
+            }
+            Err(mpsc::error::TrySendError::Closed(sess)) => {
+                // Shutdown: no replacement, the pool is going away.
+                drop(sess);
+                metrics::pool_in_use_delta(-1);
+                metrics::session_alive_delta(-1);
+            }
+        }
     }
 
     /// Drop an acquired session that's no longer healthy (died

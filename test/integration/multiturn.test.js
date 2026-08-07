@@ -4,6 +4,7 @@ import { loadDefaultEnv } from '../../src/lib/common.js'
 import mohdel from '../../src/lib/index.js'
 import providers from '../../src/lib/providers.js'
 import { getCuratedCacheSnapshot } from '../../src/lib/curated-cache.js'
+import { isTextModel } from './_model-types.js'
 
 loadDefaultEnv()
 
@@ -20,8 +21,6 @@ const NO_SYNTHETIC_HISTORY = new Set(['gemini', 'deepseek'])
 // Providers that reject `tool_choice: 'required'`. DeepSeek V4
 // inherits the `deepseek-reasoner` restriction.
 const NO_REQUIRED_TOOL_CHOICE = new Set(['deepseek'])
-
-const IMAGE_TYPES = new Set(['image'])
 
 const tagFilter = process.env.TAG || null
 
@@ -65,10 +64,9 @@ describe('multi-turn messages integration', async () => {
     const envVar = providers[provider].apiKeyEnv
     const hasKey = envVar && !!process.env[envVar]
     const sdk = providers[provider].sdk
-    // Text-answer path only — skip image-gen models (those live in
-    // provider.test.js's image() smoke). A provider with only image
-    // models is entirely skipped.
-    const textModels = modelIds.filter(id => !IMAGE_TYPES.has(curated[id].type))
+    // Text-answer path only. A provider with no chat model is skipped
+    // entirely; non-chat types are covered by their own suites.
+    const textModels = modelIds.filter(id => isTextModel(curated[id]))
     if (textModels.length === 0) continue
     const modelId = textModels[0]
 

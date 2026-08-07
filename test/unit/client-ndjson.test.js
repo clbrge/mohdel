@@ -72,4 +72,29 @@ describe('client/ndjson parseNDJSON', () => {
     // Ensure the cap is the one we claim
     expect(CAP).toBe(16777216)
   })
+
+  test('a chunk holding more than the cap in complete frames is not a runaway line', async () => {
+    // The cap bounds one unterminated line. Measuring the accumulated
+    // buffer instead rejects a fully-framed burst that happens to
+    // arrive in one chunk.
+    const frame = JSON.stringify({ pad: 'y'.repeat(256 * 1024) }) + '\n'
+    const count = 70
+    const oneChunk = frame.repeat(count)
+    expect(Buffer.byteLength(oneChunk, 'utf8')).toBeGreaterThan(16 * 1024 * 1024)
+    const s = (async function * () { yield oneChunk })()
+    const out = await collect(parseNDJSON(s))
+    expect(out).toHaveLength(count)
+  })
+
+  test('the cap counts UTF-8 bytes, not UTF-16 units', async () => {
+    // A 3-byte-per-char run is under the cap by `.length` and over it
+    // by bytes; the gate reads bytes, so this must be rejected.
+    const chars = 7 * 1024 * 1024
+    const s = (async function * () {
+      yield '\u4e00'.repeat(chars)
+    })()
+    expect(chars).toBeLessThan(16 * 1024 * 1024)
+    expect(Buffer.byteLength('\u4e00'.repeat(chars), 'utf8')).toBeGreaterThan(16 * 1024 * 1024)
+    await expect(collect(parseNDJSON(s))).rejects.toThrow(/exceeds .* bytes/)
+  })
 })

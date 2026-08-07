@@ -101,6 +101,13 @@ const rotateBackup = async (filePath) => {
 
 export const BACKUP_SLOTS = ['prev', 'daily', 'weekly']
 
+export class ConfigParseError extends Error {
+  constructor (message, options) {
+    super(message, options)
+    this.name = 'ConfigParseError'
+  }
+}
+
 const createFileOperation = (filePath, defaultValue = {}, operationType) => {
   const loadHandler = async () => {
     let loadedData
@@ -118,7 +125,14 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
         }
       } else {
         const fileContent = await readFile(filePath, 'utf8')
-        loadedData = JSON.parse(fileContent)
+        try {
+          loadedData = JSON.parse(fileContent)
+        } catch (e) {
+          throw new ConfigParseError(
+            `[mohdel:common] ${filePath} is not valid JSON: ${e.message}`,
+            { cause: e }
+          )
+        }
       }
 
       if (typeof loadedData === 'object' && loadedData !== null && !Array.isArray(loadedData)) {
@@ -158,6 +172,11 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
 
       return loadedData
     } catch (err) {
+      // A file that exists but does not parse is corrupt state, not an
+      // absent-config runtime branch. Falling back would make it read
+      // as empty and surface later as `Unknown model`, and this warn
+      // goes to `silent` unless the embedder wired a logger.
+      if (err instanceof ConfigParseError) throw err
       moduleLogger.warn(`[mohdel:common] failed to load ${operationType}: ${err.message}`)
       return JSON.parse(JSON.stringify(defaultValue || {}))
     }

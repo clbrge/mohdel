@@ -12,6 +12,9 @@
  * @module session/driver
  */
 
+import { once } from 'node:events'
+
+import { MAX_LINE_BYTES, exceedsLineBytes } from '#core/framing.js'
 import { run } from './run.js'
 import { runImage } from './run_image.js'
 import { runTranscription } from './run_transcription.js'
@@ -48,6 +51,34 @@ export async function drive (stdin, stdout) {
     precancelled.add(callId)
   }
 
+  /**
+   * Write one NDJSON frame, pausing on a full pipe. A fast adapter
+   * feeding a slow gate reader would otherwise grow Node's internal
+   * write buffer without bound, since `for await` keeps pulling events
+   * regardless of whether the previous one reached the socket.
+   *
+   * @param {unknown} payload
+   */
+  async function writeLine (payload) {
+    if (!stdout.write(JSON.stringify(payload) + '\n')) {
+      await once(stdout, 'drain')
+    }
+  }
+
+  function stdinMalformed (detail) {
+    process.stderr.write(`session: ${detail}; exiting\n`)
+    const error = {
+      message: 'unusable stdin line',
+      detail,
+      severity: 'error',
+      retryable: false,
+      type: 'SESSION_STDIN_MALFORMED'
+    }
+    stdout.write(JSON.stringify({ type: 'error', error }) + '\n')
+    framingError = Object.assign(new Error('SESSION_STDIN_MALFORMED'), { detail })
+    if (queueNotify) { queueNotify(); queueNotify = null }
+  }
+
   const onLine = (line) => {
     if (framingError) return
     const trimmed = line.trim()
@@ -57,17 +88,7 @@ export async function drive (stdin, stdout) {
     try {
       obj = JSON.parse(trimmed)
     } catch (e) {
-      process.stderr.write(`session: malformed stdin line, exiting: ${e.message}\n`)
-      const error = {
-        message: 'SESSION_STDIN_MALFORMED',
-        detail: `stdin line is not valid JSON: ${e.message}`,
-        severity: 'error',
-        retryable: false,
-        type: 'SESSION_STDIN_MALFORMED'
-      }
-      stdout.write(JSON.stringify({ type: 'error', error }) + '\n')
-      framingError = Object.assign(new Error(error.message), { detail: error.detail })
-      if (queueNotify) { queueNotify(); queueNotify = null }
+      stdinMalformed(`stdin line is not valid JSON: ${e.message}`)
       return
     }
 
@@ -78,6 +99,20 @@ export async function drive (stdin, stdout) {
         // Pre-dequeue cancel: remember the callId so the envelope
         // aborts immediately on dispatch. Honored once then cleared.
         recordPrecancel(obj.callId)
+      }
+      return
+    }
+
+    // Catalog injection from the supervisor. Supersedes whatever was
+    // loaded from disk at startup. Lets a supervisor (e.g. a
+    // thin-gate session pool) run sessions in contexts without
+    // access to `~/.config/mohdel/` by providing the catalog via
+    // stdin instead.
+    if (obj && typeof obj === 'object' && obj.op === 'set_catalog') {
+      if (obj.table && typeof obj.table === 'object') {
+        setCatalog(obj.table)
+      } else {
+        process.stderr.write('session: set_catalog requires `table: object`\n')
       }
       return
     }
@@ -94,20 +129,6 @@ export async function drive (stdin, stdout) {
     // classified as `SESSION_INVALID_EVENT` — killing the session.
     // Drop mid-call pings; the supervisor can re-ping after the
     // call terminates.
-    // Catalog injection from the supervisor. Supersedes whatever was
-    // loaded from disk at startup. Lets a supervisor (e.g. a
-    // thin-gate session pool) run sessions in contexts without
-    // access to `~/.config/mohdel/` by providing the catalog via
-    // stdin instead.
-    if (obj && typeof obj === 'object' && obj.op === 'set_catalog') {
-      if (obj.table && typeof obj.table === 'object') {
-        setCatalog(obj.table)
-      } else {
-        process.stderr.write('session: set_catalog requires `table: object`\n')
-      }
-      return
-    }
-
     if (obj && typeof obj === 'object' && obj.op === 'ping') {
       if (currentCall) {
         process.stderr.write(
@@ -116,6 +137,19 @@ export async function drive (stdin, stdout) {
         return
       }
       stdout.write(JSON.stringify({ op: 'pong' }) + '\n')
+      return
+    }
+
+    // Parseable JSON is not yet a usable envelope: `null`, an array or
+    // a bare scalar would reach the dispatch loop and throw on
+    // `envelope.callId`, killing the process with no terminal event.
+    // PROTOCOL.md §3 requires a terminal `error` for unusable stdin.
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      stdinMalformed(`stdin line is not an envelope object (got ${obj === null ? 'null' : Array.isArray(obj) ? 'array' : typeof obj})`)
+      return
+    }
+    if (typeof obj.callId !== 'string' || !obj.callId) {
+      stdinMalformed('envelope is missing a string `callId`')
       return
     }
 
@@ -132,6 +166,13 @@ export async function drive (stdin, stdout) {
       const line = stdinBuf.slice(0, nl)
       stdinBuf = stdinBuf.slice(nl + 1)
       onLine(line)
+    }
+    // The gate caps what it reads *from* a session; nothing capped what
+    // a session accepts, so a supervisor streaming a newline-less line
+    // grew this buffer without bound.
+    if (!framingError && exceedsLineBytes(stdinBuf)) {
+      stdinBuf = ''
+      stdinMalformed(`stdin line exceeds ${MAX_LINE_BYTES} bytes without newline`)
     }
   })
   stdin.on('end', () => {
@@ -166,9 +207,9 @@ export async function drive (stdin, stdout) {
         const { op: _op, ...imgEnv } = envelope
         const out = await runImage(imgEnv)
         if (out.ok) {
-          stdout.write(JSON.stringify({ type: 'image_done', result: out.result }) + '\n')
+          await writeLine({ type: 'image_done', result: out.result })
         } else {
-          stdout.write(JSON.stringify({ type: 'error', error: out.error }) + '\n')
+          await writeLine({ type: 'error', error: out.error })
         }
       } else if (envelope.op === 'transcription') {
         // Same one-shot contract as the image path; shape matches
@@ -176,13 +217,13 @@ export async function drive (stdin, stdout) {
         const { op: _op, ...trEnv } = envelope
         const out = await runTranscription(trEnv)
         if (out.ok) {
-          stdout.write(JSON.stringify({ type: 'transcription_done', result: out.result }) + '\n')
+          await writeLine({ type: 'transcription_done', result: out.result })
         } else {
-          stdout.write(JSON.stringify({ type: 'error', error: out.error }) + '\n')
+          await writeLine({ type: 'error', error: out.error })
         }
       } else {
         for await (const ev of run(envelope, { signal: controller.signal })) {
-          stdout.write(JSON.stringify(ev) + '\n')
+          await writeLine(ev)
         }
       }
     } finally {

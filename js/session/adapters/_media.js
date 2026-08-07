@@ -10,8 +10,10 @@
  */
 
 import { readFile as fsReadFile, realpath as fsRealpath, stat as fsStat } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
 import { delimiter, isAbsolute, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { typedError } from './_errors.js'
 
 export const MEDIA_MAX_BYTES = 64 * 1024 * 1024
 
@@ -58,11 +60,7 @@ export function mediaScheme (uri) {
  * @returns {Error & {typed: import('#core/errors.js').TypedError}}
  */
 export function mediaError (message, type, detail) {
-  const err = new Error(message)
-  /** @type {import('#core/errors.js').TypedError} */
-  const typed = { message, severity: 'error', retryable: false, type }
-  if (detail) typed.detail = detail
-  return Object.assign(err, { typed })
+  return typedError(message, type, false, detail)
 }
 
 /**

@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
+use zeroize::Zeroize;
 
 use crate::defaults::{FileQuotaPolicy, FileRoutePolicy};
 use crate::enforcer::{cooldown_key, Enforcer};
@@ -275,7 +276,7 @@ fn max_connections() -> usize {
 /// emits 16 MiB without a newline is considered broken (runaway
 /// serializer, missing newline, hung subprocess writing garbage).
 /// The existing SESSION_IO_ERROR kill-and-replace path handles it.
-const MAX_NDJSON_LINE_BYTES: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_NDJSON_LINE_BYTES: usize = 16 * 1024 * 1024;
 
 /// HTTP handler for `POST /v1/call`. Embedders composing their own
 /// data-plane router (e.g. to add routes alongside `/v1/call`) call
@@ -484,7 +485,7 @@ async fn dispatch_via_pool(
         }
     };
 
-    let envelope_bytes = match serde_json::to_vec(envelope) {
+    let mut envelope_bytes = match serde_json::to_vec(envelope) {
         Ok(b) => b,
         Err(e) => {
             pool.release(session);
@@ -505,6 +506,10 @@ async fn dispatch_via_pool(
         session.stdin.flush().await
     }
     .await;
+    // The serialized envelope carries `auth.key` in cleartext. Wipe the
+    // buffer as soon as it has been handed to the session so a gate core
+    // dump does not retain every recently-dispatched key.
+    envelope_bytes.zeroize();
 
     if let Err(e) = write_result {
         pool.discard(session);
@@ -582,7 +587,7 @@ impl Drop for PoolStreamState {
 /// once accumulated bytes exceed `cap` without a newline. Prevents a session
 /// that stops emitting `\n` (serializer wedge, stuck write) from ballooning
 /// the buffer to OOM.
-async fn read_capped_line<R>(
+pub(crate) async fn read_capped_line<R>(
     reader: &mut R,
     dst: &mut String,
     cap: usize,
@@ -1052,7 +1057,7 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
     tagged: &impl Serialize,
     what: &str,
 ) -> Result<L, Response<Body>> {
-    let envelope_bytes = match serde_json::to_vec(tagged) {
+    let mut envelope_bytes = match serde_json::to_vec(tagged) {
         Ok(b) => b,
         Err(e) => {
             return Err(typed_error_response(
@@ -1096,6 +1101,10 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
         session.stdin.flush().await
     }
     .await;
+    // The serialized envelope carries `auth.key` in cleartext. Wipe the
+    // buffer as soon as it has been handed to the session so a gate core
+    // dump does not retain every recently-dispatched key.
+    envelope_bytes.zeroize();
 
     if let Err(e) = write_result {
         pool.discard(session);

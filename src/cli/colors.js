@@ -1,5 +1,5 @@
 // Semantic color roles for CLI output.
-import chalk from 'chalk'
+import chalk from './_chalk.js'
 
 export const id = chalk.cyan // model IDs, provider names
 export const label = chalk.bold // display names, titles

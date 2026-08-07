@@ -214,12 +214,19 @@ describe('loadCatalog from curated.json', () => {
     expect(catalog['anthropic/claude-opus-4-5'].defaultThinkingEffort).toBe('medium')
   })
 
-  test('returns {} for missing/malformed/non-object files', () => {
+  test('returns {} for a missing file', () => {
     expect(loadCatalog(path.join(tmpDir, 'nope.json'))).toEqual({})
-    fs.writeFileSync(tmpFile, 'not json')
-    expect(loadCatalog(tmpFile)).toEqual({})
+  })
+
+  test('returns {} for a non-object file', () => {
     fs.writeFileSync(tmpFile, JSON.stringify(['array']))
     expect(loadCatalog(tmpFile)).toEqual({})
+  })
+
+  test('throws naming the file when it exists but does not parse', () => {
+    fs.writeFileSync(tmpFile, 'not json')
+    expect(() => loadCatalog(tmpFile)).toThrow(/is not valid JSON/)
+    expect(() => loadCatalog(tmpFile)).toThrow(tmpFile)
   })
 })
 

@@ -14,9 +14,12 @@
  *     hook for deployments that source config from elsewhere).
  *   - `get(key)` — read-through; loads synchronously on first miss.
  *
- * A malformed / missing / non-object file resolves to the supplied
- * `defaultValue` (default `{}`) so callers never have to handle
- * file-absence explicitly.
+ * A missing file resolves to the supplied `defaultValue` (default
+ * `{}`) so callers never have to handle file-absence explicitly. A
+ * file that exists but does not parse throws: absent config is a
+ * runtime state, corrupt config is a bug, and collapsing the two
+ * turns a typo in `curated.json` into `Unknown model` on every call
+ * with nothing naming the real cause.
  *
  * @module session/adapters/_lazy_json_cache
  */
@@ -40,24 +43,42 @@ export function createLazyJsonFileCache (pathFn, { defaultValue = /** @type {any
     return /** @type {V} */(parsed)
   }
 
+  /** @param {string} file */
+  function parseOrThrow (text, file) {
+    try {
+      return normalize(JSON.parse(text))
+    } catch (e) {
+      throw new Error(`[mohdel] ${file} is not valid JSON: ${e.message}`, { cause: e })
+    }
+  }
+
   /** @param {string} [p] */
   function loadSync (p) {
     const file = p ?? pathFn()
+    let text
     try {
-      return normalize(JSON.parse(fs.readFileSync(file, 'utf8')))
-    } catch {
-      return defaultValue
+      text = fs.readFileSync(file, 'utf8')
+    } catch (e) {
+      if (e.code === 'ENOENT') return defaultValue
+      throw e
     }
+    return parseOrThrow(text, file)
   }
 
   async function initAsync () {
     if (active !== null) return
+    const file = pathFn()
+    let text
     try {
-      const text = await fs.promises.readFile(pathFn(), 'utf8')
-      active = normalize(JSON.parse(text))
-    } catch {
-      active = defaultValue
+      text = await fs.promises.readFile(file, 'utf8')
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        active = defaultValue
+        return
+      }
+      throw e
     }
+    active = parseOrThrow(text, file)
   }
 
   /** @param {V} table */

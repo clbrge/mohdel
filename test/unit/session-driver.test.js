@@ -57,6 +57,87 @@ describe('session/driver', () => {
     expect(dones.length).toBe(3)
   })
 
+  test.each([
+    ['null', 'null'],
+    ['array', '[1,2,3]'],
+    ['bare number', '42'],
+    ['bare string', '"hello"']
+  ])('parseable but unusable stdin line (%s) emits a terminal error, not a crash', async (_label, line) => {
+    const stdin = inputStream(line, JSON.stringify(envelope({ callId: 'valid' })))
+    const { stream: stdout, output } = capturingStdout()
+
+    await expect(drive(stdin, stdout)).rejects.toThrow('SESSION_STDIN_MALFORMED')
+    const events = parseNDJSON(output())
+    expect(events).toHaveLength(1)
+    expect(events[0].type).toBe('error')
+    expect(events[0].error.type).toBe('SESSION_STDIN_MALFORMED')
+  })
+
+  test('a newline-less stdin torrent is capped instead of buffered forever', async () => {
+    const { PassThrough } = await import('node:stream')
+    const stdin = new PassThrough()
+    const { stream: stdout, output } = capturingStdout()
+    const driving = drive(stdin, stdout)
+
+    // 20 MiB with no newline, past the 16 MiB line cap.
+    const chunk = 'x'.repeat(4 * 1024 * 1024)
+    for (let i = 0; i < 5; i++) stdin.write(chunk)
+
+    await expect(driving).rejects.toThrow('SESSION_STDIN_MALFORMED')
+    const events = parseNDJSON(output())
+    expect(events[0].error.type).toBe('SESSION_STDIN_MALFORMED')
+    expect(events[0].error.detail).toMatch(/without newline/)
+  })
+
+  test('an envelope without a callId is rejected rather than dispatched', async () => {
+    const { callId: _drop, ...noCallId } = envelope()
+    const stdin = inputStream(JSON.stringify(noCallId))
+    const { stream: stdout, output } = capturingStdout()
+
+    await expect(drive(stdin, stdout)).rejects.toThrow('SESSION_STDIN_MALFORMED')
+    const events = parseNDJSON(output())
+    expect(events[0].error.detail).toMatch(/callId/)
+  })
+
+  test('stdout backpressure stops the driver pulling events into the write buffer', async () => {
+    let release
+    const held = new Promise(resolve => { release = resolve })
+    let firstWrite = true
+
+    // Accepts the first frame and never completes it, so every later
+    // frame can only sit in the stream's internal buffer. Counting
+    // `_write` calls would prove nothing — Node serializes those
+    // regardless. `writableLength` is what grows when the producer
+    // ignores the `false` return.
+    const stdout = new Writable({
+      highWaterMark: 1,
+      write (_chunk, _enc, cb) {
+        if (firstWrite) {
+          firstWrite = false
+          held.then(() => cb())
+          return
+        }
+        cb()
+      }
+    })
+
+    const stdin = inputStream(JSON.stringify(envelope({
+      model: 'fake/m',
+      prompt: JSON.stringify({ mode: 'slow', tokens: 12, delayMs: 1 })
+    })))
+    const done = drive(stdin, stdout)
+
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const bufferedWhileBlocked = stdout.writableLength
+
+    release()
+    await done
+
+    // One frame is in flight and counted; anything beyond that is the
+    // driver having pulled more events than the pipe could take.
+    expect(bufferedWhileBlocked).toBeLessThan(200)
+  })
+
   test('unparseable stdin line emits a terminal framing error and rejects', async () => {
     const stdin = inputStream(
       'not json',

@@ -163,15 +163,28 @@ provider SDK client. On the Rust side, `SecretString` zeroizes on
 `Drop`; V8 has no string-zeroize primitive, so once in the session
 process the key lives in a GC-managed string until collection.
 
+`SecretString` covers the parsed envelope, not every copy the gate
+makes of it. Serializing an envelope for session stdin materializes
+the key into a plain byte buffer; the gate wipes that buffer once the
+write completes, but `serde_json` grows it by reallocation and the
+intermediate allocations are freed without zeroing. `Auth` also
+derives a `#[serde(transparent)]` `Serialize`, so any incidental
+`to_string(&envelope)` — a debug print, a future log line — emits the
+key in cleartext. Gate-side zeroizing therefore narrows the window; it
+does not make the gate key-free.
+
 Implications for operators:
 
 - Process inspection (`strace`, `ptrace`, `/proc/<pid>/mem`) of the
   session subprocess shows the key in cleartext.
 - Core dumps from the session process may contain the key; disable
-  core dumps or restrict their visibility on production hosts.
+  core dumps or restrict their visibility on production hosts. Gate
+  core dumps may still contain reallocation residue.
 - The gate → session boundary relies on the socket's own permissions
   (see unix-socket `0o600` mode) for confidentiality, not on key
   wrapping.
+- Never serialize a `CallEnvelope` for diagnostics. `Debug` redacts
+  the key; `Serialize` does not.
 
 If a deployment's threat model includes local process inspection,
 treat each session subprocess as carrying the secret for its full

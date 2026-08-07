@@ -11,7 +11,7 @@
  */
 
 import { getSpec } from '../_catalog.js'
-import { classifyProviderError } from '../_errors.js'
+import { classifyProviderError, fromHttpStatus, typedError } from '../_errors.js'
 import { catalogKey } from '#core/model-id.js'
 
 const BASE_URL = 'https://api.novita.ai'
@@ -117,20 +117,4 @@ async function pollTaskResult (fetchFn, sleep, now, taskId, apiKey) {
   }
 
   throw typedError('novita image generation timed out', 'PROVIDER_UNAVAILABLE', true)
-}
-
-function fromHttpStatus (status, message, detail) {
-  const typed = classifyProviderError({ status })
-  // Keep the classifier's message (stable/machine-readable); put the
-  // caller's context + any response-body snippet into `detail`. Never
-  // echo provider response bodies into `TypedError.message`.
-  return typedError(typed.message, typed.type, typed.retryable, detail ? `${message}: ${detail}` : message)
-}
-
-function typedError (message, type, retryable, detail) {
-  const err = new Error(message)
-  const typed = { message, severity: retryable ? 'warn' : 'error', retryable, type }
-  if (detail) typed.detail = detail
-  err.typed = typed
-  return err
 }

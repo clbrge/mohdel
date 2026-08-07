@@ -4,9 +4,39 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [0.118.1] — Fix: every factory-path OpenRouter call threw before the network / Security: clear dependency advisories
+## [0.119.0] — Security: gate resource bounds, secret hygiene, dependency advisories / Fix: OpenRouter factory path, session framing, corrupt-config errors
 
 ### Security
+
+- **A pasted API key containing `$` was silently corrupted on save.**
+  `appendToEnvFile` passed the key as a `String.replace` *replacement
+  string*, where `$&`, `` $` ``, `$'` and `$$` are expanded — so on the
+  update path (an existing entry for that provider) `sk-$&-tail` was stored
+  as `sk-OPENAI_API_SK=sk-original-tail`, and `` sk-$`-tail `` as
+  `sk--tail`. The key then failed to authenticate with no indication that
+  the file did not contain what was typed. The first-write path was never
+  affected. The replacement is now a function, and the env var name is
+  escaped before being interpolated into the matching regex.
+
+- **The gate retained `auth.key` in freed heap after dispatch.**
+  `SecretString` zeroizes on `Drop`, but serializing an envelope for session
+  stdin materialized the key into a plain `Vec<u8>` that was dropped without
+  wiping, so a gate core dump could contain every recently-dispatched key.
+  Both dispatch sites now zeroize that buffer once the write completes.
+  This narrows the window rather than closing it: `serde_json` grows the
+  buffer by reallocation and those intermediate allocations are freed
+  unzeroed. PROTOCOL.md §3.1 now says so explicitly, and warns that `Auth`'s
+  `#[serde(transparent)]` `Serialize` emits the key in cleartext even though
+  `Debug` redacts it — so an envelope must never be serialized for
+  diagnostics.
+
+- **Gemini catalog fetch sent the API key in the query string.**
+  `src/lib/catalog/gemini.js` set `?key=<apiKey>`, which proxies, CDNs and
+  server access logs record verbatim — the one fetcher of seven not already
+  using a header. It now sends `x-goog-api-key`.
+  `test/unit/catalog-key-transport.test.js` asserts no catalog fetcher puts
+  its key in the URL, so a future provider module cannot reintroduce it;
+  these modules previously had no coverage at all.
 
 - **Publish workflow ran third-party actions by moving tag in an OIDC job.**
   `publish.yml` holds `id-token: write` for npm trusted publishing while using
@@ -66,6 +96,100 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- **A missing `chalk` took the whole CLI down instead of dropping colour.**
+  `chalk` is an `optionalDependency` — npm skips it on an engine mismatch or
+  `--no-optional`, silently — but `src/cli/colors.js` and
+  `colored-logger.js` imported it statically, so the ten CLI modules
+  depending on them failed at load. Both now resolve it through
+  `src/cli/_chalk.js`, which falls back to an uncoloured stand-in that stays
+  callable and chainable (`dim('x')`, `bold.red('x')`). `isColorAvailable`
+  reports which one is in use.
+
+- **A reused `AbortSignal` accumulated a listener per call.**
+  `js/client/transport.js` registered an `abort` listener with
+  `{ once: true }`, which releases on abort but not on a call that ends
+  normally, so a caller holding one long-lived `AbortController` across many
+  calls retained one closure — and its `ClientRequest` — per call. The
+  listener is now removed when the request closes, rather than when the
+  promise resolves: resolve happens at response headers and cancellation has
+  to stay live for the streaming body.
+
+- **The video upload cache had no TTL or bound.**
+  `~/.cache/mohdel/uploaded-files.json` retained every entry forever, keyed
+  by content hash and mtime so each re-save of a file added another. The
+  correctness half matters more than the size: provider handles expire
+  server-side (Gemini's Files API keeps an upload about 48h) while the entry
+  did not, so a re-sent file could skip the upload and hand the provider a
+  URI it no longer knows. Entries now expire after 24h and are capped at 500,
+  most-recent first, pruned on both read and write.
+
+- **Corrupt config degraded silently to empty.** `_lazy_json_cache.js` and
+  `common.js` both caught everything on load and returned `{}`, so a typo in
+  `curated.json` was indistinguishable from the file being absent: every call
+  then failed with `Unknown model 'x' — not in catalog` and nothing named the
+  real cause. `common.js` was worse — its `moduleLogger.warn` defaults to
+  `silent`, so no diagnostic was emitted at all.
+  A missing file still resolves to the default, which is a real runtime
+  branch. A file that exists but does not parse now throws, naming the path
+  and the parse position; `common.js` raises a `ConfigParseError` carrying
+  the original `SyntaxError` as `cause`. Non-object files are unchanged and
+  still normalize to the default.
+
+- **A parseable but unusable stdin line killed the session with no terminal
+  event.** `driver.js` enqueued any JSON without a recognized `op` as an
+  envelope, so a line of `null`, `[1,2,3]`, `42` or `"hello"` reached the
+  dispatch loop and threw on `envelope.callId` — `main().catch` then exited
+  the process, violating PROTOCOL.md §3's requirement of a terminal `error`
+  for unusable stdin. The gate recovered by respawning, so this cost a
+  session rather than a call. Lines are now shape-checked before enqueue and
+  a missing string `callId` is rejected the same way, both emitting
+  `SESSION_STDIN_MALFORMED`.
+
+- **No backpressure on session stdout.** The driver ignored every
+  `stdout.write` return value, so a fast-streaming adapter feeding a slow
+  gate reader grew Node's internal write buffer without bound: with the pipe
+  blocked, a 12-event call buffered 1015 bytes where one frame (60) should
+  have been in flight. Frames on the dispatch path now await `drain` when the
+  pipe reports full, which propagates the pause back through `for await` to
+  the adapter. Control frames (`pong`, the malformed-stdin error) still write
+  synchronously — they are single small frames emitted from sync callbacks.
+
+- **Framing caps were inconsistent across the NDJSON readers.** The gate
+  capped what it read from a session at 16 MiB, but the session capped
+  nothing on stdin, and three Rust readers — the readiness ping, the
+  post-cancel drain, and the stderr relay — used uncapped `read_line` /
+  `lines()`. All now share `read_capped_line` at the same 16 MiB bound;
+  an over-cap stderr line is reported and the drain stops rather than
+  growing its task buffer.
+  On the JS side `parseNDJSON` measured the *accumulated buffer* rather than
+  the current unterminated line, so a single chunk carrying more than 16 MiB
+  of already-framed events was rejected as a runaway line, and it counted
+  UTF-16 units while its error said "bytes" — a 3-byte-per-character line was
+  accepted at up to three times the gate's limit. Both the client and the
+  session driver now use `js/core/framing.js`, which bounds one line in UTF-8
+  bytes to match the gate.
+
+- **A multi-line catalog snapshot silently corrupted the session frame.**
+  `send_catalog` spliced the embedder's JSON string straight into
+  `{"op":"set_catalog","table":<json>}`, so a pretty-printed snapshot split
+  the frame across lines and the session rejected the fragments as
+  `SESSION_STDIN_MALFORMED` — an error naming nothing the operator could
+  act on. The snapshot is now rejected before anything reaches stdin, with a
+  message naming the `CatalogSource` contract. At acquire time a rejected
+  snapshot serves the stale catalog rather than discarding the session:
+  the session is healthy, the embedder is at fault, and the next snapshot
+  would be equally bad, so discarding would destroy one session per acquire
+  and never converge.
+
+- **`release` into a full channel dropped the session silently.** No
+  replacement was queued and no `session_alive_delta(-1)` was emitted, so
+  the pool shrank permanently and `sessions_alive` stayed overstated. A
+  released session came out of that channel, so a full channel means the
+  accounting is already wrong: it now routes through `discard`, which
+  balances both gauges and queues a replacement, and reports the anomaly.
+  Channel closure (pool shutdown) is handled separately — gauges are
+  balanced, no replacement is spawned.
+
 - `providers.openrouter.createConfiguration()` returned a `defaultHeaders` key
   unconditionally — the `OPENROUTER_REFERER` / `OPENROUTER_TITLE` guards chose
   what went *inside* the object, not whether it existed. The factory bridge
@@ -79,6 +203,20 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `keywords` in `package.json` — npm registry search matches on this field
+  and the package declared none.
+- `test/unit/client-transport.test.js`,
+  `test/unit/session-video-cache.test.js` and
+  `test/unit/cli-chalk-optional.test.js` — none of these modules had
+  coverage.
+
+### Removed
+
+- The upload-cache half of `src/lib/cache.js` (`FILE_CACHE_PATH`,
+  `loadFileCache`, `saveFileCache`, `getCachedFileData`,
+  `setCachedFileData`). It was a factory-era duplicate writing the same
+  `uploaded-files.json` as `js/session/adapters/_videos.js` with a different
+  shape and no expiry, and had no caller. `CACHE_DIR` remains.
 - `rust/thin-gate/tests/pool_admission.rs` — a saturated pool returns
   `AcquireError::Timeout` within the configured bound rather than hanging,
   a released session is still reacquirable, and the timeout env var parses

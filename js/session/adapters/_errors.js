@@ -417,3 +417,38 @@ export function classifyProviderError (e, key, opts = {}) {
     detail
   }
 }
+
+/**
+ * Wrap a `TypedError` payload in a throwable `Error`. Adapters that
+ * fetch directly (rather than through a provider SDK) throw these; the
+ * run loop lifts `.typed` onto the terminal error event.
+ *
+ * @param {string} message
+ * @param {string} type
+ * @param {boolean} retryable
+ * @param {string} [detail]
+ * @returns {Error & {typed: import('#core/errors.js').TypedError}}
+ */
+export function typedError (message, type, retryable, detail) {
+  const err = new Error(message)
+  /** @type {import('#core/errors.js').TypedError} */
+  const typed = { message, severity: retryable ? 'warn' : 'error', retryable, type }
+  if (detail) typed.detail = detail
+  return Object.assign(err, { typed })
+}
+
+/**
+ * Classify an HTTP status, keeping the classifier's stable message and
+ * routing the caller's context plus any response-body snippet into
+ * `detail` — provider response bodies must never reach
+ * `TypedError.message`.
+ *
+ * @param {number} status
+ * @param {string} message
+ * @param {string} [detail]
+ * @returns {Error & {typed: import('#core/errors.js').TypedError}}
+ */
+export function fromHttpStatus (status, message, detail) {
+  const typed = classifyProviderError({ status })
+  return typedError(typed.message, typed.type, typed.retryable, detail ? `${message}: ${detail}` : message)
+}

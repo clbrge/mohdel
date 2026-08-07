@@ -6,6 +6,7 @@ import { loadDefaultEnv } from '../../src/lib/common.js'
 import mohdel from '../../src/lib/index.js'
 import { getCuratedCacheSnapshot } from '../../src/lib/curated-cache.js'
 import providers from '../../src/lib/providers.js'
+import { isTextModel } from './_model-types.js'
 
 loadDefaultEnv()
 
@@ -34,8 +35,8 @@ describe('vision integration', async () => {
   for (const [fullId, meta] of Object.entries(curated)) {
     if (meta.deprecated) continue
     if (!meta.inputFormat?.includes('image')) continue
-    // Skip image-generation-only models (no answer() support)
-    if (meta.type === 'image') continue
+    // Non-chat endpoints have no answer() support.
+    if (!isTextModel(meta)) continue
     // Skip models without an SDK (imagen, etc.)
     if (!meta.sdk) continue
     const provider = fullId.split('/')[0]

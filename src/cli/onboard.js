@@ -107,6 +107,8 @@ function getConfiguredProviders () {
   return { configured, unconfigured }
 }
 
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 async function appendToEnvFile (key, value) {
   const dir = dirname(ENV_PATH)
   if (!existsSync(dir)) await mkdir(dir, { recursive: true })
@@ -114,10 +116,13 @@ async function appendToEnvFile (key, value) {
   let content = ''
   if (existsSync(ENV_PATH)) {
     content = await readFile(ENV_PATH, 'utf8')
-    // Replace existing line if present
-    const re = new RegExp(`^${key}=.*$`, 'm')
+    // Replace existing line if present. The replacement is a function
+    // because `$&`, `` $` ``, `$'` and `$1` are expanded inside a
+    // replacement *string* — a pasted key containing any of them would
+    // be silently rewritten before it hit disk.
+    const re = new RegExp(`^${escapeRegExp(key)}=.*$`, 'm')
     if (re.test(content)) {
-      content = content.replace(re, `${key}=${value}`)
+      content = content.replace(re, () => `${key}=${value}`)
       await writeFile(ENV_PATH, content, { mode: 0o600 })
       chmodSync(ENV_PATH, 0o600)
       return

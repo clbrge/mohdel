@@ -8,6 +8,27 @@
   },
   "description": "Self-hosted LLM gateway and SDK for Node — a LiteLLM-style unified API for 11 providers (Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, DeepSeek, OpenRouter, …) with per-call USD cost tracking, streaming, tool calls, vision, speech-to-text, and built-in OpenTelemetry. Run in-process, or behind the process-isolated thin-gate for fault containment.",
   "type": "module",
+  "keywords": [
+    "llm",
+    "llm-gateway",
+    "ai-gateway",
+    "ai-sdk",
+    "openai",
+    "anthropic",
+    "claude",
+    "gemini",
+    "mistral",
+    "groq",
+    "deepseek",
+    "openrouter",
+    "streaming",
+    "tool-calling",
+    "token-cost",
+    "rate-limiting",
+    "opentelemetry",
+    "self-hosted",
+    "cli"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/clbrge/mohdel.git"
@@ -86,17 +107,17 @@
     "@clack/prompts": "^1.7.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.221.0",
     "@opentelemetry/sdk-node": "^0.221.0",
-    "chalk": "^5.4.0",
+    "chalk": "^6.0.0",
     "mohdel-thin-gate-linux-x64-gnu": "0.118.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@cerebras/cerebras_cloud_sdk": "^1.91.0",
-    "@google/genai": "^2.13.0",
+    "@google/genai": "^2.16.0",
     "@opentelemetry/api": "^1.9.1",
     "env-paths": "^4.0.0",
-    "groq-sdk": "^1.4.0",
-    "openai": "^6.49.0",
+    "groq-sdk": "^1.5.0",
+    "openai": "^7.4.0",
     "undici": "^7.29.0"
   },
   "lint-staged": {
@@ -104,8 +125,8 @@
   },
   "devDependencies": {
     "gpt-tokenizer": "^3.4.0",
-    "lint-staged": "^17.2.0",
-    "release-it": "^20.2.1",
+    "lint-staged": "^17.3.0",
+    "release-it": "^21.0.1",
     "standard": "^17.1.2",
     "vitest": "^4.1.10"
   }

@@ -21,7 +21,7 @@
 import { basename } from 'node:path'
 
 import { getSpec } from '../_catalog.js'
-import { classifyProviderError } from '../_errors.js'
+import { classifyProviderError, fromHttpStatus, typedError } from '../_errors.js'
 import { dataUriPayload, isTrustedMedia, mediaScheme, readLocalMedia } from '../_media.js'
 import { computeTranscriptionCost } from '../_pricing.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
@@ -149,19 +149,4 @@ export async function loadAudio (audio, opts = {}) {
     'SESSION_INVALID_AUDIO',
     false
   )
-}
-
-function fromHttpStatus (status, message, detail) {
-  const typed = classifyProviderError({ status })
-  // Keep the classifier's message (stable/machine-readable); response
-  // body snippets go to `detail` only.
-  return typedError(typed.message, typed.type, typed.retryable, detail ? `${message}: ${detail}` : message)
-}
-
-function typedError (message, type, retryable, detail) {
-  const err = new Error(message)
-  const typed = { message, severity: retryable ? 'warn' : 'error', retryable, type }
-  if (detail) typed.detail = detail
-  err.typed = typed
-  return err
 }

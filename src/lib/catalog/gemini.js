@@ -5,10 +5,11 @@ const fetchModels = async ({ apiKey }) => {
   let pageToken = null
   while (true) {
     const url = new URL(`${BASE_URL}/models`)
-    url.searchParams.set('key', apiKey)
     url.searchParams.set('pageSize', '1000')
     if (pageToken) url.searchParams.set('pageToken', pageToken)
-    const res = await fetch(url)
+    // Header, not `?key=`: query strings are recorded verbatim by
+    // proxies, CDNs and server access logs.
+    const res = await fetch(url, { headers: { 'x-goog-api-key': apiKey } })
     if (!res.ok) throw new Error(`${res.status} ${res.statusText} fetching ${url.pathname}`)
     const body = await res.json()
     const page = Array.isArray(body?.models) ? body.models : []

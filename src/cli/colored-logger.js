@@ -10,7 +10,7 @@
  * @module cli/colored-logger
  */
 
-import chalk from 'chalk'
+import chalk from './_chalk.js'
 
 const noop = () => {}
 

@@ -9,6 +9,7 @@
  */
 
 import { requestUnix } from './transport.js'
+import { readAll, parseErrorBody } from './response.js'
 import { parseNDJSON } from './ndjson.js'
 import { isEvent, MohdelError } from '#core'
 
@@ -42,35 +43,5 @@ export async function * call (envelope, { socketPath, signal, path = '/v1/call' 
       )
     }
     yield /** @type {import('#core/events.js').Event} */(obj)
-  }
-}
-
-/**
- * @param {AsyncIterable<Buffer|string>} stream
- * @returns {Promise<string>}
- */
-async function readAll (stream) {
-  let s = ''
-  for await (const c of stream) s += typeof c === 'string' ? c : c.toString('utf8')
-  return s
-}
-
-/**
- * @param {string} body
- * @param {number} status
- * @returns {import('#core/errors.js').TypedError}
- */
-function parseErrorBody (body, status) {
-  try {
-    const parsed = JSON.parse(body)
-    if (parsed && typeof parsed === 'object' && typeof parsed.type === 'string') {
-      return parsed
-    }
-  } catch {}
-  return {
-    type: 'PROTOCOL_HTTP_ERROR',
-    message: `thin-gate returned HTTP ${status}`,
-    severity: 'error',
-    retryable: status >= 500
   }
 }

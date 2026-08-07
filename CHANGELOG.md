@@ -8,6 +8,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Security
 
+- **Publish workflow ran third-party actions by moving tag in an OIDC job.**
+  `publish.yml` holds `id-token: write` for npm trusted publishing while using
+  `dtolnay/rust-toolchain@stable` and `Swatinem/rust-cache@v2`, either of which
+  could be repointed by its owner to code that mints a publishing token and
+  signs provenance for this package. Both are now pinned to full commit SHAs,
+  and `npm ci` runs with `--ignore-scripts` so dependency lifecycle scripts no
+  longer execute with those privileges. Nothing in the job runs the installed
+  tree: the build is cargo, and neither package declares a
+  prepack/prepublish script.
+
 - **Pool acquire waited forever and the accept loop had no admission
   cap.** `SessionPool::acquire` blocked until a session freed up, `handle_call`
   imposed no bound, and `serve_data_with_state` spawned a task per accepted

@@ -30,17 +30,27 @@ jobs:
       - name: Upgrade npm to OIDC-capable version
         run: npm install -g npm@11
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Third-party actions are pinned to full commit SHAs, not moving
+      # tags. This job holds `id-token: write`, so whoever controls an
+      # action repo could otherwise mint an npm publishing token and
+      # sign provenance for this package by moving a tag.
+      # dtolnay/rust-toolchain@stable as of 2026-08-05
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
         with:
           targets: x86_64-unknown-linux-gnu
 
+      # Swatinem/rust-cache@v2 as of 2026-08-06
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           workspaces: '. -> target'
 
+      # `--ignore-scripts`: dependency lifecycle scripts would otherwise
+      # run with this job's OIDC privileges. Nothing here executes the
+      # installed tree — the build is cargo, and the package declares no
+      # prepack/prepublish scripts.
       - name: Install Node dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Get Release Version
         run: |

@@ -288,6 +288,31 @@ struct PoolInner {
     catalog_version: AtomicU64,
 }
 
+/// Why `SessionPool::acquire` gave up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AcquireError {
+    /// Every session is busy and none freed up within the timeout.
+    Timeout,
+    /// The pool channel is closed — no session will ever arrive.
+    Closed,
+}
+
+pub const DEFAULT_ACQUIRE_TIMEOUT_MS: u64 = 30_000;
+
+/// `0` disables the bound, which is only ever right for a single-tenant
+/// deployment that would rather block forever than fail a call.
+pub fn acquire_timeout() -> Duration {
+    let ms = std::env::var("MOHDEL_POOL_ACQUIRE_TIMEOUT_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_ACQUIRE_TIMEOUT_MS);
+    if ms == 0 {
+        Duration::MAX
+    } else {
+        Duration::from_millis(ms)
+    }
+}
+
 /// Clone-cheap handle to a pool of sessions.
 #[derive(Clone)]
 pub struct SessionPool {
@@ -360,26 +385,35 @@ impl SessionPool {
         self.inner.catalog_version.load(Ordering::Acquire)
     }
 
-    /// Wait for an idle session and take ownership. Returns `None`
-    /// if the pool is closed.
+    /// Wait for an idle session and take ownership, giving up after
+    /// `acquire_timeout()`. The pool is `pool_size` wide; an unbounded
+    /// wait lets callers queue without limit against it, and the queue
+    /// holds their already-read request bodies.
     ///
     /// When the session's seeded catalog version is behind the pool's,
     /// the latest snapshot is fetched from `cfg.catalog` and injected
     /// into the session before it's handed out. On injection failure
     /// the session is discarded, a replacement is queued, and the
     /// caller gets the next one in the channel.
-    pub async fn acquire(&self) -> Option<PooledSession> {
+    pub async fn acquire(&self) -> Result<PooledSession, AcquireError> {
         // Full wait time from caller's perspective — includes any
         // internal loop iterations that discard a session and retry
         // (e.g. catalog injection failure).
         let waited_since = Instant::now();
-        let sess = self.acquire_inner().await;
+        let outcome = tokio::time::timeout(acquire_timeout(), self.acquire_inner()).await;
         let waited_ms = waited_since.elapsed().as_secs_f64() * 1000.0;
         metrics::pool_acquire_wait(waited_ms);
-        if sess.is_some() {
-            metrics::pool_in_use_delta(1);
+        match outcome {
+            Ok(Some(sess)) => {
+                metrics::pool_in_use_delta(1);
+                Ok(sess)
+            }
+            Ok(None) => Err(AcquireError::Closed),
+            Err(_) => {
+                metrics::pool_acquire_timeout();
+                Err(AcquireError::Timeout)
+            }
         }
-        sess
     }
 
     async fn acquire_inner(&self) -> Option<PooledSession> {

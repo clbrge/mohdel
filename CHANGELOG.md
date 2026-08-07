@@ -8,6 +8,37 @@ All notable changes to this project are documented here. Format follows
 
 ### Security
 
+- **Pool acquire waited forever and the accept loop had no admission
+  cap.** `SessionPool::acquire` blocked until a session freed up, `handle_call`
+  imposed no bound, and `serve_data_with_state` spawned a task per accepted
+  connection. Against the default two-session pool, callers queued without
+  limit and each queued request held its already-read body, so gate memory
+  grew with the queue.
+  `acquire` now takes `MOHDEL_POOL_ACQUIRE_TIMEOUT_MS` (default 30000) and
+  answers `503` with a retryable `SESSION_POOL_BUSY` when it expires;
+  `mohdel.pool.acquire_timeouts` counts those. The accept loop holds a
+  semaphore of `MOHDEL_MAX_CONNECTIONS` permits (default 64), taken *before*
+  `accept` so that at capacity the gate stops accepting and callers wait in
+  the kernel backlog rather than each costing a task and a body read.
+  `acquire` returns `Result<PooledSession, AcquireError>` instead of
+  `Option`, so a closed pool and an exhausted timeout are distinguishable at
+  the call site.
+
+- **`idleHeartbeatMs` had no floor and the heartbeat leaked promise
+  reactions.** One request could set `idleHeartbeatMs: 1` and turn adapter
+  silence into ~1000 serialized `idle` events per second through the gate —
+  unbounded output amplification from a single caller-supplied integer. The
+  same loop re-raced the in-flight `iterator.next()` on every timer firing,
+  attaching two more reaction records per tick to a promise that, during a
+  stall, does not settle: 6 idle ticks produced 7 subscriptions to one
+  pending promise.
+  `idleHeartbeatMs` is now raised to `MIN_IDLE_HEARTBEAT_MS` (250 ms), and
+  the continuation is attached once at creation, parking its result for the
+  loop to observe instead of re-subscribing. Both transports are covered:
+  `withIdleHeartbeat` is the only producer of `idle` events and every path
+  reaches it through `js/session/run.js`. The session logs a `warn` naming
+  the requested and applied values when it raises a value.
+
 - Cleared all three high-severity advisories in the production dependency
   tree; `npm audit --omit=dev` now reports zero.
   - **`undici` `^7.24.5` → `^7.29.0`** (5 CVEs: downstream response
@@ -38,6 +69,14 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- `rust/thin-gate/tests/pool_admission.rs` — a saturated pool returns
+  `AcquireError::Timeout` within the configured bound rather than hanging,
+  a released session is still reacquirable, and the timeout env var parses
+  (default, explicit, `0`, garbage).
+- `test/unit/session-idle-heartbeat.test.js` — the module had no coverage at
+  all, which is how both defects survived. Counts subscriptions to the
+  in-flight `next()` across many idle ticks, and pins the floor against both
+  a sub-floor and an above-floor request.
 - `test/unit/provider-config-bridge.test.js` — feeds every provider's
   `createConfiguration()` output through the bridge's real `configToAuth()`.
   Both sides of this join were already tested in isolation, which is why the

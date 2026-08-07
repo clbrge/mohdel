@@ -131,8 +131,8 @@ form on the post-normalization envelope. Consumers SHOULD use the
 same split rule (`.split_once('/')` in Rust, `str.split('/', 2)` in
 JS) when interpreting stored / logged envelopes.
 
-Malformed `model` (no `/`) **MUST** be rejected at ingress with
-`PROTOCOL_INVALID_ENVELOPE`.
+Malformed `model` — no `/`, or an empty provider or bare half —
+**MUST** be rejected at ingress with `PROTOCOL_INVALID_ENVELOPE`.
 
 The optional `:<effort>` suffix selects a thinking-effort level
 for the call. The session runtime splits it before dispatch when
@@ -233,6 +233,11 @@ caller sets `idleHeartbeatMs` on the envelope. Re-emitted every
 the next real event. Advisory only — mohdel never aborts on its
 own. Consumers decide whether to log, bump a watchdog, or trigger
 an external cancel. Never terminal; further events may follow.
+
+`idleHeartbeatMs` has a floor of **250 ms**. A positive value below
+it is raised to the floor and the session logs a `warn` naming both
+the requested and applied values; the cadence is a service policy,
+not a caller guarantee.
 
 ### 4.3 `done` — terminal with `AnswerResult`
 

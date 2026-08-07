@@ -221,6 +221,8 @@ cargo run --bin mohdel-thin-gate /tmp/mohdel-data.sock /tmp/mohdel-admin.sock /p
 Positional args are optional (data socket, admin socket, session bin). Env overrides:
 - `MOHDEL_SESSION_BIN` — path to session entrypoint (defaults to none; if unset, data plane returns synthetic events)
 - `MOHDEL_SESSION_POOL_SIZE` — pre-warmed sessions (default 2)
+- `MOHDEL_POOL_ACQUIRE_TIMEOUT_MS` — wait for a free session before `503 SESSION_POOL_BUSY` (default 30000)
+- `MOHDEL_MAX_CONNECTIONS` — concurrently served data-plane connections (default 64)
 
 With no session-bin configured, thin-gate runs in demo mode: `POST /v1/call` returns a synthetic echo event sequence. Useful for health-checking the HTTP layer without a runtime dependency on Node.
 

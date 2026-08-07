@@ -11,20 +11,30 @@
  * own. Consumers decide whether to log, bump a watchdog, or trigger
  * an external AbortSignal.
  *
- * The in-flight `iterator.next()` is reused across timer firings so
- * no real event is dropped: when the timer wins the race, the
- * underlying promise stays pending and the next loop iteration
- * attaches a fresh race to the same promise.
+ * `idleMs` is caller-supplied and raised to `MIN_IDLE_HEARTBEAT_MS`.
+ * Without a floor one request can ask for a millisecond cadence and
+ * turn adapter silence into thousands of serialized events per second
+ * through the gate.
+ *
+ * The in-flight `iterator.next()` is reused across timer firings so no
+ * real event is dropped. Its continuation is attached exactly once, at
+ * creation, and parks its result in `settled`; each idle tick races a
+ * fresh timer against that flag rather than re-subscribing. Attaching
+ * per tick instead would retain two reaction records per firing on a
+ * promise that by definition has not settled.
  *
  * @module session/_idle_heartbeat
  */
+
+export const MIN_IDLE_HEARTBEAT_MS = 250
 
 /**
  * @template T
  * @param {AsyncIterable<T>} source
  * @param {number | undefined | null} idleMs
  *   When falsy or non-positive, the source is yielded through
- *   unchanged (no timer is set up).
+ *   unchanged (no timer is set up). Positive values below
+ *   `MIN_IDLE_HEARTBEAT_MS` are raised to it.
  * @returns {AsyncGenerator<T | import('#core/events.js').IdleEvent>}
  */
 export async function * withIdleHeartbeat (source, idleMs) {
@@ -33,28 +43,45 @@ export async function * withIdleHeartbeat (source, idleMs) {
     return
   }
 
+  const tickMs = Math.max(idleMs, MIN_IDLE_HEARTBEAT_MS)
   const iter = source[Symbol.asyncIterator]()
   let lastAt = Date.now()
-  /** @type {Promise<IteratorResult<T>> | null} */
-  let pending = null
+
+  /** @type {{real: IteratorResult<T>} | {err: unknown} | null} */
+  let settled = null
+  /** @type {(() => void) | null} */
+  let wake = null
+  let inFlight = false
+
+  const park = (result) => {
+    settled = result
+    const w = wake
+    wake = null
+    w?.()
+  }
 
   try {
     while (true) {
-      if (!pending) pending = iter.next()
-
-      /** @type {NodeJS.Timeout | undefined} */
-      let timer
-      /** @type {{idle: true} | {real: IteratorResult<T>} | {err: unknown}} */
-      const winner = await new Promise(resolve => {
-        timer = setTimeout(() => resolve({ idle: true }), idleMs)
-        pending.then(
-          r => resolve({ real: r }),
-          e => resolve({ err: e })
+      if (!inFlight) {
+        inFlight = true
+        iter.next().then(
+          r => park({ real: r }),
+          e => park({ err: e })
         )
-      })
-      clearTimeout(timer)
+      }
 
-      if ('idle' in winner) {
+      if (!settled) {
+        /** @type {NodeJS.Timeout | undefined} */
+        let timer
+        await new Promise(resolve => {
+          wake = resolve
+          timer = setTimeout(resolve, tickMs)
+        })
+        clearTimeout(timer)
+        wake = null
+      }
+
+      if (!settled) {
         yield /** @type {import('#core/events.js').IdleEvent} */ ({
           type: 'idle',
           sinceMs: Date.now() - lastAt
@@ -62,11 +89,13 @@ export async function * withIdleHeartbeat (source, idleMs) {
         continue
       }
 
-      pending = null
-      if ('err' in winner) throw winner.err
-      if (winner.real.done) return
+      const done = settled
+      settled = null
+      inFlight = false
+      if ('err' in done) throw done.err
+      if (done.real.done) return
       lastAt = Date.now()
-      yield winner.real.value
+      yield done.real.value
     }
   } finally {
     // Best-effort cleanup if the consumer abandons us mid-stream.

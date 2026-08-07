@@ -56,6 +56,13 @@ Env overrides:
 - `MOHDEL_THIN_GATE_CONFIG` — explicit path to TOML config
 - `MOHDEL_SESSION_BIN` — session entrypoint (overrides config)
 - `MOHDEL_SESSION_POOL_SIZE` — pre-warmed subprocess count (default 2)
+- `MOHDEL_POOL_ACQUIRE_TIMEOUT_MS` — how long a call waits for a free
+  session before the gate answers `503 SESSION_POOL_BUSY` (default 30000).
+  `0` waits forever, which is only safe on a single-tenant gate
+- `MOHDEL_MAX_CONNECTIONS` — concurrently served data-plane connections
+  (default 64). At the cap the gate stops accepting and callers queue in
+  the kernel backlog; multiplied by the 16 MiB body cap this is the
+  gate's worst-case request memory
 - `MOHDEL_LOG_LEVEL` — `trace|debug|info|warn|error|silent` (session stderr)
 - `MOHDEL_VERBOSITY` — 0/1/2 per LOGGING.md
 - `MOHDEL_MEDIA_ROOTS` — `PATH`-style list of directories that `file://`

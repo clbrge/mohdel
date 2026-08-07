@@ -48,7 +48,7 @@ use crate::protocol::{
     AnswerResult, CallEnvelope, DeltaChunk, DeltaKind, Event, ImageEnvelope, ImageResult,
     Severity, Status, TranscriptionEnvelope, TranscriptionResult, TypedError,
 };
-use crate::session_pool::{PooledSession, SessionPool};
+use crate::session_pool::{AcquireError, PooledSession, SessionPool};
 
 pub type Body = BoxBody<Bytes, Infallible>;
 
@@ -135,10 +135,21 @@ pub async fn serve_data(path: &Path, pool: Option<SessionPool>) -> Result<(), Se
 pub async fn serve_data_with_state(path: &Path, state: GateState) -> Result<(), ServeError> {
     let listener = bind(path)?;
     let state = Arc::new(state);
+    let admission = Arc::new(tokio::sync::Semaphore::new(max_connections()));
     loop {
+        // Taken before `accept` so that at capacity the gate simply
+        // stops accepting and connections wait in the kernel backlog.
+        // Accepting first would spawn a task and read a body (up to
+        // MAX_CALL_BODY_BYTES) for work that cannot start yet.
+        let permit = admission
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("admission semaphore is never closed");
         let (stream, _addr) = listener.accept().await.map_err(ServeError::Accept)?;
         let state = state.clone();
         tokio::spawn(async move {
+            let _permit = permit;
             let io = TokioIo::new(stream);
             let svc = service_fn(move |req| {
                 let state = state.clone();
@@ -244,6 +255,21 @@ async fn handle_data(req: Request<Incoming>, state: Arc<GateState>) -> Response<
 /// pathological caller can't OOM the gate and take down every tenant
 /// sharing it. Raise this if provider context windows keep growing.
 const MAX_CALL_BODY_BYTES: usize = 16 * 1024 * 1024;
+
+pub const DEFAULT_MAX_CONNECTIONS: usize = 64;
+
+/// Ceiling on concurrently served data-plane connections. Each one can
+/// hold a `MAX_CALL_BODY_BYTES` body, so this multiplied by that cap is
+/// the gate's worst-case request memory. `0` is rejected rather than
+/// treated as unlimited — an unbounded accept loop is the condition
+/// this exists to prevent.
+fn max_connections() -> usize {
+    std::env::var("MOHDEL_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(DEFAULT_MAX_CONNECTIONS)
+}
 
 /// Per-line cap for NDJSON read from session stdout. A session that
 /// emits 16 MiB without a newline is considered broken (runaway
@@ -435,13 +461,23 @@ async fn dispatch_via_pool(
     enforcer: Arc<Enforcer>,
 ) -> Response<Body> {
     let mut session = match pool.acquire().await {
-        Some(s) => s,
-        None => {
+        Ok(s) => s,
+        Err(AcquireError::Timeout) => {
+            return typed_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                Severity::Warn,
+                "session pool busy",
+                "no session became free within the acquire timeout",
+                "SESSION_POOL_BUSY",
+                true,
+            );
+        }
+        Err(AcquireError::Closed) => {
             return typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Fatal,
                 "session pool is closed",
-                "pool returned None on acquire",
+                "pool channel closed on acquire",
                 "SESSION_POOL_CLOSED",
                 false,
             );
@@ -1031,13 +1067,23 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
     };
 
     let mut session = match pool.acquire().await {
-        Some(s) => s,
-        None => {
+        Ok(s) => s,
+        Err(AcquireError::Timeout) => {
+            return Err(typed_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                Severity::Warn,
+                "session pool busy",
+                "no session became free within the acquire timeout",
+                "SESSION_POOL_BUSY",
+                true,
+            ));
+        }
+        Err(AcquireError::Closed) => {
             return Err(typed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Severity::Fatal,
                 "session pool is closed",
-                "pool returned None on acquire",
+                "pool channel closed on acquire",
                 "SESSION_POOL_CLOSED",
                 false,
             ));

@@ -29,7 +29,7 @@ import { getProviderLimits } from './adapters/_providers.js'
 import { providerOf, catalogKey, effortOf } from '#core/model-id.js'
 import * as defaultCooldown from './_cooldown.js'
 import * as defaultLimiter from './_rate_limiter.js'
-import { withIdleHeartbeat } from './_idle_heartbeat.js'
+import { withIdleHeartbeat, MIN_IDLE_HEARTBEAT_MS } from './_idle_heartbeat.js'
 import { logger as defaultLogger } from './_logger.js'
 import {
   startSpan,
@@ -176,6 +176,12 @@ export async function * run (envelope, {
   let lastFrameAt = startedAt
   let maxInterFrameMs = 0
   try {
+    if (envelope.idleHeartbeatMs > 0 && envelope.idleHeartbeatMs < MIN_IDLE_HEARTBEAT_MS) {
+      log.warn(
+        { requested: envelope.idleHeartbeatMs, applied: MIN_IDLE_HEARTBEAT_MS },
+        '[mohdel:answer] idleHeartbeatMs raised to the floor'
+      )
+    }
     const adapterStream = adapter(envelope, { signal, log, span })
     const heartbeated = withIdleHeartbeat(adapterStream, envelope.idleHeartbeatMs)
     for await (const ev of heartbeated) {

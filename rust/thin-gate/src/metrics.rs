@@ -48,6 +48,7 @@ struct Metrics {
     sessions_spawn_failures: Counter<u64>,
     pool_in_use: UpDownCounter<i64>,
     pool_acquire_wait_ms: Histogram<f64>,
+    pool_acquire_timeouts: Counter<u64>,
     calls: Counter<u64>,
     call_duration_ms: Histogram<f64>,
     cooldown_rejections: Counter<u64>,
@@ -155,6 +156,10 @@ pub fn init() {
             .f64_histogram("mohdel.pool.acquire_wait_ms")
             .with_description("Wall time a caller waited for a free session slot")
             .with_unit("ms")
+            .build(),
+        pool_acquire_timeouts: meter
+            .u64_counter("mohdel.pool.acquire_timeouts")
+            .with_description("Calls rejected with SESSION_POOL_BUSY after waiting out the acquire timeout")
             .build(),
         calls: meter
             .u64_counter("mohdel.calls")
@@ -308,6 +313,12 @@ pub fn pool_in_use_delta(delta: i64) {
 pub fn pool_acquire_wait(ms: f64) {
     if let Some(m) = METRICS.get() {
         m.pool_acquire_wait_ms.record(ms, &[]);
+    }
+}
+
+pub fn pool_acquire_timeout() {
+    if let Some(m) = METRICS.get() {
+        m.pool_acquire_timeouts.add(1, &[]);
     }
 }
 

@@ -64,6 +64,7 @@
  *   the gap persists. The consumer decides whether to act (log,
  *   bump a watchdog, abort via its own AbortSignal). Mohdel never
  *   aborts on its own. Omitting the field disables the heartbeat.
+ *   Positive values are raised to `MIN_IDLE_HEARTBEAT_MS` (250).
  *
  * @property {Object<string, object>} [providerOptions]
  *   Namespaced bag of provider-specific knobs that don't fit the

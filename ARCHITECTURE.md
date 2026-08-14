@@ -195,7 +195,9 @@ async function * <provider> (envelope, { client?, signal?, log?, span? }) {
 }
 ```
 
-Adapters never own cooldown, rate limiting, or OTel spans — those live in `run.js`. Each adapter handles one call from envelope to terminal. Shared cross-adapter helpers live under `js/session/adapters/_*.js` (images, videos, tools, errors, pricing, catalog).
+Adapters never own cooldown, rate limiting, or OTel spans — those live in `run.js`. Each adapter handles one call from envelope to terminal. Shared cross-adapter helpers live under `js/session/adapters/_*.js` (images, videos, tools, errors, pricing, catalog, speed).
+
+Speed lanes are declared centrally in `_speed.js`, mapping provider → native parameter name. That table is also what drives emission, since adapters call its shared `applySpeed` rather than writing the parameter themselves — so a provider cannot be listed as supporting lanes while its adapter quietly drops them. An adapter that accepted a lane and ignored it would produce exactly the silent mis-billing the design exists to prevent.
 
 Registered adapters (`js/session/adapters/index.js`): anthropic, openai, gemini, groq, cerebras, xai, deepseek, mistral, openrouter, fireworks, novita (image-only), plus `echo` and `fake` as test/dev tools. Six of the provider adapters (groq, cerebras, deepseek, mistral, openrouter, fireworks) share `_chat_completions.js` — a single core that handles the OpenAI-compatible Chat Completions shape with flavor hooks for tool-choice mapping, DSML parsing (DeepSeek), reasoning field mapping (Cerebras zai models), and arg mutation (Fireworks model prefix, OpenRouter routing).
 
@@ -254,6 +256,22 @@ Mohdel does not count input tokens or reject oversized prompts. Trim or reject b
 ### No projected-cost precheck
 
 Mohdel reports `result.cost` from curated pricing but does not enforce budgets. Spending policy is caller-side.
+
+### The catalog, not the provider, decides which service speeds may be requested
+
+Providers have begun selling the same weights at several speeds behind a request parameter (Anthropic `speed: "fast"`). Mohdel models these as **lanes**: a catalog entry declares the lanes a model sells under `speeds`, each carrying the provider-native wire value plus the prices and rate limits that differ from the base entry.
+
+Lanes are unordered — a discount lane is slower and cheaper, a premium lane faster and dearer — so there is no default lane. Omitting `speed` sends no parameter at all.
+
+**An undeclared lane fails the call; it never falls back to standard service.** Two guards, both raised before the provider call so a rejected lane costs nothing: `SESSION_INVALID_SPEED` when the entry does not declare the lane, and `SESSION_SPEED_NOT_IMPLEMENTED` when it does but the provider's adapter emits no lane parameter. They stay distinct because the fixes differ — the first is a caller asking for something the model does not sell, the second is the catalog and the adapter disagreeing.
+
+That strictness exists because model support is three-state. A model may honour the parameter, reject it, or **accept it, run at standard speed, and bill standard rates** — and the third case is invisible from the request side. If mohdel priced a call from what the caller asked for, every call to such a model would be billed at the lane's rates for standard service. So the catalog is the whitelist: mohdel never sends a lane an entry does not declare, and never infers lane support from a provider's silence.
+
+Two consequences follow. Cost is attributed per (model, lane) rather than per model, since lane prices differ by design and a rollup keyed on the id alone merges them into a meaningless number. And an active lane gets its own rate-limit bucket regardless of `rateLimitScope`, because lane capacity is a separate pool — sharing one would let standard traffic throttle the lane being paid for.
+
+A lane overlay carries prices and quotas only. Anything that would redirect the call or restate what the model *is* — provider, SDK, base URL, context limits, modality, tool support — is model selection wearing a lane's clothes and belongs in its own catalog entry. Buying throughput by routing the same weights to a different provider is therefore a separate entry, not a lane.
+
+See `docs/CATALOG.md` for the entry shape and `PROTOCOL.md` §3.1.1 for the `@lane` id suffix.
 
 ### No automatic tool loop
 
@@ -372,6 +390,7 @@ Defeats the isolation win (same process = same crash domain) and adds a heavywei
 
 - [PROTOCOL.md](PROTOCOL.md) — wire protocol reference
 - [INTEGRATION.md](INTEGRATION.md) — library embedding guide
+- [docs/CATALOG.md](docs/CATALOG.md) — curated catalog entry shape
 - [LOGGING.md](LOGGING.md) — log levels, prefixes, pino / OTel integration
 - `bench/bench.js` — throughput benchmark source
 - `bench/isolation.js` — fault-isolation demo source

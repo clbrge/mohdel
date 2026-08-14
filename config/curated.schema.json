@@ -88,6 +88,7 @@
           "description": "USD per 1M thinking/reasoning tokens (when the provider bills these separately)."
         },
         "cacheWritePrice": { "type": "number", "minimum": 0, "description": "USD per 1M tokens written to provider-side prompt cache." },
+        "cacheWrite1hPrice": { "type": "number", "minimum": 0, "description": "USD per 1M tokens written with a 1h TTL, when the provider prices that above the default write rate. Falls back to cacheWritePrice." },
         "cacheReadPrice": { "type": "number", "minimum": 0, "description": "USD per 1M tokens served from provider-side prompt cache." },
 
         "contextTokenLimit": { "type": "integer", "minimum": 1, "description": "Maximum total tokens (input + output)." },
@@ -106,6 +107,43 @@
           ]
         },
         "defaultThinkingEffort": { "type": "string", "description": "Effort level used when the envelope omits 'outputEffort'." },
+
+        "speeds": {
+          "type": "object",
+          "description": "Service speed lanes this model sells, keyed by lane name. A lane is a provider request parameter buying a different speed/price point for the same weights. There is no default lane: omitting 'speed' on the envelope sends no parameter. Only lanes declared here may be requested.",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["wire"],
+            "additionalProperties": false,
+            "description": "Lane overlay. Fields named here override the base entry; unnamed fields fall through. Only prices and rate limits are overridable — anything that would change what the model is belongs in its own entry.",
+            "properties": {
+              "wire": { "type": "string", "description": "Provider-native value for the lane parameter (e.g. 'fast')." },
+              "inputPrice": {
+                "oneOf": [
+                  { "type": "number", "minimum": 0 },
+                  { "type": "object", "required": ["default"], "additionalProperties": { "type": "number" }, "properties": { "default": { "type": "number" } } }
+                ]
+              },
+              "outputPrice": {
+                "oneOf": [
+                  { "type": "number", "minimum": 0 },
+                  { "type": "object", "required": ["default"], "additionalProperties": { "type": "number" }, "properties": { "default": { "type": "number" } } }
+                ]
+              },
+              "thinkingPrice": {
+                "oneOf": [
+                  { "type": "number", "minimum": 0 },
+                  { "type": "object", "required": ["default"], "additionalProperties": { "type": "number" }, "properties": { "default": { "type": "number" } } }
+                ]
+              },
+              "cacheWritePrice": { "type": "number", "minimum": 0 },
+              "cacheWrite1hPrice": { "type": "number", "minimum": 0 },
+              "cacheReadPrice": { "type": "number", "minimum": 0 },
+              "rpmLimit": { "type": "integer", "minimum": 1 },
+              "tpmLimit": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
 
         "tags": {
           "type": "array",

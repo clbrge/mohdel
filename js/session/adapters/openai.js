@@ -30,6 +30,7 @@ import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
 import { isTrustedMedia } from './_media.js'
 import { costFor } from './_pricing.js'
+import { applySpeed } from './_speed.js'
 import { catalogKey, providerOf, bareOf } from '#core/model-id.js'
 import {
   toOpenAITools,
@@ -201,7 +202,7 @@ export async function * openai (envelope, deps = {}) {
       ...(cacheWriteTokens > 0 && { cacheWriteInputTokens: cacheWriteTokens }),
       ...(cachedInputTokens > 0 && { cacheReadInputTokens: cachedInputTokens }),
       cost: costFor(
-        catalogKey(envelope.model),
+        envelope,
         {
           inputTokens: regularInputTokens,
           outputTokens: messageOutputTokens,
@@ -286,6 +287,8 @@ function buildRequest (envelope, input, instructions) {
       request.user = envelope.identifier
     }
   }
+
+  applySpeed(request, envelope, spec)
 
   return request
 }

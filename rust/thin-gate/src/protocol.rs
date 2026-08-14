@@ -51,6 +51,8 @@ pub struct CallEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_effort: Option<String>, // per-model; validated at runtime
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<String>, // per-model service lane; validated at runtime
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<MediaRef>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub videos: Option<Vec<MediaRef>>,

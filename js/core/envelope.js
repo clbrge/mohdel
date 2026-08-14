@@ -43,6 +43,13 @@
  *   Thinking effort level. Valid keys are per-model — validated at
  *   runtime against the curated entry's `thinkingEffortLevels`.
  *   Default is the model's `defaultThinkingEffort`.
+ * @property {string} [speed]
+ *   Service speed lane. Valid keys are per-model — validated at
+ *   runtime against the curated entry's `speeds`. There is no
+ *   default and no fallback: omitting the field sends no speed
+ *   parameter, while naming a lane the entry does not declare
+ *   (`SESSION_INVALID_SPEED`) or the provider's adapter cannot emit
+ *   (`SESSION_SPEED_NOT_IMPLEMENTED`) fails the call before dispatch.
  *
  * @property {MediaRef[]} [images]
  * @property {MediaRef[]} [videos]
@@ -146,6 +153,7 @@ export const ENVELOPE_FIELDS = Object.freeze([
   'outputType',
   'outputStyle',
   'outputEffort',
+  'speed',
   'images',
   'videos',
   'cache',

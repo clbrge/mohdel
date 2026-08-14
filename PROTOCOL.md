@@ -63,8 +63,9 @@ interface CallEnvelope {
 
   // --- Routing ---
   model:        string             // full mohdel id `"<provider>/<bare>"`,
-                                   // with optional `:<effort>` suffix
-                                   // (e.g. `"anthropic/claude-opus-4:max"`).
+                                   // with optional `:<effort>` and
+                                   // `@<speed>` suffixes, in that order
+                                   // (e.g. `"anthropic/claude-opus-4:max@fast"`).
                                    // Same shape as `mo model list` and
                                    // cs-core's catalog keys. The gate
                                    // splits the provider prefix server-
@@ -84,6 +85,12 @@ interface CallEnvelope {
                                     // Redundant with the `:effort` suffix
                                     // on `model`; when both present,
                                     // explicit `outputEffort` wins.
+  speed?:             string        // per-model service lane; validated
+                                    // against the model's `speeds`.
+                                    // Redundant with the `@speed` suffix
+                                    // on `model`; when both present,
+                                    // explicit `speed` wins. No default:
+                                    // omitting it sends no parameter.
   images?:            MediaRef[]
   videos?:            MediaRef[]
   cache?:             boolean       // Gemini video upload caching
@@ -117,13 +124,13 @@ interface ToolSpec { name: string; description?: string; parameters: object }
 Unknown fields **MUST** be ignored (additive tolerance). `auth.key`
 **MUST NOT** appear in any event, log, or stderr output.
 
-#### 3.1.1 Routing normalization — `<provider>/<bare>[:<effort>]`
+#### 3.1.1 Routing normalization — `<provider>/<bare>[:<effort>][@<speed>]`
 
 The gate parses `model` on ingress:
 
 1. The substring before the first `/` is the **provider**.
 2. The remainder is the **bare provider-native id**, optionally
-   suffixed with `:<effort>`.
+   suffixed with `:<effort>`, then `@<speed>`.
 
 Downstream runtime code (cooldown keys, rate-limit buckets, session
 adapter dispatch, JS session `run.js`) reads the two parts in split
@@ -134,15 +141,20 @@ JS) when interpreting stored / logged envelopes.
 Malformed `model` — no `/`, or an empty provider or bare half —
 **MUST** be rejected at ingress with `PROTOCOL_INVALID_ENVELOPE`.
 
-The optional `:<effort>` suffix selects a thinking-effort level
-for the call. The session runtime splits it before dispatch when
-all of the following hold:
+The session runtime resolves the **whole** `model` string against the
+catalog first, and only attempts to split suffixes when that misses.
+A bare provider-native id that itself contains `:` or `@` — an
+OpenRouter variant id, a version-pinned Vertex id — is therefore a
+catalog key in its own right and is never mistaken for a suffixed one.
 
-1. The string contains a `:` (use of `lastIndexOf`).
+The optional `:<effort>` suffix selects a thinking-effort level
+for the call. The session splits it before dispatch when all of the
+following hold:
+
+1. The whole string does not itself resolve to a spec.
 2. `envelope.outputEffort` is not already set — explicit
    `outputEffort` wins over the suffix.
-3. The base (everything before the last `:`) resolves to a known
-   spec via `<provider>/<base>`.
+3. The base resolves to a known spec via `<provider>/<base>`.
 4. The spec has `thinkingEffortLevels` **and** the candidate level
    is either `"none"` or a key in `thinkingEffortLevels`.
 
@@ -152,7 +164,28 @@ terminal `error` event with `type: 'SESSION_INVALID_OUTPUT_EFFORT'`.
 If the base does not resolve, the session leaves `model` untouched
 and the normal not-found path handles it.
 
-This mirrors the factory's `mohdel().use('model:effort')`
+The optional `@<speed>` suffix selects a **service speed lane** and is
+parsed off before `:<effort>`, so the two are read in canonical order.
+Splitting follows the same rules, and explicit `envelope.speed` wins
+over the suffix.
+
+Lane validity is checked after normalization, so an explicitly-set
+`envelope.speed` passes through the same two guards as the suffix form.
+Both are raised before the provider call, so a rejected lane costs
+nothing:
+
+- `SESSION_INVALID_SPEED` — the resolved spec has no `speeds`, or the
+  lane is not among its keys.
+- `SESSION_SPEED_NOT_IMPLEMENTED` — the spec declares the lane but the
+  provider's adapter emits no lane parameter.
+
+There is **no default lane and no fallback to standard service**.
+Omitting `speed` sends no parameter; naming an unusable one fails the
+call. Providers vary in whether an unsupported lane errors or is
+silently ignored and billed at standard rates, so the catalog — never
+the provider's response — decides whether a lane may be sent.
+
+Both suffixes mirror the factory's `mohdel().use('model:effort')`
 convenience so factory and wire callers see identical ergonomics.
 
 #### Operational note — auth.key lifetime asymmetry

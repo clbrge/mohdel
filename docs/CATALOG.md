@@ -74,6 +74,7 @@ Prices are **USD per 1M tokens**. So `"inputPrice": 3` means $3 per million inpu
 | `cacheWrite1hPrice` | Anthropic only. Bills the 1h-TTL portion of cache-creation (2× input, vs 1.25× for 5m). Falls back to `cacheWritePrice` when absent — so omitting it prices all writes at the 5m rate. |
 | `thinkingEffortLevels` | Object mapping `"low" \| "medium" \| "high" \| "xhigh" \| "max" \| "none"` → provider-native budget. Mohdel translates the caller's `outputEffort: 'medium'` to whatever the provider accepts (Anthropic budget tokens, OpenAI reasoning_effort, Gemini thinkingBudget, …). Set to `null` to disable thinking on this model. |
 | `defaultThinkingEffort` | The level used when the envelope omits `outputEffort`. |
+| `speeds` | Object mapping lane name → overlay. Service speed lanes this model sells. See *Service speeds* below. |
 | `tags` | Free-form strings. `[a-zA-Z][a-zA-Z0-9._-]{0,31}`. Used by `mo bench --tag X`, `mo rank --tag X`, and your application's own model selection. |
 | `leaderboard` | `[intelligence, speed, latency]` triple (numbers). Drives `mo rank`. Source it however you want — published benchmarks, your own evals, vibes. |
 | `aliases` | Alternative ids that should resolve to this entry. |
@@ -87,6 +88,54 @@ Prices are **USD per 1M tokens**. So `"inputPrice": 3` means $3 per million inpu
 - `"model"` — this model has its own private budget.
 
 Use `mo rl show <model-or-provider>` to inspect, `mo rl set <model> <rpm> <tpm>` to write.
+
+## Service speeds
+
+Some providers sell the same weights at more than one speed, selected by a
+request parameter — Anthropic's `speed: "fast"`, and equivalents elsewhere.
+Faster lanes cost more; discount lanes are slower and cheaper. Declare the
+lanes a model sells under `speeds`:
+
+```jsonc
+"anthropic/claude-x": {
+  "inputPrice": 3,
+  "outputPrice": 15,
+  "rateLimitScope": "model",
+  "speeds": {
+    "fast": { "wire": "fast", "inputPrice": 6, "outputPrice": 30, "rpmLimit": 200 }
+  }
+}
+```
+
+`wire` is the provider-native value; the parameter name comes from the
+adapter. Every other field is an override: named fields replace the base
+entry's, unnamed fields fall through. Only prices and rate limits are
+overridable — anything that would change what the model *is* belongs in
+its own catalog entry.
+
+Callers select a lane with `speed` on the envelope, or the `@lane` suffix
+on the model id (`anthropic/claude-x@fast`, or `claude-x:high@fast`
+alongside an effort suffix).
+
+**There is no default lane and no fallback.** Omitting `speed` sends no
+parameter at all. Requesting a lane the entry does not declare fails with
+`SESSION_INVALID_SPEED`; requesting one the provider's adapter cannot emit
+fails with `SESSION_SPEED_NOT_IMPLEMENTED`. Both fail before the provider
+call, so nothing is billed.
+
+That strictness is deliberate. Model support is three-state: a model may
+honour the parameter, reject it, or accept it and silently run at standard
+speed while billing standard rates. The third case is invisible from the
+request side, so the catalog — not the provider's response — decides whether
+a lane may be sent. A lane declared for a model that quietly ignores it would
+bill every call at the overlay's rates for standard service.
+
+An active lane also gets its own rate-limit bucket regardless of
+`rateLimitScope`, since lane capacity is a separate pool. Give the overlay
+its own `rpmLimit`/`tpmLimit`.
+
+`mo check` reports an entry that declares `speeds` for a provider with no
+adapter support, and warns about a lane that restates no prices.
 
 ## Image-generation entries
 

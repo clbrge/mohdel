@@ -1,6 +1,7 @@
 import { label, err, warn, ok } from './colors.js'
 import providers from '../lib/providers.js'
 import { validate, isValidTag } from '../lib/schema.js'
+import { providerSupportsSpeed } from '../../js/session/adapters/_speed.js'
 import { getCuratedModels, loadDefaultEnv, catalogEntries, catalogValues } from '../lib/common.js'
 
 // --- Local validation ---
@@ -48,6 +49,22 @@ const checkLocal = (curated) => {
 
     if (spec.thinkingEffortLevels && !spec.defaultThinkingEffort) {
       warnings.push(`${key}: has thinkingEffortLevels but no defaultThinkingEffort`)
+    }
+
+    if (spec.speeds && !providerSupportsSpeed(keyProvider)) {
+      errors.push(`${key}: declares speeds but provider '${keyProvider}' has no adapter support — calls on those lanes would fail at dispatch`)
+    }
+    for (const [lane, overlay] of Object.entries(spec.speeds || {})) {
+      for (const priceField of ['inputPrice', 'outputPrice', 'thinkingPrice']) {
+        const val = overlay[priceField]
+        if (val != null && typeof val === 'object' && val.default == null) {
+          errors.push(`${key}: speeds.${lane}.${priceField} is tiered but missing 'default' key`)
+        }
+      }
+      const priced = ['inputPrice', 'outputPrice'].some(f => overlay[f] != null)
+      if (!priced) {
+        warnings.push(`${key}: speeds.${lane} restates no prices — the lane will bill at base rates`)
+      }
     }
 
     if (Array.isArray(spec.tags)) {

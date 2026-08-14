@@ -268,8 +268,35 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
           // below. If `base` doesn't resolve, fall through — the full
           // `modelId` (with colon) gets the normal lookup + "not
           // found" error path.
+          // A curated id that itself contains `:` or `@` is a catalog
+          // key in its own right, so an exact hit wins over splitting.
+          // Fallback specs are excluded from that test on purpose:
+          // providers that synthesize them resolve any string, which
+          // would disable suffix parsing for them entirely.
+          const exactId = libraryMode ? modelId : expandModelAliasSync(modelId)
+          const isCuratedId = !!catalog[exactId]
+
+          // `@speed` is parsed off first so the two suffixes are read
+          // in canonical order (`base:effort@speed`).
+          let aliasSpeed
+          const atIdx = isCuratedId ? -1 : modelId.lastIndexOf('@')
+          if (atIdx > 0) {
+            const candidate = modelId.slice(atIdx + 1)
+            const base = modelId.slice(0, atIdx)
+            // The base may still carry `:effort`, which is stripped
+            // separately below — probe without it so `x:high@fast`
+            // resolves the same as `x@fast`.
+            const colon = base.lastIndexOf(':')
+            const probe = colon > 0 ? base.slice(0, colon) : base
+            const probeResolved = libraryMode ? probe : expandModelAliasSync(probe)
+            if (catalog[probeResolved] || createFallbackModelSpec(probeResolved)) {
+              aliasSpeed = candidate
+              modelId = base
+            }
+          }
+
           let aliasOutputEffort
-          const colonIdx = modelId.lastIndexOf(':')
+          const colonIdx = isCuratedId ? -1 : modelId.lastIndexOf(':')
           if (colonIdx > 0) {
             const candidate = modelId.slice(colonIdx + 1)
             const base = modelId.slice(0, colonIdx)
@@ -327,6 +354,14 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
           }
           modelSpec = normalizeModelSpec(resolvedModelId, modelSpec, providerConfig)
 
+          if (aliasSpeed && !Object.hasOwn(modelSpec.speeds || {}, aliasSpeed)) {
+            const available = Object.keys(modelSpec.speeds || {})
+            const detail = available.length
+              ? `Available: ${available.join(', ')}`
+              : 'It declares no speed lanes.'
+            throw new Error(`Model '${resolvedModelId}' does not support speed lane '${aliasSpeed}'. ${detail}`)
+          }
+
           // Validate outputEffort alias against model capabilities
           if (aliasOutputEffort) {
             if (!modelSpec.thinkingEffortLevels) {
@@ -337,7 +372,7 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
             }
           }
 
-          return createModelProxy(resolvedModelId, modelSpec, handlers, aliasOutputEffort, sdkCache, rateLimiter, providersConfig, cooldown, configurations, resolveProviderLimits)
+          return createModelProxy(resolvedModelId, modelSpec, handlers, aliasOutputEffort, aliasSpeed, sdkCache, rateLimiter, providersConfig, cooldown, configurations, resolveProviderLimits)
         }
       }
 
@@ -383,7 +418,7 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
   })
 }
 
-const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffort, sdkCache, rateLimiter, providersConfig, cooldown, externalConfigurations, resolveProviderLimits) => {
+const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffort, aliasSpeed, sdkCache, rateLimiter, providersConfig, cooldown, externalConfigurations, resolveProviderLimits) => {
   // modelSpec is the full metadata object for resolvedModelId
   let runtimePromise = null
 
@@ -444,6 +479,9 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
         return async (prompt, options = {}) => {
           if (aliasOutputEffort && !options.outputEffort) {
             options.outputEffort = aliasOutputEffort
+          }
+          if (aliasSpeed && !options.speed) {
+            options.speed = aliasSpeed
           }
 
           // Verbosity tier — captured from handlers (set by the mohdel factory). Used

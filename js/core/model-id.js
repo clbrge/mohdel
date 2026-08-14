@@ -2,10 +2,10 @@
  * Model-id helpers.
  *
  * A mohdel model id is a single string of shape
- * `"<provider>/<bare>[:<effort>]"` — same on the wire and in-process.
- * See PROTOCOL §3. Nothing in mohdel ever holds the id in a split
- * object form; when the provider or bare part is needed, these
- * helpers return it as a substring.
+ * `"<provider>/<bare>[:<effort>][@<speed>]"` — same on the wire and
+ * in-process. See PROTOCOL §3. Nothing in mohdel ever holds the id in
+ * a split object form; when a part is needed, these helpers return it
+ * as a substring.
  *
  * Ids are validated at ingress by the gate
  * (`rust/thin-gate/src/protocol.rs::validate_ids`); these accessors
@@ -47,12 +47,8 @@ export function bareOf (model) {
  * @returns {string}
  */
 export function catalogKey (model) {
-  const colon = model.lastIndexOf(':')
-  const slash = model.indexOf('/')
-  // Only treat `:` as an effort separator when it appears after the
-  // provider slash (otherwise a model id without `/` that happens to
-  // contain `:` would get the wrong thing stripped).
-  return colon > slash ? model.slice(0, colon) : model
+  const base = beforeSuffix(model, SPEED_SIGIL)
+  return beforeSuffix(base, EFFORT_SIGIL)
 }
 
 /**
@@ -62,8 +58,46 @@ export function catalogKey (model) {
  * @returns {string | undefined}
  */
 export function effortOf (model) {
-  const colon = model.lastIndexOf(':')
+  return afterSuffix(beforeSuffix(model, SPEED_SIGIL), EFFORT_SIGIL)
+}
+
+/**
+ * Speed-lane suffix, without the `@`, or `undefined` if absent.
+ *
+ * @param {string} model
+ * @returns {string | undefined}
+ */
+export function speedOf (model) {
+  return afterSuffix(model, SPEED_SIGIL)
+}
+
+const EFFORT_SIGIL = ':'
+const SPEED_SIGIL = '@'
+
+/**
+ * Index of `sigil` when it separates a suffix, or `-1`. A sigil only
+ * separates when it falls after the provider slash, so a bare id that
+ * itself contains one is left whole.
+ *
+ * @param {string} model
+ * @param {string} sigil
+ * @returns {number}
+ */
+function suffixIndex (model, sigil) {
   const slash = model.indexOf('/')
-  if (colon <= slash) return undefined
-  return model.slice(colon + 1)
+  if (slash < 0) return -1
+  const at = model.lastIndexOf(sigil)
+  return at > slash ? at : -1
+}
+
+/** @returns {string} */
+function beforeSuffix (model, sigil) {
+  const at = suffixIndex(model, sigil)
+  return at < 0 ? model : model.slice(0, at)
+}
+
+/** @returns {string | undefined} */
+function afterSuffix (model, sigil) {
+  const at = suffixIndex(model, sigil)
+  return at < 0 ? undefined : model.slice(at + 1)
 }

@@ -260,4 +260,36 @@ describe('classifyProviderError — detail extraction', () => {
     expect(out.detail.length).toBe(501)
     expect(out.detail.endsWith('…')).toBe(true)
   })
+
+  test('unwraps @google/genai ApiError double-wrapped JSON message', () => {
+    const nativeBody = JSON.stringify({
+      error: {
+        code: 400,
+        message: 'Thinking level MINIMAL is not supported for this model. Please retry with other thinking level.',
+        status: 'INVALID_ARGUMENT'
+      }
+    }, null, 2) + '\n'
+    const err = Object.assign(new Error(JSON.stringify({
+      error: { message: nativeBody, code: 400, status: 'Bad Request' }
+    })), { name: 'ApiError', status: 400 })
+    const out = classifyProviderError(err, undefined, { provider: 'gemini' })
+    expect(out.type).toBe('PROVIDER_ERROR')
+    expect(out.detail).toBe('Thinking level MINIMAL is not supported for this model. Please retry with other thinking level.')
+  })
+
+  test('unwrap leaves a plain sentence untouched', () => {
+    const err = { status: 400, message: 'Thinking level MINIMAL is not supported.' }
+    expect(classifyProviderError(err).detail).toBe('Thinking level MINIMAL is not supported.')
+  })
+
+  test('unwrap leaves JSON without a message field untouched', () => {
+    const raw = '{"reason":"nope"}'
+    expect(classifyProviderError({ status: 400, message: raw }).detail).toBe(raw)
+  })
+
+  test('unwrap stops after two envelopes', () => {
+    const depth3 = JSON.stringify({ error: { message: JSON.stringify({ error: { message: JSON.stringify({ error: { message: 'deep' } }) } }) } })
+    const out = classifyProviderError({ status: 400, message: depth3 })
+    expect(out.detail).toBe(JSON.stringify({ error: { message: 'deep' } }))
+  })
 })

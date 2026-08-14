@@ -15,7 +15,7 @@ describe('core/envelope', () => {
       // prompt (first arg)
       'prompt',
       // answer options (flat)
-      'outputBudget', 'outputType', 'outputStyle', 'outputEffort',
+      'outputBudget', 'outputType', 'outputStyle', 'outputEffort', 'speed',
       'images', 'videos', 'cache',
       'tools', 'toolChoice', 'parallelToolCalls',
       'identifier',

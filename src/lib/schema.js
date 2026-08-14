@@ -1,3 +1,23 @@
+import { SPEED_OVERRIDABLE } from '../../js/session/adapters/_speed.js'
+
+const validateSpeeds = (speeds) => {
+  const allowed = new Set(['wire', ...SPEED_OVERRIDABLE])
+  for (const [lane, overlay] of Object.entries(speeds)) {
+    if (typeof overlay !== 'object' || overlay === null || Array.isArray(overlay)) {
+      return `lane '${lane}' must be an object`
+    }
+    if (typeof overlay.wire !== 'string' || !overlay.wire) {
+      return `lane '${lane}' must set a string 'wire' value`
+    }
+    for (const field of Object.keys(overlay)) {
+      if (!allowed.has(field)) {
+        return `lane '${lane}' may not override '${field}' (allowed: ${[...allowed].join(', ')})`
+      }
+    }
+  }
+  return null
+}
+
 const fieldDefs = {
   model: { type: 'string', required: true },
   provider: { type: 'string' },
@@ -15,6 +35,7 @@ const fieldDefs = {
   thinkingTokenLimit: { type: 'number' },
   thinkingEffortLevels: { type: 'object', nullable: true, default: null },
   defaultThinkingEffort: { type: 'string' },
+  speeds: { type: 'object', validate: validateSpeeds },
   tags: { type: 'array', itemType: 'string', default: [] },
   aliases: { type: 'array', itemType: 'string', default: [] },
   replaces: { type: 'array', itemType: 'string', default: [] },

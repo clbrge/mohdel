@@ -9,7 +9,7 @@
  * @module session/adapters/_pricing
  */
 
-import { getSpec, setCatalog } from './_catalog.js'
+import { setCatalog, specFor } from './_catalog.js'
 
 /**
  * Pure cost computation from spec + usage.
@@ -104,12 +104,15 @@ function resolveTier (price, tokens) {
 }
 
 /**
- * @param {string} model  Fully-qualified `<provider>/<model>`.
+ * Cost of a call, priced against the envelope's effective spec so an
+ * active speed lane bills at the lane's rates.
+ *
+ * @param {import('#core/envelope.js').CallEnvelope} envelope
  * @param {{inputTokens?: number, outputTokens?: number, thinkingTokens?: number}} usage
  * @returns {number}
  */
-export function costFor (model, usage) {
-  return computeCost(getSpec(model), usage)
+export function costFor (envelope, usage) {
+  return computeCost(specFor(envelope), usage)
 }
 
 /**

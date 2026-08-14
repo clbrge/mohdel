@@ -42,11 +42,13 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **Tag** — free-form label on a catalog entry (`["chat", "tool-loop", "fast", "vision"]`). Used by `mo bench --tag`, `mo rank --tag`, and your application's own model selection logic. Must match `[a-zA-Z][a-zA-Z0-9._-]{0,31}`.
 
-**Leaderboard** — the `[intelligence, speed, latency]` triple on an entry. Drives `mo rank`. Source the numbers however you like (published benchmarks, your own evals).
+**Leaderboard** — the `[intelligence, speed, latency]` triple on an entry. Drives `mo rank`. Source the numbers however you like (published benchmarks, your own evals). The `speed` axis here is *measured* throughput and is not selectable — for the lane you buy, see *Speed lane*.
 
 **Alias** — alternative id that resolves to the same entry. Useful for accepting common short names (`opus` → `anthropic/claude-opus-4-7`).
 
 **Thinking effort** — symbolic level (`low`, `medium`, `high`, `xhigh`, `max`, `none`) that mohdel translates to the provider's native budget (Anthropic budget tokens, OpenAI `reasoning_effort`, Gemini `thinkingBudget`, …). Mapping lives in the entry's `thinkingEffortLevels`. The caller passes `outputEffort: 'medium'`; the entry decides what that means in upstream units.
+
+**Speed lane** — a named service speed the model sells, selected by a provider request parameter (Anthropic `speed: "fast"`). Declared per entry under `speeds`, each lane carrying its wire value plus the prices and rate limits that differ from the base entry. Callers pass `speed: 'fast'` or the `@fast` id suffix. Unordered — a lane may be slower and cheaper as readily as faster and dearer. There is no default lane and no fallback to standard: an undeclared lane fails the call before dispatch. Distinct from the `leaderboard` triple's *speed* axis, which is measured, not bought.
 
 ---
 

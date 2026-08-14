@@ -257,12 +257,12 @@ describe('setCatalog / getSpec / setPricing / costFor', () => {
 
   test('setPricing wrapper still works (back-compat)', () => {
     setPricing({ 'test/model': { input: 2, output: 10 } })
-    const cost = costFor('test/model', { inputTokens: 1000, outputTokens: 500 })
+    const cost = costFor({ model: 'test/model' }, { inputTokens: 1000, outputTokens: 500 })
     expect(cost).toBeCloseTo(0.007, 6)
   })
 
   test('costFor returns 0 for unknown model', () => {
-    expect(costFor('unknown', { inputTokens: 100, outputTokens: 200 })).toBe(0)
+    expect(costFor({ model: 'unknown' }, { inputTokens: 100, outputTokens: 200 })).toBe(0)
   })
 
   // Regression for the model-id unification: when the cs-core/mohdel
@@ -280,8 +280,8 @@ describe('setCatalog / getSpec / setPricing / costFor', () => {
         outputPrice: 5
       }
     })
-    const cost = costFor('anthropic/claude-haiku-4-5', { inputTokens: 1_000_000, outputTokens: 100_000 })
+    const cost = costFor({ model: 'anthropic/claude-haiku-4-5' }, { inputTokens: 1_000_000, outputTokens: 100_000 })
     expect(cost).toBeCloseTo(1.5, 6)
-    expect(costFor('anthropic/claude-haiku-4-5-20251001', { inputTokens: 1_000_000, outputTokens: 100_000 })).toBe(0)
+    expect(costFor({ model: 'anthropic/claude-haiku-4-5-20251001' }, { inputTokens: 1_000_000, outputTokens: 100_000 })).toBe(0)
   })
 })

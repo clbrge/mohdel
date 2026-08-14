@@ -4,6 +4,64 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.120.0] — Service speed lanes
+
+### Added
+
+- **Service speed lanes (`speeds` / `speed` / `@lane`).** Providers have begun
+  selling the same weights at different speeds behind a request parameter
+  (Anthropic `speed: "fast"`). A catalog entry now declares the lanes a model
+  sells under `speeds`, each carrying the provider-native `wire` value plus the
+  prices and rate limits that differ from the base entry. Callers select one
+  with `speed` on the envelope or the `@lane` suffix on the model id
+  (`anthropic/claude-x@fast`, or `claude-x:high@fast` alongside an effort
+  suffix), in the factory, the CLI, and on the wire.
+
+  Lanes are unordered — a lane may be slower and cheaper as readily as faster
+  and dearer — so there is no `defaultSpeed` and no fallback. Omitting `speed`
+  sends no parameter. Naming a lane the entry does not declare raises
+  `SESSION_INVALID_SPEED`; naming one the provider's adapter cannot emit raises
+  `SESSION_SPEED_NOT_IMPLEMENTED`. Both fire before the provider call, so a
+  rejected lane costs nothing. The strictness exists because model support is
+  three-state: a model may honour the parameter, reject it, or accept it and
+  silently run at standard speed while billing standard rates — the last of
+  which is invisible from the request side and would bill every such call at
+  the lane's rates.
+
+  An active lane is priced from its own overlay and gets its own rate-limit
+  bucket regardless of `rateLimitScope`, and rides on `AnswerResult.speed` and
+  the `mohdel.speed` span attribute so cost can be attributed per (model, lane).
+  `mo check` rejects an entry declaring `speeds` for a provider with no adapter
+  support.
+
+### Changed
+
+- **`costFor(model, usage)` now takes the envelope: `costFor(envelope, usage)`.**
+  Pricing resolves through the envelope's effective spec so an active lane bills
+  at the lane's rates without each adapter merging the overlay for itself.
+
+- **Suffix splitting resolves the whole model id against the catalog first.**
+  A bare provider-native id that itself contains `:` or `@` — an OpenRouter
+  variant id, a version-pinned Vertex id — is a catalog key in its own right and
+  is no longer mistaken for a suffixed one.
+
+- **`cacheWrite1hPrice` is in the catalog schema.** `_pricing.js` already read
+  it; the field was missing from `curated.schema.json`.
+
+## [0.119.1] — Fix: `detail` carried a JSON document instead of a sentence on Gemini errors
+
+### Fixed
+
+- **A Gemini rejection reached consumers as a JSON blob rather than the
+  provider's sentence.** `@google/genai` sets `ApiError.message` to
+  `JSON.stringify({error: {message, code, status}})`, and the body it wraps
+  is itself Gemini's JSON error document — so `classifyProviderError` put two
+  nested envelopes on `detail`, which every consumer treats as a user-facing
+  string. `extractDetail` now peels up to two JSON envelopes, yielding
+  `Thinking level MINIMAL is not supported for this model. Please retry with
+  other thinking level.` Plain sentences, JSON without a message field, and
+  bodies nested deeper than two levels are returned unchanged.
+
 ## [0.119.0] — Security: gate resource bounds, secret hygiene, dependency advisories / Fix: OpenRouter factory path, session framing, corrupt-config errors
 
 ### Security

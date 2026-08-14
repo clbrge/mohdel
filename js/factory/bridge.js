@@ -223,6 +223,7 @@ function toEnvelope ({ modelKey, configuration, prompt, options }) {
   if (options.outputType) envelope.outputType = options.outputType
   if (options.outputStyle) envelope.outputStyle = options.outputStyle
   if (options.outputEffort) envelope.outputEffort = options.outputEffort
+  if (options.speed) envelope.speed = options.speed
   if (options.images?.length) envelope.images = options.images
   if (options.videos?.length) envelope.videos = options.videos
   if (options.cache !== undefined) envelope.cache = options.cache

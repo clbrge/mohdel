@@ -129,6 +129,7 @@ Optional fields:
   outputType:        'json',                        // 'text' | 'json'
   outputStyle:       'coding',                      // 'chat'|'coding'|'analysis'|'translation'|'creative'
   outputEffort:      'high',                        // per-model effort level
+  speed:             'fast',                        // per-model service lane
   images:            [{ fileUri, mimeType }],
   videos:            [{ fileUri, mimeType }],
   cache:             true,
@@ -330,6 +331,18 @@ const m = mo.use('claude-opus-4-7:low')  // model = claude-opus-4-7, effort = lo
 ```
 
 Valid levels: `none`, `low`, `medium`, `high`. Call-time `outputEffort` still wins if you pass it.
+
+### `@speed` suffix
+
+Lock a service speed lane at resolution time:
+
+```js
+const m = mo.use('claude-x@fast')          // model = claude-x, lane = fast
+const both = mo.use('claude-x:high@fast')  // effort and lane together
+```
+
+Valid lanes are per-model — the keys of the curated entry's `speeds`.
+Call-time `speed` still wins if you pass it. See *Service speeds* below.
 
 ### Model proxy
 
@@ -562,6 +575,35 @@ Effort levels are per-model — look at the curated spec's `thinkingEffortLevels
 
 `outputEffort` defaults from `spec.defaultThinkingEffort` when the model supports thinking and no explicit effort is passed.
 
+## Service speeds
+
+Some providers sell the same weights at more than one speed, chosen with a
+request parameter. Pass `speed` (or the `@lane` id suffix) to pick one:
+
+```js
+const response = await mo.use('anthropic/claude-x').answer('hi', { speed: 'fast' })
+console.log(response.speed)   // 'fast' — cost is only meaningful per (model, lane)
+console.log(response.cost)    // priced at the lane's rates
+```
+
+Lanes are declared per model in the curated entry's `speeds`, each carrying
+the provider-native wire value plus whatever prices and rate limits differ
+from the base entry. They are unordered: a lane may be slower and cheaper as
+readily as faster and dearer.
+
+**There is no default and no fallback.** Omitting `speed` sends no parameter.
+Naming a lane the model does not declare throws `SESSION_INVALID_SPEED`;
+naming one the provider's adapter cannot emit throws
+`SESSION_SPEED_NOT_IMPLEMENTED`. Both are raised before the provider call, so
+a rejected lane costs nothing.
+
+The strictness is deliberate: some models accept an unsupported lane, run at
+standard speed, and bill standard rates, which is invisible from the request
+side. Letting that through would bill every such call at the lane's rates.
+
+An active lane gets its own rate-limit bucket, since lane capacity is a
+separate pool from standard traffic.
+
 ## Error handling
 
 Errors surface as `MohdelError` — the same error the gate serializes as a
@@ -723,7 +765,7 @@ When cooling down, `.answer()` throws `MohdelError('PROVIDER_COOLDOWN', { retrya
 
 Depends on `@opentelemetry/api`. Mohdel creates one `mohdel.answer` span per call:
 
-- Start: `gen_ai.request.model`, `gen_ai.system`, `gen_ai.request.max_tokens`, `mohdel.output_effort`
+- Start: `gen_ai.request.model`, `gen_ai.system`, `gen_ai.request.max_tokens`, `mohdel.output_effort`, `mohdel.speed`
 - End: `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `mohdel.thinking_tokens`, `mohdel.status`, `mohdel.cost`, `mohdel.time_to_first_token_ms`
 - On cooldown fast-fail: `mohdel.cooldown: true`
 

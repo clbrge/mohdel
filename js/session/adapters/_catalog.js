@@ -12,7 +12,10 @@
 
 import envPaths from 'env-paths'
 
+import { catalogKey } from '#core/model-id.js'
+
 import { createLazyJsonFileCache } from './_lazy_json_cache.js'
+import { mergeSpeed } from './_speed.js'
 
 // `{ suffix: null }` mirrors `src/lib/common.js::CONFIG_DIR` so the
 // session subprocess reads the same `~/.config/mohdel/curated.json`
@@ -55,4 +58,17 @@ export function setCatalog (table) {
  */
 export function getSpec (model) {
   return cache.get(model)
+}
+
+/**
+ * Effective spec for a call: the catalog entry with any speed-lane
+ * overlay applied. Adapters resolve spec through this rather than
+ * `getSpec` so lane prices and quotas reach pricing and throttling
+ * without each adapter merging for itself.
+ *
+ * @param {import('#core/envelope.js').CallEnvelope} envelope
+ * @returns {any | undefined}
+ */
+export function specFor (envelope) {
+  return mergeSpeed(getSpec(catalogKey(envelope.model)), envelope.speed)
 }

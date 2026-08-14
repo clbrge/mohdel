@@ -26,7 +26,8 @@ import { getAdapter } from './adapters/index.js'
 import { isImageProvider } from './adapters/image/index.js'
 import { getSpec } from './adapters/_catalog.js'
 import { getProviderLimits } from './adapters/_providers.js'
-import { providerOf, catalogKey, effortOf } from '#core/model-id.js'
+import { hasSpeed, mergeSpeed, providerSupportsSpeed, speedNames } from './adapters/_speed.js'
+import { providerOf, catalogKey, effortOf, speedOf } from '#core/model-id.js'
 import * as defaultCooldown from './_cooldown.js'
 import * as defaultLimiter from './_rate_limiter.js'
 import { withIdleHeartbeat, MIN_IDLE_HEARTBEAT_MS } from './_idle_heartbeat.js'
@@ -66,15 +67,13 @@ export async function * run (envelope, {
   sleep = defaultSleep,
   signal
 } = {}) {
-  // Honor the `model:effort` shortcut on the wire (mirrors the
-  // factory-side `mohdel().use('model:effort')` convenience). If
-  // the envelope's `model` field ends in `:<effort>` and the base
-  // resolves to a known spec, split the suffix into
-  // `envelope.outputEffort`. Explicit `outputEffort` wins when both
-  // are set (suffix is a shortcut, not an override).
-  const effortNorm = normalizeModelEffort(envelope, resolveSpec)
-  if (effortNorm.error) { yield effortNorm.error; return }
-  envelope = effortNorm.envelope
+  // Honor the `model:effort@speed` shortcuts on the wire (mirrors the
+  // factory-side `mohdel().use('model:effort')` convenience). Explicit
+  // envelope fields win when both are set (a suffix is a shortcut, not
+  // an override).
+  const norm = normalizeModelId(envelope, resolveSpec)
+  if (norm.error) { yield norm.error; return }
+  envelope = norm.envelope
 
   const provider = providerOf(envelope.model)
   const span = openSpan(envelope)
@@ -85,6 +84,7 @@ export async function * run (envelope, {
     provider,
     model: envelope.model,
     effort: envelope.outputEffort ?? 'default',
+    speed: envelope.speed ?? null,
     outputBudget: envelope.outputBudget ?? null,
     tools: envelope.tools?.length || 0,
     images: envelope.images?.length || 0
@@ -116,11 +116,8 @@ export async function * run (envelope, {
   // Catalog is authoritative: every callable model must have a
   // spec. Without one we'd silently run the provider call with
   // defaults (no rate-limits, no budget clamps, cost=0), masking
-  // misconfiguration in the layer that pushed the catalog. Effort
-  // suffix is stripped for the lookup — catalog entries are keyed
-  // by the bare `<provider>/<bare>` id, not per-effort variants.
-  const key = catalogKey(envelope.model)
-  const spec = resolveSpec(key)
+  // misconfiguration in the layer that pushed the catalog.
+  const { key, spec } = norm
   if (!spec) {
     const detail = `Unknown model '${key}' — not in catalog`
     const err = errorEvent(detail, 'SESSION_UNKNOWN_MODEL')
@@ -129,6 +126,17 @@ export async function * run (envelope, {
     yield err
     return
   }
+
+  if (envelope.speed) {
+    const speedErr = speedError(key, envelope.speed, spec, provider)
+    if (speedErr) {
+      log.warn({ provider, speed: envelope.speed }, '[mohdel:answer] unusable speed lane')
+      endSpanError(span, new Error(speedErr.error.message))
+      yield speedErr
+      return
+    }
+  }
+  const effective = mergeSpeed(spec, envelope.speed)
 
   const coolErr = cooldown.coolingDownError(provider)
   if (coolErr) {
@@ -140,9 +148,14 @@ export async function * run (envelope, {
   }
 
   const providerCfg = resolveProviderLimits(provider) || {}
-  const rpmLimit = spec?.rpmLimit ?? providerCfg.rpmLimit
-  const tpmLimit = spec?.tpmLimit ?? providerCfg.tpmLimit
-  const bucketKey = (spec?.rateLimitScope === 'model') ? key : provider
+  const rpmLimit = effective?.rpmLimit ?? providerCfg.rpmLimit
+  const tpmLimit = effective?.tpmLimit ?? providerCfg.tpmLimit
+  // An active lane is its own capacity pool, so it gets its own bucket
+  // whatever `rateLimitScope` says — sharing one would let standard
+  // traffic throttle the lane being paid for.
+  const bucketKey = envelope.speed
+    ? `${key}@${envelope.speed}`
+    : (spec?.rateLimitScope === 'model' ? key : provider)
 
   // `0` is a killswitch ("deny all"), not "unset"; `undefined`/`null`
   // means no limit configured for that dimension. Gate on nullability
@@ -220,8 +233,12 @@ export async function * run (envelope, {
         }
         // Surface on AnswerResult so hosts that pass the whole
         // result upstream pick it up without needing a separate
-        // wire field.
-        if (ev.result) ev.result.maxInterFrameMs = maxInterFrameMs
+        // wire field. `speed` rides along because lane prices differ,
+        // so cost is only meaningful attributed per (model, lane).
+        if (ev.result) {
+          ev.result.maxInterFrameMs = maxInterFrameMs
+          if (envelope.speed) ev.result.speed = envelope.speed
+        }
         finalizeSpanOk(span, ev.result, sawDelta, maxInterFrameMs)
         log.debug(summarizeDone(ev.result, startedAt), '[mohdel:answer] done')
       } else if (ev.type === 'error') {
@@ -267,53 +284,108 @@ export async function * run (envelope, {
 }
 
 /**
- * Split an optional `:effort` suffix from `envelope.model`. If the
- * base resolves to a known spec, rewrites `envelope.model` and sets
- * `envelope.outputEffort` (unless already set). Emits a typed error
- * when the suffix is present and the spec rejects it.
+ * Split the optional `:effort` and `@speed` suffixes from
+ * `envelope.model`. If the base resolves to a known spec, rewrites
+ * `envelope.model` and sets `envelope.outputEffort` / `envelope.speed`
+ * (unless already set). Emits a typed error when an effort suffix is
+ * present and the spec rejects it; lane validity is checked in `run`
+ * so that an explicitly-set `envelope.speed` goes through the same
+ * guard as the suffix form.
+ *
+ * Also carries out the catalog lookup, so the key the spec was found
+ * under is the one the rest of the call uses.
  *
  * @param {import('#core/envelope.js').CallEnvelope} envelope
  * @param {(key: string) => any} resolveSpec
  * @returns {{
  *   envelope: import('#core/envelope.js').CallEnvelope,
+ *   key: string,
+ *   spec?: any,
  *   error?: import('#core/events.js').ErrorEvent
  * }}
  */
-function normalizeModelEffort (envelope, resolveSpec) {
-  const candidate = effortOf(envelope.model)
-  if (!candidate) return { envelope }
+function normalizeModelId (envelope, resolveSpec) {
+  // A bare id that itself contains `:` or `@` is a catalog key in its
+  // own right; resolving the whole string first stops it being split
+  // into a base plus a suffix that was never meant as one.
+  const whole = resolveSpec(envelope.model)
+  if (whole) return { envelope, key: envelope.model, spec: whole }
 
+  const effort = effortOf(envelope.model)
+  const speed = speedOf(envelope.model)
   const base = catalogKey(envelope.model)
   const baseSpec = resolveSpec(base)
-  if (!baseSpec) return { envelope } // base not known — let full string fall through to not-found
+  const unresolved = { envelope, key: base, spec: baseSpec }
+  if (effort === undefined && speed === undefined) return unresolved
+  if (!baseSpec) return unresolved
 
-  // Explicit outputEffort wins; still strip the suffix so spans/logs see the canonical id.
-  if (envelope.outputEffort) {
-    return { envelope: { ...envelope, model: base } }
+  const next = { ...envelope, model: base }
+  if (speed !== undefined && !envelope.speed) next.speed = speed
+
+  if (effort === undefined || envelope.outputEffort) {
+    return { envelope: next, key: base, spec: baseSpec }
   }
 
   if (!baseSpec.thinkingEffortLevels) {
     return {
-      envelope,
+      ...unresolved,
       error: errorEvent(
-        `Model '${base}' does not support output effort (no thinkingEffortLevels). Cannot use ':${candidate}' suffix.`,
+        `Model '${base}' does not support output effort (no thinkingEffortLevels). Cannot use ':${effort}' suffix.`,
         'SESSION_INVALID_OUTPUT_EFFORT'
       )
     }
   }
-  if (candidate !== 'none' && !baseSpec.thinkingEffortLevels[candidate]) {
+  if (effort !== 'none' && !baseSpec.thinkingEffortLevels[effort]) {
     return {
-      envelope,
+      ...unresolved,
       error: errorEvent(
-        `Model '${base}' does not support output effort level '${candidate}'. Available: ${Object.keys(baseSpec.thinkingEffortLevels).join(', ')}`,
+        `Model '${base}' does not support output effort level '${effort}'. Available: ${Object.keys(baseSpec.thinkingEffortLevels).join(', ')}`,
         'SESSION_INVALID_OUTPUT_EFFORT'
       )
     }
   }
 
-  return {
-    envelope: { ...envelope, model: base, outputEffort: candidate }
+  next.outputEffort = effort
+  return { envelope: next, key: base, spec: baseSpec }
+}
+
+/**
+ * The two lane guards, in caller-then-internal order. Returns an
+ * error event, or `undefined` when the lane is usable.
+ *
+ * They are deliberately separate. A lane the entry does not declare is
+ * the caller asking for something this model does not sell. A lane the
+ * adapter cannot emit is the catalog and the adapter disagreeing —
+ * left to run, the call would silently take the standard lane and bill
+ * at the overlay's rates.
+ *
+ * @param {string} key
+ * @param {string} speed
+ * @param {any} spec
+ * @param {string} provider
+ * @returns {import('#core/events.js').ErrorEvent | undefined}
+ */
+function speedError (key, speed, spec, provider) {
+  if (!hasSpeed(spec, speed)) {
+    const available = speedNames(spec)
+    const detail = available.length
+      ? `Available: ${available.join(', ')}`
+      : 'It declares no speed lanes.'
+    const hint = speed.includes(':')
+      ? " Suffix order is ':effort' then '@speed'."
+      : ''
+    return errorEvent(
+      `Model '${key}' does not support speed lane '${speed}'. ${detail}${hint}`,
+      'SESSION_INVALID_SPEED'
+    )
   }
+  if (!providerSupportsSpeed(provider)) {
+    return errorEvent(
+      `Provider '${provider}' does not implement speed lanes, but '${key}' declares '${speed}'.`,
+      'SESSION_SPEED_NOT_IMPLEMENTED'
+    )
+  }
+  return undefined
 }
 
 /**
@@ -332,6 +404,7 @@ function openSpan (envelope) {
   }
   if (envelope.outputBudget) attrs['gen_ai.request.max_tokens'] = envelope.outputBudget
   if (envelope.outputEffort) attrs['mohdel.output_effort'] = envelope.outputEffort
+  if (envelope.speed) attrs['mohdel.speed'] = envelope.speed
   return startSpan('mohdel.session.answer', attrs, parent)
 }
 

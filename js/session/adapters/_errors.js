@@ -53,6 +53,29 @@ function scrubKey (detail, key) {
   return detail.split(key).join(mask)
 }
 
+const UNWRAP_DEPTH = 2
+
+/**
+ * `@google/genai` sets `ApiError.message` to `JSON.stringify({error:
+ * {message, code, status}})`, and Gemini's own body inside it is
+ * itself JSON — so the sentence sits two envelopes deep.
+ * @param {string} str
+ * @returns {string}
+ */
+function unwrapJsonMessage (str) {
+  let current = str
+  for (let i = 0; i < UNWRAP_DEPTH; i++) {
+    const trimmed = current.trim()
+    if (!trimmed.startsWith('{')) return current
+    let parsed
+    try { parsed = JSON.parse(trimmed) } catch { return current }
+    const inner = parsed?.error?.message ?? parsed?.message
+    if (typeof inner !== 'string' || !inner) return current
+    current = inner
+  }
+  return current
+}
+
 /**
  * Extract a short human-readable detail from an SDK error. Trimmed
  * to `DETAIL_CAP` chars so a verbose provider body doesn't blow up
@@ -65,7 +88,7 @@ function extractDetail (err) {
   const nested = err.error?.message || err.response?.data?.error?.message
   const raw = nested || err.message
   if (!raw) return undefined
-  const str = typeof raw === 'string' ? raw : JSON.stringify(raw)
+  const str = unwrapJsonMessage(typeof raw === 'string' ? raw : JSON.stringify(raw))
   return str.length > DETAIL_CAP ? str.slice(0, DETAIL_CAP) + '…' : str
 }
 

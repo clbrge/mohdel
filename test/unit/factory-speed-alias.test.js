@@ -50,6 +50,12 @@ describe('factory `@speed` alias', () => {
       .toThrow(/does not support speed lane 'turbo'.*Available:.*fast/)
   })
 
+  test('reversed suffix order suggests the corrected id', async () => {
+    const m = await libraryFactory()
+    expect(() => m.use('anthropic/claude-x@fast:high'))
+      .toThrow(/did you mean 'anthropic\/claude-x:high@fast'/)
+  })
+
   test('rejects any lane on a spec with no speeds', async () => {
     const m = await libraryFactory()
     expect(() => m.use('anthropic/claude-plain@fast'))

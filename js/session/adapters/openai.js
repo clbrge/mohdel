@@ -30,7 +30,6 @@ import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
 import { isTrustedMedia } from './_media.js'
 import { costFor } from './_pricing.js'
-import { applySpeed } from './_speed.js'
 import { catalogKey, providerOf, bareOf } from '#core/model-id.js'
 import {
   toOpenAITools,
@@ -84,6 +83,8 @@ export async function * openai (envelope, deps = {}) {
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
+  /** @type {string | null | undefined} */
+  let servedTier
 
   // Tool-call accumulation: itemId → {call_id, name, arguments}
   /** @type {Map<string, {call_id: string, name: string, arguments: string}>} */
@@ -131,6 +132,7 @@ export async function * openai (envelope, deps = {}) {
           break
 
         case 'response.completed':
+          servedTier = event.response?.service_tier ?? servedTier
           if (event.response?.usage) {
             inputTokens = event.response.usage.input_tokens ?? 0
             outputTokens = event.response.usage.output_tokens ?? 0
@@ -144,6 +146,7 @@ export async function * openai (envelope, deps = {}) {
           break
 
         case 'response.incomplete':
+          servedTier = event.response?.service_tier ?? servedTier
           status = STATUS_INCOMPLETE
           if (event.response?.incomplete_details?.reason === 'max_output_tokens') {
             warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
@@ -190,6 +193,8 @@ export async function * openai (envelope, deps = {}) {
   // simpler with the additive shape.
   const regularInputTokens = Math.max(0, inputTokens - cachedInputTokens - cacheWriteTokens)
 
+  const billed = billedEnvelope(envelope, servedTier, log)
+
   /** @type {import('#core/events.js').DoneEvent} */
   const done = {
     type: 'done',
@@ -201,8 +206,9 @@ export async function * openai (envelope, deps = {}) {
       thinkingTokens,
       ...(cacheWriteTokens > 0 && { cacheWriteInputTokens: cacheWriteTokens }),
       ...(cachedInputTokens > 0 && { cacheReadInputTokens: cachedInputTokens }),
+      ...(envelope.speed && { servedSpeed: billed.served }),
       cost: costFor(
-        envelope,
+        billed.envelope,
         {
           inputTokens: regularInputTokens,
           outputTokens: messageOutputTokens,
@@ -219,6 +225,66 @@ export async function * openai (envelope, deps = {}) {
     done.result.toolCalls = fromOpenAIToolCalls(Array.from(toolItems.values()))
   }
   yield done
+}
+
+/**
+ * Lane names the OpenAI adapter can put on `service_tier`. `run.js`
+ * reads this before dispatch; a lane outside it never reaches here.
+ */
+openai.speedLanes = new Set(['fast', 'priority', 'flex', 'scale'])
+
+/**
+ * Lane the response says was served, given the one requested.
+ *
+ * OpenAI answers `service_tier: 'priority'` to a granted request for
+ * either premium lane, so the echo alone cannot name which was asked
+ * for — the request is the other half of the answer. Any other value
+ * is the tier that actually ran, `null` when nothing was reported.
+ *
+ * @param {string} requested
+ * @param {string | null | undefined} servedTier
+ * @returns {string | null | undefined}
+ */
+function servedLane (requested, servedTier) {
+  if (servedTier == null) return undefined
+  if (servedTier === 'priority') {
+    return (requested === 'fast' || requested === 'priority') ? requested : 'priority'
+  }
+  return openai.speedLanes.has(servedTier) ? servedTier : null
+}
+
+/**
+ * Envelope to price the call against. OpenAI serves Standard instead
+ * when a premium lane is unavailable — documented behaviour above the
+ * ramp rate limit — so billing the requested lane would charge premium
+ * rates for standard service.
+ *
+ * When a lane was requested and nothing was reported back, the request
+ * is the only evidence available: bill it and say so.
+ *
+ * @param {import('#core/envelope.js').CallEnvelope} envelope
+ * @param {string | null | undefined} servedTier
+ * @param {any} [log]
+ * @returns {{envelope: import('#core/envelope.js').CallEnvelope, served: string | null}}
+ */
+function billedEnvelope (envelope, servedTier, log) {
+  if (!envelope.speed) return { envelope, served: null }
+
+  const served = servedLane(envelope.speed, servedTier)
+  if (served === undefined) {
+    log?.warn(
+      { model: envelope.model, speed: envelope.speed },
+      '[mohdel:openai] no service_tier reported; billing the requested lane'
+    )
+    return { envelope, served: envelope.speed }
+  }
+  if (served === envelope.speed) return { envelope, served }
+
+  log?.warn(
+    { model: envelope.model, requested: envelope.speed, servedTier, served },
+    '[mohdel:openai] provider served a different speed lane; billing what was served'
+  )
+  return { envelope: { ...envelope, speed: served ?? undefined }, served }
 }
 
 /**
@@ -288,7 +354,7 @@ function buildRequest (envelope, input, instructions) {
     }
   }
 
-  applySpeed(request, envelope, spec)
+  if (envelope.speed) request.service_tier = envelope.speed
 
   return request
 }

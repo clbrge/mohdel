@@ -1,7 +1,7 @@
 import { label, err, warn, ok } from './colors.js'
 import providers from '../lib/providers.js'
 import { validate, isValidTag } from '../lib/schema.js'
-import { providerSupportsSpeed } from '../../js/session/adapters/_speed.js'
+import { adapters } from '../../js/session/adapters/index.js'
 import { getCuratedModels, loadDefaultEnv, catalogEntries, catalogValues } from '../lib/common.js'
 
 // --- Local validation ---
@@ -51,10 +51,12 @@ const checkLocal = (curated) => {
       warnings.push(`${key}: has thinkingEffortLevels but no defaultThinkingEffort`)
     }
 
-    if (spec.speeds && !providerSupportsSpeed(keyProvider)) {
-      errors.push(`${key}: declares speeds but provider '${keyProvider}' has no adapter support — calls on those lanes would fail at dispatch`)
-    }
+    const lanes = adapters[keyProvider]?.speedLanes
     for (const [lane, overlay] of Object.entries(spec.speeds || {})) {
+      if (!lanes?.has(lane)) {
+        const detail = lanes ? `accepts: ${[...lanes].join(', ')}` : 'implements no speed lanes'
+        errors.push(`${key}: speeds.${lane} — provider '${keyProvider}' ${detail}; calls on that lane would fail at dispatch`)
+      }
       for (const priceField of ['inputPrice', 'outputPrice', 'thinkingPrice']) {
         const val = overlay[priceField]
         if (val != null && typeof val === 'object' && val.default == null) {

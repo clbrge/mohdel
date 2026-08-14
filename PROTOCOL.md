@@ -306,6 +306,11 @@ interface AnswerResult {
   maxInterFrameMs?: number               // longest gap (ms) between adapter events
                                          // in this call: startedAt→first frame,
                                          // between consecutive frames, last frame→terminal
+  speed?:         string                 // speed lane requested for the call
+  servedSpeed?:   string | null          // lane the provider reports serving, when it
+                                         // reports one. `null` means it downgraded to
+                                         // standard service. `cost` follows this, not
+                                         // `speed`
 }
 ```
 

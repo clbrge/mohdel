@@ -1,29 +1,20 @@
 /**
- * Service-speed lanes.
+ * Service-speed lanes — catalog side.
  *
- * A lane is a provider request parameter that buys a different
- * speed/price point for the same weights (Anthropic `speed: "fast"`).
- * Lanes are declared per catalog entry under `speeds`, keyed by lane
- * name, each carrying the wire value plus any price and rate-limit
- * fields that differ from the base entry.
+ * A lane is a named service speed a model sells, declared per catalog
+ * entry under `speeds` with the price and rate-limit fields that
+ * differ from the base entry. This module owns only what is common to
+ * every provider: what the entry declares, and what that means for
+ * pricing and throttling.
  *
- * Two declarations must agree for a lane to be usable: the entry
- * declares it (`spec.speeds`) and the provider's adapter can emit it
- * (`SPEED_PARAMS`). `run.js` checks both before dispatch.
+ * How a lane reaches the wire, and how the served lane is read back,
+ * is provider protocol and lives in the adapter. An adapter that
+ * handles lanes advertises the names it accepts on `speedLanes`;
+ * absence of that property is the declaration that it handles none,
+ * and is what `run.js` checks before dispatch.
  *
  * @module session/adapters/_speed
  */
-
-import { providerOf } from '#core/model-id.js'
-
-/**
- * Providers whose adapter emits a lane parameter, mapped to the
- * native parameter name. Absence from this table is the declaration
- * that a provider has no lanes.
- */
-export const SPEED_PARAMS = Object.freeze({
-  anthropic: 'speed'
-})
 
 /** Spec fields a lane overlay may restate. */
 export const SPEED_OVERRIDABLE = Object.freeze([
@@ -38,24 +29,8 @@ export const SPEED_OVERRIDABLE = Object.freeze([
 ])
 
 /**
- * @param {string} provider
- * @returns {boolean}
- */
-export function providerSupportsSpeed (provider) {
-  return Object.hasOwn(SPEED_PARAMS, provider)
-}
-
-/**
- * @param {string} provider
- * @returns {string | undefined}
- */
-export function speedParamFor (provider) {
-  return SPEED_PARAMS[provider]
-}
-
-/**
  * Whether `spec` declares `speed`. Uses `hasOwn` rather than
- * truthiness so an overlay that only carries `wire` still counts.
+ * truthiness so a lane sold at base prices still counts.
  *
  * @param {any} spec
  * @param {string} speed
@@ -71,6 +46,22 @@ export function hasSpeed (spec, speed) {
  */
 export function speedNames (spec) {
   return spec?.speeds ? Object.keys(spec.speeds) : []
+}
+
+/**
+ * Whether the lane declares a quota of its own, which is what earns it
+ * a private rate-limit bucket. Lanes that don't (OpenAI's service_tier
+ * shares the model's TPM/RPM pool) count against the base bucket —
+ * giving them their own would silently double the allowance.
+ *
+ * @param {any} spec
+ * @param {string} [speed]
+ * @returns {boolean}
+ */
+export function speedHasOwnQuota (spec, speed) {
+  if (!speed || !hasSpeed(spec, speed)) return false
+  const overlay = spec.speeds[speed]
+  return overlay.rpmLimit != null || overlay.tpmLimit != null
 }
 
 /**
@@ -93,27 +84,4 @@ export function mergeSpeed (spec, speed) {
     if (Object.hasOwn(overlay, field)) merged[field] = overlay[field]
   }
   return merged
-}
-
-/**
- * Set the provider-native lane parameter on an outbound request.
- * No-op when the envelope carries no lane.
- *
- * @param {Record<string, any>} request
- * @param {import('#core/envelope.js').CallEnvelope} envelope
- * @param {any} spec
- * @throws when the envelope carries a lane the provider cannot emit
- *   or the spec does not declare
- */
-export function applySpeed (request, envelope, spec) {
-  if (!envelope.speed) return
-  const provider = providerOf(envelope.model)
-  const param = speedParamFor(provider)
-  if (!param) {
-    throw new Error(`provider '${provider}' does not implement speed lanes`)
-  }
-  if (!hasSpeed(spec, envelope.speed)) {
-    throw new Error(`model does not declare speed lane '${envelope.speed}'`)
-  }
-  request[param] = spec.speeds[envelope.speed].wire
 }

@@ -346,6 +346,15 @@ pub struct AnswerResult {
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_inter_frame_ms: Option<u32>,
+    /// Speed lane requested for the call, echoed so cost can be
+    /// attributed per (model, lane).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<String>,
+    /// Lane the provider reports it actually served, when it reports
+    /// one. Differs from `speed` when the provider downgraded the
+    /// request; `cost` is computed from this, not from `speed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub served_speed: Option<String>,
     /// `reasoning_content` from chat-completions providers (DeepSeek V4,
     /// deepseek-reasoner, Cerebras reasoning models). Multi-turn callers
     /// must roundtrip this back into the assistant message; DeepSeek V4

@@ -581,7 +581,7 @@ Some providers sell the same weights at more than one speed, chosen with a
 request parameter. Pass `speed` (or the `@lane` id suffix) to pick one:
 
 ```js
-const response = await mo.use('anthropic/claude-x').answer('hi', { speed: 'fast' })
+const response = await mo.use('openai/gpt-x').answer('hi', { speed: 'fast' })
 console.log(response.speed)   // 'fast' — cost is only meaningful per (model, lane)
 console.log(response.cost)    // priced at the lane's rates
 ```
@@ -601,8 +601,14 @@ The strictness is deliberate: some models accept an unsupported lane, run at
 standard speed, and bill standard rates, which is invisible from the request
 side. Letting that through would bill every such call at the lane's rates.
 
-An active lane gets its own rate-limit bucket, since lane capacity is a
-separate pool from standard traffic.
+Where the provider reports which tier it served, mohdel prices the call from
+that rather than from the request, and `response.servedSpeed` carries it —
+`null` when the provider downgraded to standard service. OpenAI does this,
+and documents downgrading above its ramp rate limit, so a `fast` request under
+load can legitimately come back billed at base rates.
+
+A lane shares the model's rate-limit bucket unless it declares its own
+`rpmLimit`/`tpmLimit`.
 
 ## Error handling
 

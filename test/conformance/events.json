@@ -1,11 +1,17 @@
 {
   "delta-message": {
     "type": "delta",
-    "delta": { "type": "message", "delta": "Hello, world." }
+    "delta": {
+      "type": "message",
+      "delta": "Hello, world."
+    }
   },
   "delta-function_call": {
     "type": "delta",
-    "delta": { "type": "function_call", "delta": "{\"city\":\"" }
+    "delta": {
+      "type": "function_call",
+      "delta": "{\"city\":\""
+    }
   },
   "idle": {
     "type": "idle",
@@ -20,7 +26,11 @@
       "outputTokens": 3,
       "thinkingTokens": 0,
       "cost": 0.00042,
-      "timestamps": { "start": "1000000000", "first": "1050000000", "end": "1200000000" }
+      "timestamps": {
+        "start": "1000000000",
+        "first": "1050000000",
+        "end": "1200000000"
+      }
     }
   },
   "done-completed-with-thinking": {
@@ -32,7 +42,11 @@
       "outputTokens": 2,
       "thinkingTokens": 1200,
       "cost": 0.0032,
-      "timestamps": { "start": "1000", "first": "1050", "end": "2000" }
+      "timestamps": {
+        "start": "1000",
+        "first": "1050",
+        "end": "2000"
+      }
     }
   },
   "done-incomplete-budget": {
@@ -44,7 +58,11 @@
       "outputTokens": 1024,
       "thinkingTokens": 50,
       "cost": 0.005,
-      "timestamps": { "start": "1000", "first": "1050", "end": "2000" },
+      "timestamps": {
+        "start": "1000",
+        "first": "1050",
+        "end": "2000"
+      },
       "warning": "insufficientOutputBudget"
     }
   },
@@ -57,7 +75,11 @@
       "outputTokens": 0,
       "thinkingTokens": 0,
       "cost": 0.0,
-      "timestamps": { "start": "1000", "first": "1050", "end": "1100" },
+      "timestamps": {
+        "start": "1000",
+        "first": "1050",
+        "end": "1100"
+      },
       "warning": "cancelled"
     }
   },
@@ -71,7 +93,11 @@
       "thinkingTokens": 0,
       "cacheWriteInputTokens": 4096,
       "cost": 0.0185,
-      "timestamps": { "start": "1000", "first": "1050", "end": "2000" }
+      "timestamps": {
+        "start": "1000",
+        "first": "1050",
+        "end": "2000"
+      }
     }
   },
   "done-completed-with-cache-read": {
@@ -84,7 +110,11 @@
       "thinkingTokens": 0,
       "cacheReadInputTokens": 4096,
       "cost": 0.00135,
-      "timestamps": { "start": "1000", "first": "1050", "end": "2000" }
+      "timestamps": {
+        "start": "1000",
+        "first": "1050",
+        "end": "2000"
+      }
     }
   },
   "done-completed-with-cache-both": {
@@ -98,7 +128,11 @@
       "cacheWriteInputTokens": 1024,
       "cacheReadInputTokens": 3072,
       "cost": 0.0067,
-      "timestamps": { "start": "1000", "first": "1050", "end": "2000" }
+      "timestamps": {
+        "start": "1000",
+        "first": "1050",
+        "end": "2000"
+      }
     }
   },
   "done-tool_use": {
@@ -110,9 +144,19 @@
       "outputTokens": 30,
       "thinkingTokens": 0,
       "cost": 0.002,
-      "timestamps": { "start": "1000", "first": "1050", "end": "1500" },
+      "timestamps": {
+        "start": "1000",
+        "first": "1050",
+        "end": "1500"
+      },
       "toolCalls": [
-        { "id": "t1", "name": "weather", "arguments": { "city": "Paris" } }
+        {
+          "id": "t1",
+          "name": "weather",
+          "arguments": {
+            "city": "Paris"
+          }
+        }
       ]
     }
   },
@@ -125,10 +169,26 @@
       "outputTokens": 80,
       "thinkingTokens": 0,
       "cost": 0.0041,
-      "timestamps": { "start": "1000", "first": "1050", "end": "2500" },
+      "timestamps": {
+        "start": "1000",
+        "first": "1050",
+        "end": "2500"
+      },
       "toolCalls": [
-        { "id": "t1", "name": "weather", "arguments": { "city": "Paris" } },
-        { "id": "t2", "name": "time", "arguments": { "zone": "Europe/Paris" } }
+        {
+          "id": "t1",
+          "name": "weather",
+          "arguments": {
+            "city": "Paris"
+          }
+        },
+        {
+          "id": "t2",
+          "name": "time",
+          "arguments": {
+            "zone": "Europe/Paris"
+          }
+        }
       ]
     }
   },
@@ -202,6 +262,42 @@
       "severity": "fatal",
       "retryable": false,
       "type": "SESSION_POOL_CLOSED"
+    }
+  },
+  "done-completed-on-speed-lane": {
+    "type": "done",
+    "result": {
+      "status": "completed",
+      "output": "Hello, world.",
+      "inputTokens": 10,
+      "outputTokens": 3,
+      "thinkingTokens": 0,
+      "cost": 0.00042,
+      "timestamps": {
+        "start": "1000000000",
+        "first": "1050000000",
+        "end": "1200000000"
+      },
+      "speed": "fast",
+      "servedSpeed": "fast"
+    }
+  },
+  "done-completed-speed-lane-downgraded": {
+    "type": "done",
+    "result": {
+      "status": "completed",
+      "output": "Hello, world.",
+      "inputTokens": 10,
+      "outputTokens": 3,
+      "thinkingTokens": 0,
+      "cost": 0.00042,
+      "timestamps": {
+        "start": "1000000000",
+        "first": "1050000000",
+        "end": "1200000000"
+      },
+      "speed": "fast",
+      "servedSpeed": null
     }
   }
 }

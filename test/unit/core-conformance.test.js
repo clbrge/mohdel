@@ -29,7 +29,8 @@ const DELTA_CHUNK_ALLOWED = new Set(['type', 'delta'])
 const ANSWER_RESULT_ALLOWED = new Set([
   'status', 'output', 'inputTokens', 'outputTokens', 'thinkingTokens',
   'cacheWriteInputTokens', 'cacheWrite1hInputTokens', 'cacheReadInputTokens',
-  'cost', 'timestamps', 'warning', 'toolCalls', 'maxInterFrameMs', 'reasoning'
+  'cost', 'timestamps', 'warning', 'toolCalls', 'maxInterFrameMs', 'reasoning',
+  'speed', 'servedSpeed'
 ])
 const TIMESTAMPS_ALLOWED = new Set(['start', 'first', 'end'])
 const TOOL_CALL_ALLOWED = new Set(['id', 'name', 'arguments', 'thoughtSignature'])

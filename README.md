@@ -102,7 +102,7 @@ mo ask anthropic/claude-sonnet-4-6 --stream "write a haiku about recursion"
 mo ask anthropic/claude-opus-4-6 --effort high "prove P != NP"
 
 # On a faster service lane, when the model sells one
-mo ask anthropic/claude-opus-4-6@fast "triage this alert"
+mo ask openai/gpt-5.6-luna@fast "triage this alert"
 
 # Speech → text from an audio file
 mo transcribe groq/whisper-large-v3-turbo meeting.mp3
@@ -318,7 +318,7 @@ What each provider supports through mohdel's unified interface:
 
 Adapter capability ≠ model capability — whether a given model accepts images, tools, or thinking effort depends on the model spec in `curated.json`. The adapter passes through what the envelope supplies; the provider rejects unsupported combos.
 
-**Service speeds** are the exception to that pass-through rule. Where a provider sells the same weights at several speeds (Anthropic's fast mode, and equivalents elsewhere), the lanes a model sells are declared in its `curated.json` entry under `speeds`, with their own prices and rate limits. Select one with `speed` or the `@lane` id suffix. There is no default lane and no fallback: an undeclared lane fails the call before it is sent, because a model that silently ignores an unsupported lane would otherwise be billed at the lane's rates for standard service. See [docs/CATALOG.md](docs/CATALOG.md#service-speeds).
+**Service speeds** are the exception to that pass-through rule. Where a provider sells the same weights at several speeds (OpenAI's `service_tier`, and equivalents elsewhere), the lanes a model sells are declared in its `curated.json` entry under `speeds`, with their own prices and rate limits. Select one with `speed` or the `@lane` id suffix. There is no default lane and no fallback: an undeclared lane fails the call before it is sent, because a model that silently ignores an unsupported lane would otherwise be billed at the lane's rates for standard service. See [docs/CATALOG.md](docs/CATALOG.md#service-speeds).
 
 ## Local Development
 

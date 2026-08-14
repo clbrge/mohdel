@@ -92,29 +92,35 @@ Use `mo rl show <model-or-provider>` to inspect, `mo rl set <model> <rpm> <tpm>`
 ## Service speeds
 
 Some providers sell the same weights at more than one speed, selected by a
-request parameter — Anthropic's `speed: "fast"`, and equivalents elsewhere.
+request parameter — OpenAI's `service_tier`, and equivalents elsewhere.
 Faster lanes cost more; discount lanes are slower and cheaper. Declare the
 lanes a model sells under `speeds`:
 
 ```jsonc
-"anthropic/claude-x": {
+"openai/gpt-x": {
   "inputPrice": 3,
   "outputPrice": 15,
-  "rateLimitScope": "model",
   "speeds": {
-    "fast": { "wire": "fast", "inputPrice": 6, "outputPrice": 30, "rpmLimit": 200 }
+    "fast": { "inputPrice": 6, "outputPrice": 30 },
+    "flex": { "inputPrice": 1.5, "outputPrice": 7.5 }
   }
 }
 ```
 
-`wire` is the provider-native value; the parameter name comes from the
-adapter. Every other field is an override: named fields replace the base
-entry's, unnamed fields fall through. Only prices and rate limits are
-overridable — anything that would change what the model *is* belongs in
-its own catalog entry.
+Lane names come from the provider's own vocabulary — OpenAI sells `fast`,
+`priority`, `flex`, and `scale`. An entry lists the ones that model
+actually sells, and each carries only what differs from the base entry:
+named fields replace, unnamed fields fall through. A lane that declares
+nothing sells at base prices.
+
+Nothing about the provider's protocol belongs here. How a lane name
+reaches the wire, and how the served lane is read back, lives in the
+adapter — it is the same for every model that provider serves, so
+repeating it per entry would only be a constant waiting to drift. The
+overlay is economics: prices and rate limits, nothing else.
 
 Callers select a lane with `speed` on the envelope, or the `@lane` suffix
-on the model id (`anthropic/claude-x@fast`, or `claude-x:high@fast`
+on the model id (`openai/gpt-x@fast`, or `gpt-x:high@fast`
 alongside an effort suffix).
 
 **There is no default lane and no fallback.** Omitting `speed` sends no
@@ -130,12 +136,15 @@ request side, so the catalog — not the provider's response — decides whether
 a lane may be sent. A lane declared for a model that quietly ignores it would
 bill every call at the overlay's rates for standard service.
 
-An active lane also gets its own rate-limit bucket regardless of
-`rateLimitScope`, since lane capacity is a separate pool. Give the overlay
-its own `rpmLimit`/`tpmLimit`.
+A lane gets its own rate-limit bucket **only if it declares its own**
+`rpmLimit`/`tpmLimit`. Otherwise its traffic counts against the bucket it
+would have used anyway. Declare limits when the lane really is a separate
+pool; leave them out when it shares the model's quota, as OpenAI's
+`service_tier` does — a private bucket there would double the allowance
+rather than protect it.
 
-`mo check` reports an entry that declares `speeds` for a provider with no
-adapter support, and warns about a lane that restates no prices.
+`mo check` rejects a lane the provider's adapter does not accept, naming
+the ones it does, and warns about a lane that restates no prices.
 
 ## Image-generation entries
 

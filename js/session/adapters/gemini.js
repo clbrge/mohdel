@@ -31,7 +31,6 @@ import { loadImages } from './_images.js'
 import { isTrustedMedia } from './_media.js'
 import { loadVideos } from './_videos.js'
 import { costFor } from './_pricing.js'
-import { applySpeed } from './_speed.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 import {
   toGeminiTools,
@@ -272,7 +271,6 @@ function buildRequest (envelope, contents, systemInstruction) {
     contents
   }
   if (Object.keys(config).length > 0) request.config = config
-  applySpeed(request, envelope, spec)
   return request
 }
 

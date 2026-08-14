@@ -4,6 +4,63 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.121.0] — OpenAI speed lanes, priced from what was served
+
+### Added
+
+- **OpenAI is the first provider wired for speed lanes.** The adapter owns
+  the protocol: it accepts the lane names `fast`, `priority`, `flex`, and
+  `scale`, puts them on `service_tier`, and reads the served tier back. A
+  catalog entry lists the lanes a model sells and their prices; nothing about
+  the wire appears in the entry.
+
+- **Cost follows the lane the provider says it served, not the one that was
+  requested.** OpenAI reports `service_tier` on the response and documents
+  serving Standard instead above its ramp rate limit, so a `fast` request
+  under load is legitimately answered at standard speed. Billing the request
+  would charge premium rates for standard service. Reconciling the two takes
+  the request as well as the echo, since OpenAI answers `priority` to a
+  granted request for either premium lane. The served lane rides on
+  `AnswerResult.servedSpeed` (`null` when downgraded) and the
+  `mohdel.served_speed` span attribute, and a downgrade is logged rather than
+  absorbed. When a lane was requested and the provider reported nothing back,
+  the request is billed and the gap is logged.
+
+- **Adapters advertise the lanes they accept** on `speedLanes`. Absence of
+  the property declares an adapter handles none, which is what the dispatch
+  guard reads — so `SESSION_SPEED_NOT_IMPLEMENTED` now names the lanes the
+  provider does accept, and `mo check` rejects an unaccepted lane name at
+  authoring time.
+
+### Fixed
+
+- **A `done` event carrying `speed` was rejected by the gate.** `run.js` has
+  stamped `AnswerResult.speed` since 0.120.0, but the Rust `AnswerResult` is
+  `deny_unknown_fields` and the gate parses every session event line, so the
+  first lane call over the wire would have failed as a broken session. The
+  field is now on both sides, with conformance fixtures round-tripping it.
+  Unreachable before now because no catalog entry declared `speeds`.
+
+- **A lane no longer gets a private rate-limit bucket unless it declares its
+  own quota.** 0.120.0 gave every active lane its own bucket on the assumption
+  that a lane means separate capacity. OpenAI's `service_tier` shares the
+  model's TPM/RPM pool with standard traffic, so that handed lane traffic a
+  second full allowance instead of protecting it. A lane now buckets
+  separately only when it sets `rpmLimit` or `tpmLimit`.
+
+- **Tiered prices are accepted for the cache fields.** `cacheReadPrice`,
+  `cacheWritePrice`, and `cacheWrite1hPrice` were declared scalar-only in
+  `curated.schema.json` while `resolveTier` has always handled the `{">N": …}`
+  form, which several entries already use. Both the base entry and lane
+  overlays now accept either shape, and the three fields are known to
+  `mo check` rather than reported as unknown.
+
+### Changed
+
+- `@anthropic-ai/sdk` 0.115 → 0.117.1
+- `@google/genai` 2.16 → 2.17.1
+- `release-it` 21.0.1 → 21.0.2 (dev)
+
 ## [0.120.0] — Service speed lanes
 
 ### Added

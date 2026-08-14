@@ -223,23 +223,16 @@ describe('speeds', () => {
   const entry = (speeds) => ({ model: 'm', creator: 'c', inputFormat: ['text'], speeds })
 
   test('a well-formed lane passes', () => {
-    const issues = validate(entry({ fast: { wire: 'fast', inputPrice: 6, rpmLimit: 2 } }), 'anthropic/m')
+    const issues = validate(entry({ fast: { inputPrice: 6, rpmLimit: 2 } }), 'openai/m')
     expect(issues).toEqual([])
   })
 
-  test('a lane carrying only wire passes', () => {
-    expect(validate(entry({ fast: { wire: 'fast' } }), 'anthropic/m')).toEqual([])
-  })
-
-  test('a lane without wire is reported', () => {
-    const issues = validate(entry({ fast: { inputPrice: 6 } }), 'anthropic/m')
-    expect(issues).toContainEqual(
-      expect.objectContaining({ field: 'speeds', message: expect.stringMatching(/must set a string 'wire'/) })
-    )
+  test('a lane declaring nothing passes — it sells at base prices', () => {
+    expect(validate(entry({ fast: {} }), 'openai/m')).toEqual([])
   })
 
   test('a lane overriding a non-overridable field is reported', () => {
-    const issues = validate(entry({ fast: { wire: 'fast', contextTokenLimit: 1 } }), 'anthropic/m')
+    const issues = validate(entry({ fast: { contextTokenLimit: 1 } }), 'openai/m')
     expect(issues).toContainEqual(
       expect.objectContaining({ field: 'speeds', message: expect.stringMatching(/may not override 'contextTokenLimit'/) })
     )
@@ -247,7 +240,7 @@ describe('speeds', () => {
 
   test('a lane may not redirect the call', () => {
     for (const field of ['provider', 'sdk', 'baseURL', 'model']) {
-      const issues = validate(entry({ fast: { wire: 'fast', [field]: 'x' } }), 'anthropic/m')
+      const issues = validate(entry({ fast: { [field]: 'x' } }), 'openai/m')
       expect(issues, field).toContainEqual(
         expect.objectContaining({ field: 'speeds', message: expect.stringMatching(/may not override/) })
       )

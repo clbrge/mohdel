@@ -1,13 +1,10 @@
 import { SPEED_OVERRIDABLE } from '../../js/session/adapters/_speed.js'
 
 const validateSpeeds = (speeds) => {
-  const allowed = new Set(['wire', ...SPEED_OVERRIDABLE])
+  const allowed = new Set(SPEED_OVERRIDABLE)
   for (const [lane, overlay] of Object.entries(speeds)) {
     if (typeof overlay !== 'object' || overlay === null || Array.isArray(overlay)) {
       return `lane '${lane}' must be an object`
-    }
-    if (typeof overlay.wire !== 'string' || !overlay.wire) {
-      return `lane '${lane}' must set a string 'wire' value`
     }
     for (const field of Object.keys(overlay)) {
       if (!allowed.has(field)) {
@@ -30,6 +27,9 @@ const fieldDefs = {
   inputPrice: { type: 'number', altType: 'object' },
   outputPrice: { type: 'number', altType: 'object' },
   thinkingPrice: { type: 'number', altType: 'object' },
+  cacheReadPrice: { type: 'number', altType: 'object' },
+  cacheWritePrice: { type: 'number', altType: 'object' },
+  cacheWrite1hPrice: { type: 'number', altType: 'object' },
   contextTokenLimit: { type: 'number' },
   outputTokenLimit: { type: 'number' },
   thinkingTokenLimit: { type: 'number' },

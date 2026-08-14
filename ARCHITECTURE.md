@@ -67,12 +67,12 @@ Each call inside a session (`js/session/run.js`):
 
 Wire format is JSON-over-NDJSON, camelCase. Types are authored in `js/core/*.js` (JSDoc) and mirrored in `rust/thin-gate/src/protocol.rs` (serde).
 
-- **`CallEnvelope`** — flat `answer()` options plus transport metadata. Required: `callId`, `authId`, `auth.key`, `provider`, `model`, `prompt`. Optional: `traceparent`, `baggage`, `outputBudget`, `outputType`, `outputStyle`, `outputEffort`, `images`, `videos`, `cache`, `tools`, `toolChoice`, `parallelToolCalls`, `identifier`, `providerOptions`.
+- **`CallEnvelope`** — flat `answer()` options plus transport metadata. Required: `callId`, `authId`, `auth.key`, `provider`, `model`, `prompt`. Optional: `traceparent`, `baggage`, `outputBudget`, `outputType`, `outputStyle`, `outputEffort`, `images`, `videos`, `cache`, `tools`, `toolChoice`, `parallelToolCalls`, `identifier`, `speed`, `providerOptions`.
 - **`Event`** — three-variant discriminated union:
   - `{ type: 'delta', delta: {type: 'message'|'function_call', delta: string} }`
   - `{ type: 'done', result: AnswerResult }`
   - `{ type: 'error', error: TypedError }`
-- **`AnswerResult`** — `status`, `output`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cost` (single number), `timestamps`, `warning?`, `toolCalls?`.
+- **`AnswerResult`** — `status`, `output`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cost` (single number), `timestamps`, `warning?`, `toolCalls?`, `speed?`, `servedSpeed?`.
 - **`Status`** — `'completed' | 'tool_use' | 'incomplete'`.
 - **`Warning`** — additive string union: `'insufficientOutputBudget'`, `'cancelled'`, ...
 - **`TypedError`** — `{message, detail?, severity, retryable, type}`. `type` is the canonical tag callers branch on; `message` is a short human-readable label; `detail` is the provider's own rejection text.
@@ -259,7 +259,7 @@ Mohdel reports `result.cost` from curated pricing but does not enforce budgets. 
 
 ### The catalog, not the provider, decides which service speeds may be requested
 
-Providers have begun selling the same weights at several speeds behind a request parameter (Anthropic `speed: "fast"`). Mohdel models these as **lanes**: a catalog entry declares the lanes a model sells under `speeds`, each carrying the provider-native wire value plus the prices and rate limits that differ from the base entry.
+Providers have begun selling the same weights at several speeds behind a request parameter (OpenAI's `service_tier`, Anthropic's `speed`). Mohdel models these as **lanes**: a catalog entry declares the lanes a model sells under `speeds`, each carrying the provider-native wire value plus the prices and rate limits that differ from the base entry.
 
 Lanes are unordered — a discount lane is slower and cheaper, a premium lane faster and dearer — so there is no default lane. Omitting `speed` sends no parameter at all.
 
@@ -267,7 +267,13 @@ Lanes are unordered — a discount lane is slower and cheaper, a premium lane fa
 
 That strictness exists because model support is three-state. A model may honour the parameter, reject it, or **accept it, run at standard speed, and bill standard rates** — and the third case is invisible from the request side. If mohdel priced a call from what the caller asked for, every call to such a model would be billed at the lane's rates for standard service. So the catalog is the whitelist: mohdel never sends a lane an entry does not declare, and never infers lane support from a provider's silence.
 
-Two consequences follow. Cost is attributed per (model, lane) rather than per model, since lane prices differ by design and a rollup keyed on the id alone merges them into a meaningless number. And an active lane gets its own rate-limit bucket regardless of `rateLimitScope`, because lane capacity is a separate pool — sharing one would let standard traffic throttle the lane being paid for.
+The catalog says which lanes a model sells and what they cost. Everything else about a lane is provider protocol and lives in that provider's adapter: the parameter name, how a lane name reaches the wire, and how the served lane is read back. Adapters advertise the lane names they accept on `speedLanes`; absence of that property declares an adapter handles none, and is what the dispatch guard reads. Factoring the protocol into a shared table was tried and abandoned — providers diverge in ways a table cannot express, and the exceptions land in the adapter regardless.
+
+Where a provider reports the tier it served, that report wins over the request. OpenAI echoes `service_tier` and documents serving Standard instead when a premium lane is unavailable — above its ramp rate limit, excess traffic is downgraded as a matter of course. Cost is therefore computed from the lane the provider says it served, and the difference is logged rather than absorbed. Reconciling the two needs the request as well as the echo: OpenAI answers `priority` to a granted request for *either* premium lane, so the echo alone cannot say which was asked for. That is the kind of knowledge only an adapter has. When a lane was requested and nothing came back, the request is the only evidence there is: it gets billed, with a warning saying so.
+
+Cost is attributed per (model, lane) rather than per model, since lane prices differ by design and a rollup keyed on the id alone merges them into a meaningless number.
+
+Rate limits are a per-lane fact, not an invariant. A lane gets its own bucket only when it declares its own `rpmLimit`/`tpmLimit`; otherwise its traffic counts against the bucket it would have used anyway. Some lanes are genuinely separate capacity, but OpenAI's `service_tier` shares the model's TPM/RPM pool with standard traffic — giving that one a private bucket would silently double the allowance rather than protect it.
 
 A lane overlay carries prices and quotas only. Anything that would redirect the call or restate what the model *is* — provider, SDK, base URL, context limits, modality, tool support — is model selection wearing a lane's clothes and belongs in its own catalog entry. Buying throughput by routing the same weights to a different provider is therefore a separate entry, not a lane.
 

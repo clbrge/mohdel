@@ -111,9 +111,9 @@
     "mohdel-thin-gate-linux-x64-gnu": "0.120.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
+    "@anthropic-ai/sdk": "^0.117.1",
     "@cerebras/cerebras_cloud_sdk": "^1.91.0",
-    "@google/genai": "^2.16.0",
+    "@google/genai": "^2.17.1",
     "@opentelemetry/api": "^1.9.1",
     "env-paths": "^4.0.0",
     "groq-sdk": "^1.5.0",
@@ -126,7 +126,7 @@
   "devDependencies": {
     "gpt-tokenizer": "^3.4.0",
     "lint-staged": "^17.3.0",
-    "release-it": "^21.0.1",
+    "release-it": "^21.0.2",
     "standard": "^17.1.2",
     "vitest": "^4.1.10"
   }

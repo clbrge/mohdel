@@ -19,7 +19,6 @@
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { costFor } from './_pricing.js'
-import { applySpeed } from './_speed.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 import {
   STATUS_COMPLETED,
@@ -370,8 +369,6 @@ function buildRequest (envelope, spec, config) {
   if (envelope.identifier) {
     args[config.identifierField || 'user'] = envelope.identifier
   }
-
-  applySpeed(args, envelope, spec)
 
   return args
 }

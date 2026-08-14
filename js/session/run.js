@@ -26,7 +26,7 @@ import { getAdapter } from './adapters/index.js'
 import { isImageProvider } from './adapters/image/index.js'
 import { getSpec } from './adapters/_catalog.js'
 import { getProviderLimits } from './adapters/_providers.js'
-import { hasSpeed, mergeSpeed, providerSupportsSpeed, speedNames } from './adapters/_speed.js'
+import { hasSpeed, mergeSpeed, speedHasOwnQuota, speedNames } from './adapters/_speed.js'
 import { providerOf, catalogKey, effortOf, speedOf } from '#core/model-id.js'
 import * as defaultCooldown from './_cooldown.js'
 import * as defaultLimiter from './_rate_limiter.js'
@@ -128,7 +128,7 @@ export async function * run (envelope, {
   }
 
   if (envelope.speed) {
-    const speedErr = speedError(key, envelope.speed, spec, provider)
+    const speedErr = speedError(key, envelope.speed, spec, provider, adapter)
     if (speedErr) {
       log.warn({ provider, speed: envelope.speed }, '[mohdel:answer] unusable speed lane')
       endSpanError(span, new Error(speedErr.error.message))
@@ -150,12 +150,10 @@ export async function * run (envelope, {
   const providerCfg = resolveProviderLimits(provider) || {}
   const rpmLimit = effective?.rpmLimit ?? providerCfg.rpmLimit
   const tpmLimit = effective?.tpmLimit ?? providerCfg.tpmLimit
-  // An active lane is its own capacity pool, so it gets its own bucket
-  // whatever `rateLimitScope` says — sharing one would let standard
-  // traffic throttle the lane being paid for.
-  const bucketKey = envelope.speed
+  const baseBucket = (spec?.rateLimitScope === 'model') ? key : provider
+  const bucketKey = speedHasOwnQuota(spec, envelope.speed)
     ? `${key}@${envelope.speed}`
-    : (spec?.rateLimitScope === 'model' ? key : provider)
+    : baseBucket
 
   // `0` is a killswitch ("deny all"), not "unset"; `undefined`/`null`
   // means no limit configured for that dimension. Gate on nullability
@@ -363,25 +361,31 @@ function normalizeModelId (envelope, resolveSpec) {
  * @param {string} speed
  * @param {any} spec
  * @param {string} provider
+ * @param {any} adapter
  * @returns {import('#core/events.js').ErrorEvent | undefined}
  */
-function speedError (key, speed, spec, provider) {
+function speedError (key, speed, spec, provider, adapter) {
   if (!hasSpeed(spec, speed)) {
     const available = speedNames(spec)
     const detail = available.length
       ? `Available: ${available.join(', ')}`
       : 'It declares no speed lanes.'
-    const hint = speed.includes(':')
-      ? " Suffix order is ':effort' then '@speed'."
-      : ''
+    const colon = speed.indexOf(':')
+    const hint = colon < 0
+      ? ''
+      : ` Suffix order is ':effort' then '@speed' — did you mean '${key}:${speed.slice(colon + 1)}@${speed.slice(0, colon)}'?`
     return errorEvent(
       `Model '${key}' does not support speed lane '${speed}'. ${detail}${hint}`,
       'SESSION_INVALID_SPEED'
     )
   }
-  if (!providerSupportsSpeed(provider)) {
+  const lanes = adapter?.speedLanes
+  if (!lanes?.has(speed)) {
+    const detail = lanes
+      ? `It accepts: ${[...lanes].join(', ')}.`
+      : 'It implements no speed lanes.'
     return errorEvent(
-      `Provider '${provider}' does not implement speed lanes, but '${key}' declares '${speed}'.`,
+      `Provider '${provider}' cannot serve speed lane '${speed}', but '${key}' declares it. ${detail}`,
       'SESSION_SPEED_NOT_IMPLEMENTED'
     )
   }
@@ -456,6 +460,8 @@ function finalizeSpanOk (span, result, sawDelta = false, maxInterFrameMs = 0) {
   }
   if (result?.cacheWriteInputTokens) attrs['mohdel.cache_write_input_tokens'] = result.cacheWriteInputTokens
   if (result?.cacheReadInputTokens) attrs['mohdel.cache_read_input_tokens'] = result.cacheReadInputTokens
+  if (result?.speed) attrs['mohdel.speed'] = result.speed
+  if (result?.servedSpeed !== undefined) attrs['mohdel.served_speed'] = result.servedSpeed ?? 'standard'
   if (result?.cost != null) attrs['mohdel.cost'] = result.cost
   if (result?.warning) attrs['mohdel.warning'] = result.warning
   if (result?.timestamps?.start && result?.timestamps?.first) {

@@ -176,6 +176,12 @@ Examples:
     if (tokens.outputTokens) summary.push(`${tokens.outputTokens} out`)
     if (tokens.thinkingTokens) summary.push(`${tokens.thinkingTokens} think`)
     if (tokens.cost != null) summary.push(`$${tokens.cost.toFixed(4)}`)
+    if (tokens.speed) {
+      const served = tokens.servedSpeed
+      summary.push(served === tokens.speed
+        ? `${tokens.speed} lane`
+        : `${tokens.speed} lane → ${served ?? 'standard'}`)
+    }
     const ts = tokens.timestamps
     if (ts) {
       const toMs = (a, b) => {

@@ -75,6 +75,17 @@ const resolvePrice = (price, inputTokens) => {
 // @internal — exported for unit tests only.
 export { resolvePrice as _resolvePriceForTests }
 
+// A lane candidate containing `:` means the suffixes were written the
+// other way round, which is otherwise reported as an unknown lane
+// spelled `fast:none`.
+const reversedSuffixHint = (base, candidate) => {
+  const colon = candidate.indexOf(':')
+  if (colon < 0) return ''
+  const speed = candidate.slice(0, colon)
+  const effort = candidate.slice(colon + 1)
+  return ` Suffix order is ':effort' then '@speed' — did you mean '${base}:${effort}@${speed}'?`
+}
+
 const normalizeModelSpec = (resolvedModelId, modelSpec, providerConfig) => {
   const normalized = { ...modelSpec }
   if (!normalized.provider) {
@@ -357,9 +368,12 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
           if (aliasSpeed && !Object.hasOwn(modelSpec.speeds || {}, aliasSpeed)) {
             const available = Object.keys(modelSpec.speeds || {})
             const detail = available.length
-              ? `Available: ${available.join(', ')}`
+              ? `Available: ${available.join(', ')}.`
               : 'It declares no speed lanes.'
-            throw new Error(`Model '${resolvedModelId}' does not support speed lane '${aliasSpeed}'. ${detail}`)
+            throw new Error(
+              `Model '${resolvedModelId}' does not support speed lane '${aliasSpeed}'. ${detail}` +
+              reversedSuffixHint(resolvedModelId, aliasSpeed)
+            )
           }
 
           // Validate outputEffort alias against model capabilities

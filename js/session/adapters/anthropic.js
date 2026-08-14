@@ -29,7 +29,6 @@ import { classifyProviderError } from './_errors.js'
 import { loadImages } from './_images.js'
 import { isTrustedMedia } from './_media.js'
 import { costFor } from './_pricing.js'
-import { applySpeed } from './_speed.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 import {
   toAnthropicTools,
@@ -353,7 +352,6 @@ function buildRequest (envelope, conversation, system, conversationCacheTtl = nu
     }
   }
 
-  applySpeed(request, envelope, spec)
   applyCacheBreakpoints(request, conversationCacheTtl)
 
   return request

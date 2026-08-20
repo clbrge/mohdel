@@ -332,7 +332,12 @@ function buildContents (prompt) {
 /** @param {string | import('#core/envelope.js').MessagePart[]} content */
 function safeParseToolResult (content) {
   const text = flattenText(content)
-  try { return JSON.parse(text) } catch { return { result: text } }
+  let value
+  try { value = JSON.parse(text) } catch { return { result: text } }
+  // `response` must be a protobuf Struct — a JSON object. A result that
+  // parses to a number, string, boolean, null or array is rejected 400.
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return { result: value }
+  return value
 }
 
 /** @param {string} role */

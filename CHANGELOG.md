@@ -4,6 +4,33 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.121.1] — Fix: Gemini tool results that aren't objects / Chore: bump dependencies
+
+### Fixed
+
+- **A tool result that parsed to a number, string, boolean, null or array
+  400'd the Gemini call.** `function_response.response` is a
+  `google.protobuf.Struct`, so it takes a JSON object and nothing else.
+  `safeParseToolResult` wrapped the value in `{result}` only when
+  `JSON.parse` threw, which let every other non-object shape through
+  unwrapped. A `calc` tool returning `398678330` — valid JSON, not an object
+  — produced `Invalid value at 'contents[2].parts[0].function_response.response'`
+  and killed the run after the tools had already succeeded. The wrap now keys
+  off the parsed shape rather than the throw. Prose results are unaffected;
+  they never parsed in the first place.
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.117.1` → `^0.120.0`
+- `@google/genai` `^2.17.1` → `^2.18.0`
+- `openai` `^7.4.0` → `^7.5.0`
+- `vitest` `^4.1.10` → `^4.1.11` (dev)
+
+### Notes
+
+- Dependency maintenance only; no adapter or protocol changes beyond the
+  fix above.
+
 ## [0.121.0] — OpenAI speed lanes, priced from what was served
 
 ### Added

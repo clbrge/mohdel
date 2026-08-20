@@ -356,4 +356,35 @@ describe('gemini tool round-trip', () => {
       }
     })
   })
+
+  // `function_response.response` is a protobuf Struct — anything that
+  // parses to a non-object is rejected with a 400 by the API.
+  test.each([
+    ['a number', '398678330', { result: 398678330 }],
+    ['a quoted string', '"sunny"', { result: 'sunny' }],
+    ['a boolean', 'true', { result: true }],
+    ['null', 'null', { result: null }],
+    ['an array', '[1,2]', { result: [1, 2] }],
+    ['unparseable text', 'it is sunny', { result: 'it is sunny' }]
+  ])('tool result that is %s is wrapped in an object', async (_label, content, expected) => {
+    const { client, captured } = mockGemini([
+      { candidates: [{ content: { parts: [] }, finishReason: 'STOP' }] }
+    ])
+
+    await collect(gemini({
+      callId: 'c1',
+      authId: 'a1',
+      auth: { key: 'k' },
+      model: 'gemini/gemini-2.5-flash',
+      prompt: [
+        { role: 'user', content: 'sum?' },
+        { role: 'tool', toolName: 'calc', content }
+      ]
+    }, { client }))
+
+    const toolContent = captured.request.contents.find(c =>
+      c.parts.some(p => p.functionResponse)
+    )
+    expect(toolContent.parts[0].functionResponse.response).toEqual(expected)
+  })
 })

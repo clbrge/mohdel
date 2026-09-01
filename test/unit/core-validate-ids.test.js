@@ -8,7 +8,7 @@ import {
   MAX_PROVIDER_BYTES
 } from '#core/envelope.js'
 
-const PROTOCOL_RS = join(import.meta.dirname, '..', '..', 'rust', 'thin-gate', 'src', 'protocol.rs')
+const PROTOCOL_RS = join(import.meta.dirname, '..', '..', 'rust', 'protocol', 'src', 'protocol.rs')
 
 function rustConst (name) {
   const src = readFileSync(PROTOCOL_RS, 'utf8')

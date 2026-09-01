@@ -236,7 +236,7 @@ Cache under `~/.cache/mohdel/` (benchmark rankings, file uploads).
 ## Adding a wire-protocol field
 
 `AnswerResult`, `CallEnvelope`, `Event`, and the other types in
-`js/core/events.js` ↔ `rust/thin-gate/src/protocol.rs` form a frozen
+`js/core/events.js` ↔ `rust/protocol/src/protocol.rs` form a frozen
 contract. Adding or changing a field touches every site below — miss
 one and you ship a release that crashes embedders.
 

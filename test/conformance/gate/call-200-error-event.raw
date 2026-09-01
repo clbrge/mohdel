@@ -1,0 +1,10 @@
+HTTP/1.1 200 OK
+content-type: application/x-ndjson
+transfer-encoding: chunked
+date: Tue, 01 Sep 2026 16:40:23 GMT
+
+99
+{"type":"error","error":{"message":"Unknown model 'local/nope' — not in catalog","severity":"error","retryable":false,"type":"SESSION_UNKNOWN_MODEL"}}
+
+0
+

@@ -1,8 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
+    "rust/protocol",
     "rust/thin-gate",
     "rust/napi-addon",
+    "clients/rust",
 ]
 
 [workspace.package]

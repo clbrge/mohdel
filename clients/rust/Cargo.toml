@@ -1,0 +1,20 @@
+[package]
+name = "mohdel-client"
+description = "Client for the mohdel thin-gate: one call for 13 providers or local inference"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mohdel-protocol = { path = "../../rust/protocol" }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["net", "io-util", "rt", "macros"] }
+futures.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

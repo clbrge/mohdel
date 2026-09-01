@@ -1,0 +1,34 @@
+(lang dune 3.0)
+
+(name mohdel)
+
+(generate_opam_files true)
+
+(license MIT)
+
+(authors "Christophe Le Bars <clb@toort.net>")
+
+(maintainers "Christophe Le Bars <clb@toort.net>")
+
+(source
+ (github clbrge/mohdel))
+
+(package
+ (name mohdel)
+ (synopsis "Client for the mohdel thin-gate: one call for 13 providers or local inference")
+ (description
+  "Streams events from a mohdel thin-gate over its unix socket: chat completions with tool calls and vision, image generation, speech to text, per-call USD cost. Synchronous, stdlib Unix transport, yojson.")
+ (depends
+  (ocaml
+   (>= 4.14))
+  dune
+  (yojson
+   (>= 2.0))
+  (ocamlformat
+   (and
+    :with-dev-setup
+    (= 0.27.0)))
+  (alcotest
+   (and
+    :with-test
+    (>= 1.5)))))

@@ -4,7 +4,7 @@
 **Audience:** implementors of mohdel session subprocesses and
 cross-language callers hitting `thin-gate` directly.
 **Authority:** JS types in `js/core/*.js` and Rust types in
-`rust/thin-gate/src/protocol.rs` are the ground truth; this doc
+`rust/protocol/src/protocol.rs` are the ground truth; this doc
 describes the wire contract they encode.
 
 Key words **MUST**, **MUST NOT**, **SHOULD**, **MAY** follow
@@ -413,3 +413,42 @@ Frozen at 0.90. Post-release:
 - [ ] Returns to idle between calls
 - [ ] Exits cleanly on stdin EOF
 - [ ] Writes no secrets to stdout or stderr
+
+## 10. Gate HTTP surface (clients)
+
+thin-gate fronts the session protocol above with HTTP/1.1 over a unix
+domain socket. A client speaks only this surface; it never sees the
+stdin/stdout framing.
+
+- **Sockets:** data plane (`--data`) serves calls; admin plane
+  (`--admin`) serves health. Owner-only permissions; no TCP listener.
+- **Requests:** `POST /v1/call`, `POST /v1/image`,
+  `POST /v1/transcription` with `Content-Type: application/json` and
+  the envelope (§3.1) as the body; `GET /v1/health` on the admin plane.
+  One request per connection; `Connection: close` is honoured.
+- **`/v1/call` response:** `200 OK`, `Content-Type: application/x-ndjson`,
+  `Transfer-Encoding: chunked`. The body is the §4 event stream, one
+  event per LF-terminated line, ending after the terminal event. Chunk
+  boundaries carry no meaning: de-chunk, then split on `\n` only (§2
+  framing rules and the 16 MiB per-line cap apply). Failures raised by
+  the session arrive inside the stream as a terminal `error` event
+  under a `200` (e.g. `SESSION_UNKNOWN_MODEL`).
+- **`/v1/image`, `/v1/transcription`, `/v1/health` responses:**
+  `200 OK`, `Content-Type: application/json`, `Content-Length` set;
+  the body is an `ImageResult`, a `TranscriptionResult`, or
+  `{ status, version, uptime_ms }`.
+- **Rejections before dispatch:** a non-200 status with a `TypedError`
+  (§4.4) JSON body — `400` (`PROTOCOL_INVALID_ENVELOPE`), `401`,
+  `413`, `503` (`SESSION_POOL_BUSY`), `500`. A body that does not
+  parse as a `TypedError` is reported as `PROTOCOL_HTTP_ERROR`,
+  retryable for 5xx.
+- **Cancel:** close the connection. The gate infers the cancel and the
+  session finishes with `done` + `warning: "cancelled"` upstream; the
+  closed client receives nothing further.
+- **Non-events:** a line that is not one of the four §4 events is a
+  framing violation; the client reports `PROTOCOL_INVALID_EVENT` and
+  closes.
+
+Reference clients: `js/client` (Node) and `clients/lua` (Lua).
+Fixtures under `test/conformance/` are the round-trip set every client
+is expected to pass.

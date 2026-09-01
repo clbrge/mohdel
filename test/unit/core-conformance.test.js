@@ -14,7 +14,7 @@ const fixturesDir = path.join(here, '..', 'conformance')
 // ---------- Known-field allowlists (frozen in 0.90) ----------
 //
 // These mirror the Rust `#[serde(deny_unknown_fields)]` attributes in
-// `rust/thin-gate/src/protocol.rs`. Keep them in sync when the frozen
+// `rust/protocol/src/protocol.rs`. Keep them in sync when the frozen
 // shape evolves.
 
 const ENVELOPE_ALLOWED = new Set(ENVELOPE_FIELDS)
@@ -294,7 +294,7 @@ describe('unknown-field parity', () => {
 //
 // The allowlists above are a hand-maintained mirror of the
 // `#[serde(deny_unknown_fields)]` structs in
-// `rust/thin-gate/src/protocol.rs`. When the two drift, the JS side
+// `rust/protocol/src/protocol.rs`. When the two drift, the JS side
 // stops catching a field the gate will reject (or vice versa) and the
 // mismatch only surfaces as a terminal "non-Event line" in production.
 // This block reparses the Rust source and asserts each allowlist is
@@ -302,7 +302,7 @@ describe('unknown-field parity', () => {
 // here — before release — instead of in the field.
 
 const protocolSrc = fs.readFileSync(
-  path.join(here, '..', '..', 'rust', 'thin-gate', 'src', 'protocol.rs'),
+  path.join(here, '..', '..', 'rust', 'protocol', 'src', 'protocol.rs'),
   'utf8'
 )
 

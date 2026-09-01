@@ -1,0 +1,8 @@
+(test
+ (name test_mohdel)
+ (libraries mohdel alcotest yojson unix)
+ (action
+  (setenv
+   MOHDEL_ROOT
+   %{project_root}/../../../..
+   (run %{test}))))

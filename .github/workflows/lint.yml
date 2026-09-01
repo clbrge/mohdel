@@ -38,3 +38,36 @@ jobs:
       # wrappers) fails here at PR time rather than in the consuming
       # repo.
       - run: cargo build --example embedder -p mohdel-thin-gate
+
+  lua:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        luaVersion: ['5.1', '5.4', 'luajit']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: ${{ matrix.luaVersion }}
+      - uses: leafo/gh-actions-luarocks@v6
+      - run: luarocks install luacheck && luarocks install busted && luarocks install dkjson && luarocks install luasocket
+      - run: cd clients/lua && luacheck . && busted
+
+  gleam:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27'
+          gleam-version: '1.18.1'
+      - run: cd clients/gleam && gleam deps download && gleam format --check src test && gleam test
+
+  ocaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.3'
+      - run: cd clients/ocaml && opam install . --deps-only --with-test --with-dev-setup && opam exec -- dune build @fmt && opam exec -- dune test

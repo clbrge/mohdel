@@ -1,0 +1,4 @@
+(library
+ (name mohdel)
+ (public_name mohdel)
+ (libraries yojson unix))

@@ -17,6 +17,7 @@ name = "mohdel-thin-gate"
 path = "src/main.rs"
 
 [dependencies]
+mohdel-protocol = { path = "../protocol" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

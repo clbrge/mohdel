@@ -233,9 +233,26 @@ With no session-bin configured, thin-gate runs in demo mode: `POST /v1/call` ret
 
 The client snippet under [Library Usage](#library-usage) above is the full surface: `call(envelope, { socketPath, signal? })` returns an async iterable of events. Pass an `AbortSignal` to cancel in flight; thin-gate forwards a cancel control message to the session and reuses it on the pool. The envelope is the flat `answer(prompt, options)` surface plus transport metadata (`callId`, `authId`, `auth.key`, optional `traceparent`); see [`js/core/envelope.js`](js/core/envelope.js) for the full field list.
 
+### Other languages
+
+The gate's HTTP surface is specified in [PROTOCOL.md §10](PROTOCOL.md#10-gate-http-surface-clients); `test/conformance/` holds the fixtures a client round-trips. Reference clients live under `clients/`:
+
+- **Lua** — [`clients/lua`](clients/lua): Lua 5.1+ / LuaJIT, transports over LuaSocket or `curl`. `cd clients/lua && luarocks make`.
+- **Gleam** — [`clients/gleam`](clients/gleam): Erlang target, typed events and results, `gen_tcp` over the unix socket. Path dependency until it is on Hex.
+- **Rust** — [`clients/rust`](clients/rust): async (tokio), uses the gate's own wire types from the `mohdel-protocol` crate. Path dependency until it is on crates.io.
+- **OCaml** — [`clients/ocaml`](clients/ocaml): synchronous, stdlib `Unix` transport, `yojson`; OCaml 4.14+. `opam pin` until it is on opam.
+
+```lua
+local mohdel = require('mohdel')
+local c = mohdel.connect{ socket = '/tmp/mohdel-data.sock' }
+for ev in c:call(envelope):events() do
+  if ev.type == 'delta' then io.write(ev.delta.delta) end
+end
+```
+
 ### Canonical types (frozen wire contract)
 
-Wire format is JSON over NDJSON frames, camelCase. Types are defined in `js/core/` (JSDoc) and mirrored in `rust/thin-gate/src/protocol.rs` (serde). Cross-language conformance tests enforce round-trip fidelity. The session-side protocol (envelopes in, events out, cancel control messages) is specified in [PROTOCOL.md](PROTOCOL.md) — read that to implement a session in another language.
+Wire format is JSON over NDJSON frames, camelCase. Types are defined in `js/core/` (JSDoc) and mirrored in `rust/protocol/src/protocol.rs` (serde, the `mohdel-protocol` crate). Cross-language conformance tests enforce round-trip fidelity. The session-side protocol (envelopes in, events out, cancel control messages) is specified in [PROTOCOL.md](PROTOCOL.md) — read that to implement a session in another language.
 
 - **`CallEnvelope`** — flat `answer()` options plus transport metadata: `callId`, `authId`, `auth.key`, `traceparent?`, `baggage?`, `provider`, `model`, `prompt`, `outputBudget?`, `outputType?`, `outputStyle?`, `outputEffort?`, `images?`, `videos?`, `cache?`, `tools?`, `toolChoice?`, `parallelToolCalls?`, `identifier?`.
 - **`Event`** — three-variant union discriminated on `type`:

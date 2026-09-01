@@ -4,6 +4,36 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.123.0] — Feat: Lua, Gleam, Rust and OCaml clients / Refactor: `mohdel-protocol` crate
+
+### Added
+
+- Lua client (`clients/lua`): `mohdel.connect{ socket }` → `call` (event
+  stream, `collect()`, `close()` cancels), `image`, `transcription`,
+  `health`; transports over LuaSocket or `curl`; Lua 5.1+ / LuaJIT;
+  rockspec `mohdel-scm-1`. CI runs luacheck + busted on 5.1, 5.4 and LuaJIT.
+- Gleam client (`clients/gleam`): `mohdel.connect(socket)` → `call`
+  (callback, `Stop` cancels), `fold`, `collect`, `image`, `transcription`,
+  `health`; typed `Event` / `AnswerResult` / `TypedError` decoders;
+  `envelope` builder; `gen_tcp` unix-socket FFI. CI runs
+  `gleam format --check` + `gleam test` on OTP 27 / Gleam 1.18.
+- Rust client (`clients/rust`, crate `mohdel-client`): `Client::new(socket)`
+  → `call` (a `Stream` of events; dropping it cancels), `collect`, `image`,
+  `transcription`, `health`; async on tokio; `Transport` trait for tests;
+  wire types come from `mohdel-protocol`.
+- OCaml client (`clients/ocaml`, package `mohdel`): `Mohdel.connect` →
+  `call` (stream with `next`/`iter`; `close` cancels), `collect`, `image`,
+  `transcription`, `health`; synchronous over the stdlib `Unix` socket;
+  `yojson`; `Envelope` builder. CI runs `dune build @fmt` + `dune test` on
+  OCaml 5.3.
+- `mohdel-protocol` crate (`rust/protocol`): the gate's wire types
+  (`protocol.rs`, `secret.rs`) moved out of `mohdel-thin-gate`, which
+  re-exports them at the same paths. `TypedError` implements `Display` and
+  `std::error::Error`.
+- `PROTOCOL.md` §10: the gate's HTTP surface for clients.
+- Captured gate responses under `test/conformance/gate/`, shared by all four
+  client test suites.
+
 ## [0.122.0] — Feat: `local/` provider / Removed: per-call `auth.baseURL`
 
 ### Added

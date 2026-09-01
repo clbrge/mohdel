@@ -1,0 +1,6 @@
+HTTP/1.1 400 Bad Request
+content-type: application/json
+content-length: 439
+date: Tue, 01 Sep 2026 16:40:23 GMT
+
+{"message":"invalid envelope","detail":"unknown field `bogus`, expected one of `callId`, `authId`, `auth`, `traceparent`, `baggage`, `model`, `prompt`, `outputBudget`, `outputType`, `outputStyle`, `outputEffort`, `speed`, `images`, `videos`, `cache`, `tools`, `toolChoice`, `parallelToolCalls`, `identifier`, `idleHeartbeatMs`, `providerOptions` at line 1 column 98","severity":"error","retryable":false,"type":"PROTOCOL_INVALID_ENVELOPE"}

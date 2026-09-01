@@ -1,0 +1,557 @@
+//! Wire protocol types for thin-gate.
+//!
+//! JS mirror: `mohdel/js/core/{envelope,events,status,errors}.js`.
+//! Shape is the flat `answer(prompt, options)` surface + result,
+//! plus minimum transport metadata. camelCase on the wire.
+
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::secret::SecretString;
+
+// ---------- CallEnvelope (flat answer() options) ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CallEnvelope {
+    // Transport metadata
+    pub call_id: String,
+    pub auth_id: String,
+    /// Inline API key. Optional — when omitted, the configured
+    /// `AuthPolicy` (see `hooks::auth`) resolves one before the
+    /// envelope is forwarded to the session subprocess. Defaulting
+    /// to an error-returning policy preserves the legacy contract
+    /// where this field was mandatory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<Auth>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traceparent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baggage: Option<String>,
+
+    // Routing. Full mohdel id — `"<provider>/<bare>[:<effort>]"`.
+    // Same shape on the wire and in-process: no separate `provider`
+    // field at any layer. Helpers in `split_model_id` read the parts
+    // locally where needed (auth, cooldown bucket, adapter dispatch).
+    // See PROTOCOL §3 and `mohdel/js/core/model-id.js`.
+    pub model: String,
+
+    // answer() first arg
+    pub prompt: Prompt,
+
+    // answer options (flat)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_budget: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_type: Option<OutputType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_style: Option<OutputStyle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_effort: Option<String>, // per-model; validated at runtime
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<String>, // per-model service lane; validated at runtime
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<MediaRef>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub videos: Option<Vec<MediaRef>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolSpec>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<ToolChoice>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parallel_tool_calls: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identifier: Option<String>,
+
+    /// When set, the session emits a synthetic `Event::Idle` every
+    /// `idle_heartbeat_ms` of adapter silence (no delta / done /
+    /// error). Advisory only — mohdel never aborts on its own;
+    /// consumers decide whether to log, bump a watchdog, or trigger
+    /// an external cancel. Omitting the field disables the heartbeat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_heartbeat_ms: Option<u32>,
+
+    /// Namespaced bag of provider-specific options. Keys are
+    /// provider names (e.g. `"openrouter"`); values are opaque JSON
+    /// the matching session adapter reads. Accepting `Value` here
+    /// keeps the envelope schema from growing per-provider; adapters
+    /// enforce the shape they expect for their own namespace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_options: Option<HashMap<String, Value>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Prompt {
+    Text(String),
+    Messages(Vec<Message>),
+}
+
+/// Split a mohdel model id `"<provider>/<bare>[:<effort>]"` into its
+/// provider and `<bare>[:<effort>]` parts. Returns `None` if there's
+/// no `/` (malformed id — callers should error out).
+pub fn split_model_id(model: &str) -> Option<(&str, &str)> {
+    model.split_once('/')
+}
+
+pub const MAX_ID_BYTES: usize = 128;
+pub const MAX_MODEL_BYTES: usize = 256;
+pub const MAX_PROVIDER_BYTES: usize = 32;
+
+/// Bound the envelope fields that become long-lived map keys and
+/// telemetry attributes. Without this they are limited only by the
+/// body cap, which is measured in megabytes.
+///
+/// Returns a reason suitable for an error `detail` — the values are
+/// the caller's own input, echoed back within the caps above.
+pub fn validate_ids(call_id: &str, auth_id: &str, model: &str) -> Result<(), String> {
+    if call_id.len() > MAX_ID_BYTES {
+        return Err(format!("callId exceeds {MAX_ID_BYTES} bytes"));
+    }
+    if auth_id.len() > MAX_ID_BYTES {
+        return Err(format!("authId exceeds {MAX_ID_BYTES} bytes"));
+    }
+    if model.len() > MAX_MODEL_BYTES {
+        return Err(format!("model exceeds {MAX_MODEL_BYTES} bytes"));
+    }
+    let Some((provider, bare)) = split_model_id(model) else {
+        return Err(format!("model must be '<provider>/<id>' (got: {model})"));
+    };
+    if provider.is_empty() || bare.is_empty() {
+        return Err(format!("model must be '<provider>/<id>' (got: {model})"));
+    }
+    if provider.len() > MAX_PROVIDER_BYTES {
+        return Err(format!(
+            "model provider exceeds {MAX_PROVIDER_BYTES} bytes"
+        ));
+    }
+    Ok(())
+}
+
+/// Return the provider part of a model id. Empty string if malformed
+/// (no `/`). Callers that need to reject malformed ids should check
+/// `split_model_id` directly.
+pub fn provider_of(model: &str) -> &str {
+    split_model_id(model).map(|(p, _)| p).unwrap_or("")
+}
+
+/// Return the catalog key — `<provider>/<bare>` with any `:effort`
+/// suffix removed. Mirrors the JS `catalogKey` helper.
+pub fn catalog_key(model: &str) -> &str {
+    let slash = match model.find('/') {
+        Some(i) => i,
+        None => return model,
+    };
+    match model.rfind(':') {
+        Some(colon) if colon > slash => &model[..colon],
+        _ => model,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputType {
+    Text,
+    Json,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputStyle {
+    Chat,
+    Coding,
+    Analysis,
+    Translation,
+    Creative,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ToolChoice {
+    Mode(ToolChoiceMode),
+    Named(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolChoiceMode {
+    Auto,
+    Required,
+    None,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Auth {
+    pub key: SecretString,
+}
+
+impl std::fmt::Debug for Auth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Auth")
+            .field("key", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolSpec {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub parameters: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Message {
+    pub role: Role,
+    pub content: MessageContent,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// Name of the tool that produced this message's content. Set on
+    /// `role = 'tool'` only. Paired with `toolCallId` for symmetry —
+    /// at the `Message` level, a bare `name` would be ambiguous (author?
+    /// speaker?). Inside `ToolCall` we keep just `name` because the
+    /// surrounding struct makes the meaning clear.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+    /// Set on `assistant` role messages when the model invoked tools
+    /// in that turn. Adapters translate to the provider-native
+    /// tool_use / function_call representation downstream.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    System,
+    User,
+    Assistant,
+    Tool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MessageContent {
+    Text(String),
+    Parts(Vec<MessagePart>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum MessagePart {
+    Text {
+        text: String,
+        /// Caller-set prompt-cache marker (`"5m"` | `"1h"`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache: Option<String>,
+    },
+    Reasoning {
+        text: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MediaRef {
+    pub file_uri: String,
+    pub mime_type: String,
+}
+
+// ---------- Events (3 variants) ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
+pub enum Event {
+    Delta {
+        delta: DeltaChunk,
+    },
+    /// Synthetic heartbeat — emitted by the session loop while the
+    /// adapter is silent (gated by `CallEnvelope::idle_heartbeat_ms`).
+    /// Carries the elapsed gap since the last real event so consumers
+    /// can drive their own stall policy. Never terminal.
+    Idle {
+        #[serde(rename = "sinceMs")]
+        since_ms: u32,
+    },
+    Done {
+        result: AnswerResult,
+    },
+    Error {
+        error: TypedError,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DeltaChunk {
+    pub r#type: DeltaKind,
+    pub delta: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeltaKind {
+    Message,
+    FunctionCall,
+}
+
+// ---------- AnswerResult (terminal `done.result`) ----------
+
+/// `Default` impl is provided so that test fixtures and stubs can construct
+/// minimal instances via struct-update syntax (`AnswerResult { status: ...,
+/// ..Default::default() }`). Real adapter code populates every field
+/// explicitly. Adding a new field shouldn't force every literal-construction
+/// site to be updated — `Default` absorbs the new field automatically.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AnswerResult {
+    pub status: Status,
+    pub output: Option<String>,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub thinking_tokens: u32,
+    /// Input tokens written to a fresh prompt cache breakpoint, billed at
+    /// `cacheWritePrice`. Optional — providers without a separate cache-write
+    /// counter omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_input_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "cacheWrite1hInputTokens")]
+    pub cache_write1h_input_tokens: Option<u32>,
+    /// Input tokens served from prompt cache, billed at `cacheReadPrice`.
+    /// Optional — providers without prompt caching omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_input_tokens: Option<u32>,
+    /// Single number (USD). No per-token breakdown on the wire.
+    pub cost: f64,
+    pub timestamps: Timestamps,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_inter_frame_ms: Option<u32>,
+    /// Speed lane requested for the call, echoed so cost can be
+    /// attributed per (model, lane).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<String>,
+    /// Lane the provider reports it actually served, when it reports
+    /// one. Differs from `speed` when the provider downgraded the
+    /// request; `cost` is computed from this, not from `speed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub served_speed: Option<String>,
+    /// `reasoning_content` from chat-completions providers (DeepSeek V4,
+    /// deepseek-reasoner, Cerebras reasoning models). Multi-turn callers
+    /// must roundtrip this back into the assistant message; DeepSeek V4
+    /// 400s otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Timestamps {
+    pub start: String,
+    pub first: String,
+    pub end: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    /// Parsed object. Not a JSON string.
+    pub arguments: Value,
+    /// Provider-specific opaque blob carried through for tool-call
+    /// round-trips. Gemini emits `thoughtSignature` alongside each
+    /// function call — its absence on the replay envelope breaks
+    /// thinking state continuity across tool rounds. Other providers
+    /// ignore this field; the session-side adapters read it only for
+    /// providers that set it.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "thoughtSignature"
+    )]
+    pub thought_signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Status {
+    #[default]
+    Completed,
+    ToolUse,
+    Incomplete,
+}
+
+// ---------- TypedError ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TypedError {
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    pub severity: Severity,
+    pub retryable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+    Fatal,
+}
+
+// ---------- ImageEnvelope / ImageResult (one-shot, non-streaming) ----------
+//
+// Mirrors `js/core/image.js`. Separate call path from CallEnvelope:
+// image generation is a single request/response — no streaming —
+// hence a distinct HTTP route (`POST /v1/image`) and a plain JSON
+// response body (not NDJSON).
+//
+// `op: "image"` is the driver-stdin protocol tag (internal),
+// unused over HTTP.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImageEnvelope {
+    pub call_id: String,
+    pub auth_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<Auth>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traceparent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baggage: Option<String>,
+
+    // See CallEnvelope — same rules. Full mohdel id.
+    pub model: String,
+    pub prompt: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImageData {
+    pub mime_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base64: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImageResult {
+    /// Always "completed" — images are one-shot, no incomplete state.
+    pub status: ImageStatus,
+    pub images: Vec<ImageData>,
+    /// Echo of provider seed when available; null otherwise.
+    pub seed: Option<u64>,
+    /// `first` == `end` for images (no streaming); JS side keeps the
+    /// field present for shape parity with AnswerResult timestamps.
+    pub timestamps: Timestamps,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageStatus {
+    Completed,
+}
+
+// ---------- TranscriptionEnvelope / TranscriptionResult (one-shot) ----------
+//
+// Mirrors `js/core/transcription.js`. Same one-shot shape as the image
+// path: single request/response over `POST /v1/transcription`, plain
+// JSON body, `op: "transcription"` driver-stdin tag.
+//
+// `audio.fileUri` must be a `file://` or `data:` URI. Providers only
+// accept multipart upload (no remote URL), so the session reads the
+// bytes itself — `file://` assumes the gate's sessions share a
+// filesystem with whoever produced the path; `data:` carries the bytes
+// inline subject to `MAX_CALL_BODY_BYTES`.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TranscriptionEnvelope {
+    pub call_id: String,
+    pub auth_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<Auth>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traceparent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baggage: Option<String>,
+
+    // See CallEnvelope — same rules. Full mohdel id.
+    pub model: String,
+    pub audio: MediaRef,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TranscriptionResult {
+    /// Always "completed" — transcriptions are one-shot, no incomplete state.
+    pub status: TranscriptionStatus,
+    pub text: String,
+    /// Detected (or echoed) language; null when the provider reports none.
+    pub language: Option<String>,
+    /// Audio duration as reported by the provider; null when not reported.
+    pub duration_seconds: Option<f64>,
+    /// Present only for token-billed providers (OpenAI gpt-4o-*-transcribe).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u64>,
+    pub cost: f64,
+    /// `first` == `end` (no streaming) — see ImageResult.
+    pub timestamps: Timestamps,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranscriptionStatus {
+    Completed,
+}
+
+impl std::fmt::Display for TypedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
+            Some(kind) => write!(f, "{kind}: {}", self.message)?,
+            None => f.write_str(&self.message)?,
+        }
+        if let Some(detail) = &self.detail {
+            write!(f, " ({detail})")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for TypedError {}

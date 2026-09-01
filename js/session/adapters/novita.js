@@ -18,7 +18,7 @@ const BASE_URL = 'https://api.novita.ai/openai'
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
 export async function * novita (envelope, deps = {}) {
-  const client = deps.client ?? new OpenAI({ apiKey: envelope.auth.key, baseURL: envelope.auth.baseURL || BASE_URL })
+  const client = deps.client ?? new OpenAI({ apiKey: envelope.auth.key, baseURL: BASE_URL })
   yield * runChatCompletions(envelope, client, {
     provider: 'novita'
   }, {

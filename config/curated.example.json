@@ -1,6 +1,6 @@
 {
   "$schema": "./curated.schema.json",
-  "_comment": "Worked examples for ~/.config/mohdel/curated.json. See docs/CATALOG.md for the field reference. Each top-level key is '<provider>/<model-id>'. The provider segment is the routing key; the model-id segment must match the value of the 'model' field below (which is the literal id mohdel sends to the provider's API).",
+  "_comment": "Worked examples for ~/.config/mohdel/curated.json. See docs/CATALOG.md for the field reference. Each top-level key is '<provider>/<model-id>'. The provider segment is the routing key; the 'model' field is the literal id mohdel sends to the provider's API and may differ from the model-id segment.",
 
   "anthropic/claude-haiku-4-5": {
     "_comment_a": "Minimal-but-useful entry. Required fields only: model, creator, inputFormat. Everything else is recommended — without prices, 'cost' on results will be 0; without contextTokenLimit, callers can't enforce input budgets.",
@@ -89,5 +89,17 @@
     "tpmLimit": 2000000,
     "rateLimitScope": "model",
     "tags": ["chat", "cheap"]
+  },
+
+  "local/llama3.1-8b": {
+    "_comment_f": "Self-hosted entry: 'baseURL' names the OpenAI-compatible server (required on local/ entries, rejected elsewhere). The key carries no ':' (mohdel reads ':' as the effort suffix); 'model' carries the server's own tag. No prices, so cost is 0.",
+    "model": "llama3.1:8b",
+    "baseURL": "http://127.0.0.1:11434/v1",
+    "creator": "meta",
+    "provider": "local",
+    "sdk": "openai",
+    "label": "Llama 3.1 8B (local)",
+    "inputFormat": ["text"],
+    "tags": ["local"]
   }
 }

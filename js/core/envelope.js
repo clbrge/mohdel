@@ -87,10 +87,6 @@
 /**
  * @typedef {object} Auth
  * @property {string} key  Provider API key. Redact in logs; never persist.
- * @property {string} [baseURL]
- *   Optional override of the adapter's default provider endpoint.
- *   Lets callers point at a self-hosted deployment, regional endpoint,
- *   proxy, or test server. Adapters treat it as `baseURL ?? ADAPTER_DEFAULT`.
  */
 
 /**

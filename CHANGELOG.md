@@ -4,6 +4,36 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.122.0] — Feat: `local/` provider / Removed: per-call `auth.baseURL`
+
+### Added
+
+- `local/` provider: streaming OpenAI-compatible chat completions against
+  the server named by the catalog entry.
+- Catalog field `baseURL`: required on `local/` entries, rejected on other
+  providers'. A `local/` call whose entry has no `baseURL` fails with
+  `CONFIGURATION_MISSING`.
+- `MOHDEL_LOCAL_API_SK`: optional bearer token for `local/`. Unset → no
+  `Authorization` header.
+- `local/` catalog keys carry no `:`; the server tag goes in `model`
+  (`local/llama3.1-8b` → `"model": "llama3.1:8b"`). Example entry in
+  `config/curated.example.json`; field notes in `docs/CATALOG.md`.
+- Live smoke suite for `local`, gated on `MOHDEL_LIVE_LOCAL_BASE_URL`;
+  `MOHDEL_LIVE_LOCAL_MODEL` sets the server tag (default `llama3.1:8b`).
+- `local` in `KNOWN_PROVIDERS` (`metrics.rs`).
+
+### Removed
+
+- `auth.baseURL` (`Auth.base_url`, wire `baseUrl`): removed from
+  `protocol.rs`, the envelope typedef, and every adapter. `Auth` is `{ key }`.
+- Factory `configuration.baseURL`: rejected with `CONFIGURATION_UNSUPPORTED`.
+- `createConfiguration()` no longer returns `baseURL`; the provider-level
+  `baseURL` in `providers.js` is read by the catalog fetchers only.
+
+### Changed
+
+- `mo doctor` counts only providers with an API key env var.
+
 ## [0.121.2] — Chore: bump dependencies
 
 ### Changed

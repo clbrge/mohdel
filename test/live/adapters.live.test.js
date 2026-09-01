@@ -8,6 +8,9 @@
  * Gating: each provider's suite skips when its API key env var
  * (`<PROVIDER>_API_SK`, matching `src/lib/providers.js`) is unset.
  * `npm run test:live` with no keys runs nothing and exits clean.
+ * `local` has no key: it gates on `MOHDEL_LIVE_LOCAL_BASE_URL`, and the
+ * suite injects a catalog entry pointing there for the server tag in
+ * `MOHDEL_LIVE_LOCAL_MODEL` (default `llama3.1:8b`).
  *
  * Per-provider quirks (defined in SPECS below):
  *   - `streams: false` → skip delta-count assertion + cancel test
@@ -18,8 +21,9 @@
  *     reasoning before emitting content (openai, xai with Responses).
  */
 
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, beforeAll } from 'vitest'
 import { adapters } from '../../js/session/adapters/index.js'
+import { setCatalog } from '../../js/session/adapters/_catalog.js'
 import providers from '../../src/lib/providers.js'
 import { STATUS_COMPLETED, STATUS_INCOMPLETE } from '#core'
 
@@ -43,7 +47,8 @@ const SPECS = {
   groq: { defaultModel: 'llama-3.3-70b-versatile', streams: false },
   mistral: { defaultModel: 'mistral-small-latest', streams: false },
   novita: { defaultModel: 'kwaipilot/kat-coder-pro', streams: false },
-  qwen: { defaultModel: 'qwen3.6-flash', streams: false, truncateBudget: 16 }
+  qwen: { defaultModel: 'qwen3.6-flash', streams: false, truncateBudget: 16 },
+  local: { defaultModel: 'llama3.1:8b', streams: true }
 }
 
 async function collect (iter) {
@@ -57,8 +62,11 @@ describe('live adapter smoke', () => {
     const adapter = adapters[provider]
     const envVar = providers[provider]?.apiKeyEnv
     const apiKey = envVar ? process.env[envVar] : undefined
+    const localBaseURL = provider === 'local' ? process.env.MOHDEL_LIVE_LOCAL_BASE_URL : undefined
+    const configured = provider === 'local' ? !!localBaseURL : !!apiKey
     const overrideKey = `MOHDEL_LIVE_${provider.toUpperCase()}_MODEL`
-    const model = process.env[overrideKey] || spec.defaultModel
+    const tag = process.env[overrideKey] || spec.defaultModel
+    const model = provider === 'local' ? `local/${tag.replace(/:/g, '-')}` : tag
     const truncateBudget = spec.truncateBudget ?? 1
 
     /** @returns {import('#core/envelope.js').CallEnvelope} */
@@ -73,7 +81,11 @@ describe('live adapter smoke', () => {
       ...overrides
     })
 
-    describe.skipIf(!apiKey || !adapter)(`${provider} (${model})`, () => {
+    describe.skipIf(!configured || !adapter)(`${provider} (${model})`, () => {
+      beforeAll(() => {
+        if (provider === 'local') setCatalog({ [model]: { model: tag, baseURL: localBaseURL } })
+      })
+
       test('happy path → completed + tokens', async () => {
         const events = await collect(adapter(envelope()))
         expect(events.every(e => e.type !== 'error')).toBe(true)

@@ -47,7 +47,7 @@ export async function * openrouter (envelope, deps = {}) {
   }
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,
-    baseURL: envelope.auth.baseURL || BASE_URL,
+    baseURL: BASE_URL,
     defaultHeaders,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })

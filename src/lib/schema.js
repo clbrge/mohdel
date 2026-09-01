@@ -17,6 +17,7 @@ const validateSpeeds = (speeds) => {
 
 const fieldDefs = {
   model: { type: 'string', required: true },
+  baseURL: { type: 'string' },
   provider: { type: 'string' },
   sdk: { type: 'string' },
   type: { type: 'string', default: 'model' },
@@ -120,6 +121,14 @@ const validate = (entry, curatedKey, { strict = false } = {}) => {
         }
       }
     }
+  }
+
+  const provider = entry.provider ?? (typeof curatedKey === 'string' ? curatedKey.split('/')[0] : undefined)
+  if (provider === 'local' && !isDeprecatedStub && !entry.baseURL) {
+    issues.push({ field: 'baseURL', message: 'required for local/ entries', severity: 'error' })
+  }
+  if (provider !== 'local' && entry.baseURL !== undefined) {
+    issues.push({ field: 'baseURL', message: 'only local/ entries carry an endpoint', severity: 'error' })
   }
 
   if (strict) {

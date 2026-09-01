@@ -22,7 +22,7 @@ const BASE_URL = 'https://api.xiaomimimo.com/v1'
 export async function * xiaomi (envelope, deps = {}) {
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,
-    baseURL: envelope.auth.baseURL || BASE_URL,
+    baseURL: BASE_URL,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   yield * runChatCompletions(envelope, client, {

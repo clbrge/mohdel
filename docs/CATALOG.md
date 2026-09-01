@@ -66,6 +66,23 @@ You can leave these out, but doing so disables features:
 
 Prices are **USD per 1M tokens**. So `"inputPrice": 3` means $3 per million input tokens.
 
+## Self-hosted (`local/`) entries
+
+`local/` routes each model to the OpenAI-compatible server named by its own entry — `baseURL` is required on `local/` entries and rejected on every other provider's. There is no default endpoint and no per-call override. A catalog key never contains `:` (mohdel reads it as the `:effort` suffix), so a server tag such as `llama3.1:8b` goes in `model` and the key carries a dash instead:
+
+```json
+"local/llama3.1-8b": {
+  "model": "llama3.1:8b",
+  "baseURL": "http://127.0.0.1:11434/v1",
+  "creator": "meta",
+  "provider": "local",
+  "sdk": "openai",
+  "inputFormat": ["text"]
+}
+```
+
+Two servers are two entries with different `baseURL`s. Leave prices out for a free-running server (`cost` is `0`) or set them to an operator rate. `contextTokenLimit` is what the server is configured to serve (Ollama: `num_ctx`), not the model's nominal window. Write `local/` entries by hand: `mo model add` pre-fills `model` with the key segment and does not ask for `baseURL`.
+
 ## Capability fields
 
 | Field | Notes |

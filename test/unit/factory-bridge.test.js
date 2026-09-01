@@ -578,18 +578,18 @@ describe('compat bridge — configuration normalization', () => {
     expect(result.status).toBe('completed')
   })
 
-  test('configuration.baseURL flows onto envelope.auth.baseURL', async () => {
-    let captured
-    const capturing = async function * (env) {
-      captured = env
-      yield * goneDoneAdapter()()
+  test('configuration.baseURL is rejected like every other per-call SDK option', async () => {
+    try {
+      await runAnswer({
+        ...baseArgs,
+        configuration: { apiKey: 'k', baseURL: 'https://proxy.corp/v1' }
+      }, deps)
+      throw new Error('should have thrown')
+    } catch (e) {
+      expect(e).toBeInstanceOf(MohdelError)
+      expect(e.type).toBe('CONFIGURATION_UNSUPPORTED')
+      expect(e.detail).toContain('baseURL')
     }
-    await runAnswer({
-      ...baseArgs,
-      configuration: { apiKey: 'k', baseURL: 'https://proxy.corp/v1' }
-    }, { ...deps, resolveAdapter: () => capturing })
-    expect(captured.auth.key).toBe('k')
-    expect(captured.auth.baseURL).toBe('https://proxy.corp/v1')
   })
 
   test('configuration.defaultHeaders throws with detail listing the key', async () => {

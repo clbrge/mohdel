@@ -48,7 +48,7 @@ export function createTranscriptionAdapter ({ baseURL, responseFormat }) {
     if (envelope.language) form.append('language', envelope.language)
     if (envelope.prompt) form.append('prompt', envelope.prompt)
 
-    const root = (envelope.auth.baseURL || baseURL).replace(/\/$/, '')
+    const root = baseURL.replace(/\/$/, '')
     let res
     try {
       res = await fetchFn(`${root}/audio/transcriptions`, {

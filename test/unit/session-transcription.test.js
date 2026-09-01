@@ -124,12 +124,6 @@ describe('openai-compatible transcription adapter', () => {
     expect(capture.init.body.get('response_format')).toBeNull()
   })
 
-  test('auth.baseURL overrides the provider default', async () => {
-    const capture = {}
-    await groq(envelope({ auth: { key: 'k', baseURL: 'https://proxy.local/v1/' } }), { fetch: okFetch({ text: '' }, capture) })
-    expect(capture.url).toBe('https://proxy.local/v1/audio/transcriptions')
-  })
-
   test('duration from mistral usage.prompt_audio_seconds', async () => {
     const out = await groq(envelope(), {
       fetch: okFetch({ text: 'x', usage: { prompt_audio_seconds: 203, prompt_tokens: 4 } })

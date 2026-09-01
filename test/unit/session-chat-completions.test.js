@@ -1,3 +1,5 @@
+import http from 'node:http'
+
 import { describe, test, expect, beforeEach } from 'vitest'
 
 import { groq } from '../../js/session/adapters/groq.js'
@@ -8,6 +10,7 @@ import { openrouter } from '../../js/session/adapters/openrouter.js'
 import { fireworks } from '../../js/session/adapters/fireworks.js'
 import { qwen } from '../../js/session/adapters/qwen.js'
 import { xai } from '../../js/session/adapters/xai.js'
+import { local } from '../../js/session/adapters/local.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
 
 /** @returns {import('#core/envelope.js').CallEnvelope} */
@@ -706,5 +709,83 @@ describe('signal propagation', () => {
     const controller = new AbortController()
     await collect(fireworks(envelope('fireworks', 'llama-3-70b'), { client, signal: controller.signal }))
     expect(captured.requestOptions?.signal).toBe(controller.signal)
+  })
+})
+
+// ---------- Local ----------
+
+describe('local adapter', () => {
+  const entry = { model: 'llama3.1:8b', baseURL: 'http://127.0.0.1:11434/v1' }
+
+  test('streams chat completions to the entry\'s server tag with max_tokens; cost is 0 without prices', async () => {
+    setCatalog({ 'local/llama3.1-8b': entry })
+    const { client, captured } = mockChatStream([
+      { choices: [{ delta: { content: 'hello' } }] },
+      { choices: [{ delta: { content: ' world' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 2 } }
+    ])
+    const events = await collect(local(envelope('local', 'llama3.1-8b', { outputBudget: 64 }), { client }))
+    expect(captured.args.model).toBe('llama3.1:8b')
+    expect(captured.args.stream).toBe(true)
+    expect(captured.args.max_tokens).toBe(64)
+    expect(captured.args.max_completion_tokens).toBeUndefined()
+    expect(events.filter(e => e.type === 'delta').map(e => e.delta.delta).join('')).toBe('hello world')
+    const done = events.at(-1)
+    expect(done.type).toBe('done')
+    expect(done.result.status).toBe('completed')
+    expect(done.result.inputTokens).toBe(4)
+    expect(done.result.outputTokens).toBe(2)
+    expect(done.result.cost).toBe(0)
+  })
+
+  test('entry without baseURL: terminal CONFIGURATION_MISSING, no request sent', async () => {
+    setCatalog({ 'local/llama3.1-8b': { model: 'llama3.1:8b' } })
+    const { client, captured } = mockChatStream([])
+    const events = await collect(local(envelope('local', 'llama3.1-8b'), { client }))
+    expect(events).toHaveLength(1)
+    expect(events[0].type).toBe('error')
+    expect(events[0].error.type).toBe('CONFIGURATION_MISSING')
+    expect(events[0].error.retryable).toBe(false)
+    expect(captured.args).toBeUndefined()
+  })
+
+  // Real HTTP: the SDK client is built by the adapter, so the wire
+  // auth header is only observable against a listening server.
+  async function withServer (fn) {
+    const seen = {}
+    const server = http.createServer((req, res) => {
+      seen.authorization = req.headers.authorization
+      req.on('data', () => {})
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'text/event-stream' })
+        res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: 'ok' }, finish_reason: 'stop' }] })}\n\n`)
+        res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } })}\n\n`)
+        res.write('data: [DONE]\n\n')
+        res.end()
+      })
+    })
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+    setCatalog({ 'local/llama3.1-8b': { model: 'llama3.1:8b', baseURL: `http://127.0.0.1:${server.address().port}/v1` } })
+    try {
+      return await fn(seen)
+    } finally {
+      server.close()
+    }
+  }
+
+  test('no token → request carries no Authorization header', async () => {
+    await withServer(async (seen) => {
+      const events = await collect(local(envelope('local', 'llama3.1-8b', { auth: { key: '' } })))
+      expect(events.at(-1).type).toBe('done')
+      expect(events.at(-1).result.output).toBe('ok')
+      expect(seen.authorization).toBeUndefined()
+    })
+  })
+
+  test('token → Bearer header', async () => {
+    await withServer(async (seen) => {
+      const events = await collect(local(envelope('local', 'llama3.1-8b', { auth: { key: 'tok' } })))
+      expect(events.at(-1).type).toBe('done')
+      expect(seen.authorization).toBe('Bearer tok')
+    })
   })
 })

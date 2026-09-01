@@ -19,6 +19,7 @@ import { fake } from './fake.js'
 import { fireworks } from './fireworks.js'
 import { gemini } from './gemini.js'
 import { groq } from './groq.js'
+import { local } from './local.js'
 import { mistral } from './mistral.js'
 import { novita } from './novita.js'
 import { openai } from './openai.js'
@@ -36,6 +37,7 @@ export const adapters = Object.freeze({
   fireworks,
   gemini,
   groq,
+  local,
   mistral,
   novita,
   openai,

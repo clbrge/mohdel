@@ -23,7 +23,7 @@ const BASE_URL = 'https://api.deepseek.com'
 export async function * deepseek (envelope, deps = {}) {
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,
-    baseURL: envelope.auth.baseURL || BASE_URL,
+    baseURL: BASE_URL,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   yield * runChatCompletions(envelope, client, {

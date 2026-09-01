@@ -41,7 +41,7 @@ export const initializeAPIs = async () => {
       const sdkPath = `./catalog/${config.sdk}.js`
       const { default: API } = await import(sdkPath)
 
-      api[name] = API(sdkConfig, {}, silent)
+      api[name] = API({ ...sdkConfig, baseURL: config.baseURL }, {}, silent)
       providersWithKeys.push(name)
     } catch (err) {
       console.error(`Error initializing provider ${name} api:`, err.message)

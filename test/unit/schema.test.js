@@ -307,3 +307,26 @@ describe('isValidTag', () => {
     expect(isValidTag(42)).toBe(false)
   })
 })
+
+describe('baseURL is a local/ field', () => {
+  const base = { model: 'llama3.1:8b', creator: 'meta', inputFormat: ['text'] }
+
+  test('local entry without baseURL is an error', () => {
+    const issues = validate({ ...base, provider: 'local' }, 'local/llama3.1-8b')
+    expect(issues).toContainEqual(expect.objectContaining({ field: 'baseURL', severity: 'error' }))
+  })
+
+  test('provider defaults to the key segment', () => {
+    const issues = validate(base, 'local/llama3.1-8b')
+    expect(issues).toContainEqual(expect.objectContaining({ field: 'baseURL', severity: 'error' }))
+  })
+
+  test('local entry with baseURL is clean', () => {
+    expect(validate({ ...base, provider: 'local', baseURL: 'http://127.0.0.1:11434/v1' }, 'local/llama3.1-8b')).toEqual([])
+  })
+
+  test('baseURL on another provider is an error', () => {
+    const issues = validate({ ...base, provider: 'openai', baseURL: 'http://proxy.test/v1' }, 'openai/m')
+    expect(issues).toContainEqual(expect.objectContaining({ field: 'baseURL', severity: 'error' }))
+  })
+})

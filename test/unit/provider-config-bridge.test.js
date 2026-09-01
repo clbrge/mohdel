@@ -29,7 +29,23 @@ describe('openrouter attribution env does not leak into the factory config', () 
     process.env.OPENROUTER_REFERER = 'https://example.test'
     process.env.OPENROUTER_TITLE = 'Example'
     const cfg = providers.openrouter.createConfiguration('sk-test')
-    expect(cfg).toEqual({ baseURL: 'https://openrouter.ai/api/v1', apiKey: 'sk-test' })
+    expect(cfg).toEqual({ apiKey: 'sk-test' })
     expect(configToAuth(cfg).key).toBe('sk-test')
+  })
+})
+
+describe('local: optional token only; the endpoint lives on the catalog entry', () => {
+  afterEach(() => {
+    delete process.env.MOHDEL_LOCAL_API_SK
+  })
+
+  test('no token → empty key and no baseURL on the envelope', () => {
+    delete process.env.MOHDEL_LOCAL_API_SK
+    expect(configToAuth(providers.local.resolveConfiguration())).toEqual({ key: '' })
+  })
+
+  test('MOHDEL_LOCAL_API_SK becomes the key', () => {
+    process.env.MOHDEL_LOCAL_API_SK = 'tok'
+    expect(configToAuth(providers.local.resolveConfiguration())).toEqual({ key: 'tok' })
   })
 })

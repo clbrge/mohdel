@@ -51,6 +51,7 @@ Exit code:
 
   // 2. API keys per provider
   for (const [name, def] of Object.entries(providers)) {
+    if (!def.apiKeyEnv) continue
     if (getAPIKey(def.apiKeyEnv)) {
       report.keys.configured.push({ provider: name, envVar: def.apiKeyEnv })
     } else {
@@ -137,7 +138,7 @@ Exit code:
   }
 
   console.log()
-  console.log(label(`API keys (${report.keys.configured.length} of ${Object.keys(providers).length})`))
+  console.log(label(`API keys (${report.keys.configured.length} of ${Object.values(providers).filter(def => def.apiKeyEnv).length})`))
   for (const k of report.keys.configured) {
     console.log(row(ok('✓'), k.provider, k.envVar))
   }

@@ -18,7 +18,7 @@ const fixturesDir = path.join(here, '..', 'conformance')
 // shape evolves.
 
 const ENVELOPE_ALLOWED = new Set(ENVELOPE_FIELDS)
-const AUTH_ALLOWED = new Set(['key', 'baseUrl'])
+const AUTH_ALLOWED = new Set(['key'])
 const MEDIA_ALLOWED = new Set(['fileUri', 'mimeType'])
 const TOOL_SPEC_ALLOWED = new Set(['name', 'description', 'parameters'])
 const MESSAGE_ALLOWED = new Set(['role', 'content', 'toolCallId', 'toolName', 'toolCalls'])

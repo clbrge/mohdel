@@ -19,7 +19,8 @@ const providers = {
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'DEEPSEEK_API_SK',
-    createConfiguration: apiKey => ({ baseURL: 'https://api.deepseek.com', apiKey }),
+    baseURL: 'https://api.deepseek.com',
+    createConfiguration: apiKey => ({ apiKey }),
     creators: ['deepseek'],
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
@@ -27,7 +28,8 @@ const providers = {
   fireworks: {
     sdk: 'fireworks',
     apiKeyEnv: 'FIREWORKS_API_SK',
-    createConfiguration: apiKey => ({ apiKey, baseURL: 'https://api.fireworks.ai/inference/v1' }),
+    baseURL: 'https://api.fireworks.ai/inference/v1',
+    createConfiguration: apiKey => ({ apiKey }),
     creators: ['meta', 'alibaba'],
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
@@ -46,11 +48,21 @@ const providers = {
     createConfiguration: apiKey => ({ apiKey }),
     creators: ['meta']
   },
+  local: {
+    sdk: 'openai',
+    api: 'chatCompletions',
+    catalog: false,
+    resolveConfiguration: () => ({ apiKey: process.env.MOHDEL_LOCAL_API_SK || '' }),
+    creators: [],
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
+  },
   mistral: {
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'MISTRAL_API_SK',
-    createConfiguration: apiKey => ({ baseURL: 'https://api.mistral.ai/v1', apiKey }),
+    baseURL: 'https://api.mistral.ai/v1',
+    createConfiguration: apiKey => ({ apiKey }),
     creators: ['mistral']
   },
   novita: {
@@ -58,7 +70,8 @@ const providers = {
     api: 'chatCompletions',
     imageHandler: 'novita',
     apiKeyEnv: 'NOVITA_API_SK',
-    createConfiguration: apiKey => ({ apiKey, baseURL: 'https://api.novita.ai/openai' }),
+    baseURL: 'https://api.novita.ai/openai',
+    createConfiguration: apiKey => ({ apiKey }),
     creators: ['deepseek', 'openai', 'bfl'],
     contextSemantics: 'shared',
     outputCapStrategy: 'error'
@@ -74,14 +87,16 @@ const providers = {
   openrouter: {
     sdk: 'openrouter',
     apiKeyEnv: 'OPENROUTER_API_SK',
-    createConfiguration: apiKey => ({ baseURL: 'https://openrouter.ai/api/v1', apiKey }),
+    baseURL: 'https://openrouter.ai/api/v1',
+    createConfiguration: apiKey => ({ apiKey }),
     creators: []
   },
   qwen: {
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'QWEN_API_SK',
-    createConfiguration: apiKey => ({ baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', apiKey }),
+    baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    createConfiguration: apiKey => ({ apiKey }),
     creators: ['alibaba'],
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
@@ -89,7 +104,8 @@ const providers = {
   xai: {
     sdk: 'openai',
     apiKeyEnv: 'XAI_API_SK',
-    createConfiguration: apiKey => ({ baseURL: 'https://api.x.ai/v1', apiKey }),
+    baseURL: 'https://api.x.ai/v1',
+    createConfiguration: apiKey => ({ apiKey }),
     creators: ['xai'],
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
@@ -98,7 +114,8 @@ const providers = {
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'XIAOMI_API_SK',
-    createConfiguration: apiKey => ({ baseURL: 'https://api.xiaomimimo.com/v1', apiKey }),
+    baseURL: 'https://api.xiaomimimo.com/v1',
+    createConfiguration: apiKey => ({ apiKey }),
     creators: ['xiaomi'],
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'

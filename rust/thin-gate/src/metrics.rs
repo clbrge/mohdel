@@ -63,13 +63,14 @@ struct Metrics {
 ///
 /// Kept in sync with `src/lib/providers.js` by
 /// `test/unit/gate-provider-labels.test.js`.
-const KNOWN_PROVIDERS: [&str; 13] = [
+const KNOWN_PROVIDERS: [&str; 14] = [
     "anthropic",
     "cerebras",
     "deepseek",
     "fireworks",
     "gemini",
     "groq",
+    "local",
     "mistral",
     "novita",
     "openai",

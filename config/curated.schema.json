@@ -70,6 +70,10 @@
           "minItems": 1,
           "uniqueItems": true
         },
+        "baseURL": {
+          "type": "string",
+          "description": "local/ entries only: the OpenAI-compatible server this model is served from (e.g. http://127.0.0.1:11434/v1). Required there, rejected elsewhere."
+        },
         "provider": {
           "type": "string",
           "description": "Routing provider. Defaults to the provider segment of the catalog key."

@@ -1,6 +1,6 @@
 # Mohdel
 
-Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 13 providers; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
+Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 13 providers or local inference; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
 
 ```bash
 npm install -g mohdel
@@ -279,9 +279,12 @@ FIREWORKS_API_SK=fw_...
 DEEPSEEK_API_SK=sk-...
 OPENROUTER_API_SK=sk-or-...
 NOVITA_API_SK=...
+MOHDEL_LOCAL_API_SK=...
 ```
 
 Only set keys for providers you use. Run `mo` with no arguments for interactive setup.
+
+`local/` routes each model to the `baseURL` of its catalog entry — any OpenAI-compatible chat-completions server (Ollama, vLLM, llama.cpp server, LM Studio). There is no default endpoint and no per-call override: an entry without `baseURL` fails `mo model check`, a call to it fails with `CONFIGURATION_MISSING`, so a call never falls through to a cloud provider. `MOHDEL_LOCAL_API_SK` is an optional bearer token. Entry format in [docs/CATALOG.md](docs/CATALOG.md#self-hosted-local-entries).
 
 ### File locations
 
@@ -314,6 +317,7 @@ What each provider supports through mohdel's unified interface:
 | Qwen Cloud | No | Yes | No | No | Yes (`enable_thinking` + `thinking_budget`) | Alibaba DashScope intl; hybrid models think by default — effort `none` sends explicit off |
 | Xiaomi | No | Yes | Yes | No | Auto | MiMo; shared chat-completions path, `reasoning_content` captured |
 | OpenRouter | Yes | Yes | Yes | No | Varies | Meta-provider; `providerOptions.openrouter` for routing prefs |
+| Local | Yes | Yes | Yes | No | No | Any OpenAI-compatible server; endpoint is the catalog entry's `baseURL` |
 | Novita | No | No | No | No | No | Image generation only |
 
 Adapter capability ≠ model capability — whether a given model accepts images, tools, or thinking effort depends on the model spec in `curated.json`. The adapter passes through what the envelope supplies; the provider rejects unsupported combos.

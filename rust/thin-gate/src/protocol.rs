@@ -188,19 +188,12 @@ pub enum ToolChoiceMode {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Auth {
     pub key: SecretString,
-    /// Optional override of the adapter's default provider endpoint.
-    /// Lets operators point mohdel at a self-hosted deployment,
-    /// regional endpoint, proxy, or test server without patching
-    /// adapters. Adapters treat it as `baseURL ?? ADAPTER_DEFAULT`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_url: Option<String>,
 }
 
 impl std::fmt::Debug for Auth {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Auth")
             .field("key", &"<redacted>")
-            .field("base_url", &self.base_url)
             .finish()
     }
 }

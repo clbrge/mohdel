@@ -271,7 +271,7 @@ function newCallId () {
 
 /**
  * Turn the factory's `configuration` bag into an envelope `auth` object.
- * Accepts `apiKey` + `baseURL`; anything else is rejected with
+ * Accepts `apiKey`; anything else is rejected with
  * `CONFIGURATION_UNSUPPORTED` rather than silently dropped — otherwise
  * a caller could believe their proxy / org header / timeout is in
  * effect when it isn't, which in the worst case leaks auth keys and
@@ -280,7 +280,7 @@ function newCallId () {
  * @param {any} configuration
  * @returns {import('#core/envelope.js').Auth}
  */
-const ALLOWED_CONFIG_KEYS = new Set(['apiKey', 'baseURL'])
+const ALLOWED_CONFIG_KEYS = new Set(['apiKey'])
 
 export function configToAuth (configuration) {
   if (!configuration) return { key: '' }
@@ -289,15 +289,13 @@ export function configToAuth (configuration) {
     throw new MohdelError('unsupported per-call configuration', {
       type: 'CONFIGURATION_UNSUPPORTED',
       detail:
-        'per-call SDK configuration is limited to `apiKey` and `baseURL`. ' +
+        'per-call SDK configuration is limited to `apiKey`. ' +
         `Unsupported keys: ${unsupported.join(', ')}. ` +
         'Move other fields to environment variables or pin them at factory construction.',
       retryable: false
     })
   }
-  const auth = { key: configuration.apiKey || '' }
-  if (configuration.baseURL) auth.baseURL = configuration.baseURL
-  return auth
+  return { key: configuration.apiKey || '' }
 }
 
 /**

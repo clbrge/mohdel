@@ -1,6 +1,6 @@
 {
   "name": "mohdel",
-  "version": "0.121.1",
+  "version": "0.121.2",
   "license": "MIT",
   "author": {
     "name": "Christophe Le Bars",
@@ -108,7 +108,7 @@
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.222.0",
     "@opentelemetry/sdk-node": "^0.222.0",
     "chalk": "^6.0.0",
-    "mohdel-thin-gate-linux-x64-gnu": "0.121.1"
+    "mohdel-thin-gate-linux-x64-gnu": "0.121.2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

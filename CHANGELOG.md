@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.121.2] — Chore: bump dependencies
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.120.0` → `^0.122.0`
+- `@google/genai` `^2.18.0` → `^2.20.0`
+- `groq-sdk` `^1.5.0` → `^1.6.0`
+- `openai` `^7.5.0` → `^7.8.0`
+- `@opentelemetry/exporter-trace-otlp-grpc` `^0.221.0` → `^0.222.0` (optional)
+- `@opentelemetry/sdk-node` `^0.221.0` → `^0.222.0` (optional)
+- `gpt-tokenizer` `^3.4.0` → `^4.0.0` (dev; the major only drops the UMD/unpkg bundles)
+- `lint-staged` `^17.3.0` → `^17.4.1` (dev)
+
+### Notes
+
+- Dependency maintenance only; no adapter or protocol changes.
+
 ## [0.121.1] — Fix: Gemini tool results that aren't objects / Chore: bump dependencies
 
 ### Fixed

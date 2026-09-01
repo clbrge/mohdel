@@ -3,6 +3,10 @@
 /node_modules/
 # Rust cargo build output (`cargo build` / `cargo test`).
 /target/
+# Gleam build output incl. downloaded packages (`gleam build` in
+# clients/gleam). Listed here as well as in the nested .gitignore
+# because standard only reads the root file.
+/clients/gleam/build/
 # Generic tool cache dir (release-it, vitest, etc.).
 .cache/
 

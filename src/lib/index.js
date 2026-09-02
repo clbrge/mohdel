@@ -7,6 +7,7 @@ import providers from './providers.js'
 import { getAPIKey, loadDefaultEnv, getProvidersConfig, saveProvidersConfig, setLogger as setCommonLogger } from './common.js'
 import {
   loadCuratedCache,
+  setCuratedCache,
   getCuratedCacheSnapshot,
   expandModelAliasSync,
   suggestModels,
@@ -14,6 +15,7 @@ import {
 } from './curated-cache.js'
 import { createRateLimiter } from '../../js/session/_rate_limiter.js'
 import { createCooldownTracker } from '../../js/session/_cooldown.js'
+import { setCatalog } from '../../js/session/adapters/_catalog.js'
 import { runAnswer, runAnswerImage, runAnswerTranscription } from '../../js/factory/bridge.js'
 import { startSpan, endSpanOk, endSpanError } from './tracing.js'
 import { isValidTag } from './schema.js'
@@ -200,21 +202,27 @@ export { buildHandlers as _buildHandlersForTests }
  * @param {Function} [opts.onFailure]           — fired after every failed answer call
  * @param {number} [opts.cooldownThreshold=3]   — consecutive provider failures before cooldown
  * @param {number} [opts.cooldownDuration=60000] — cooldown duration in ms
- * @param {object} [opts.models]                — model catalog (library mode — skips disk init)
- * @param {object} [opts.configurations]        — provider configurations (library mode)
+ * @param {object} [opts.models]                — catalog `{ [provider/model]: spec }`. Replaces
+ *                                                `~/.config/mohdel/curated.json` for this process,
+ *                                                factory and session runtime alike.
+ * @param {object} [opts.configurations]        — `{ [provider]: { apiKey } }`. Overrides the env
+ *                                                key per provider; env for the rest.
  */
 const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, cooldownThreshold, cooldownDuration, models, configurations } = {}) => {
-  // When consumer provides models + configurations, skip disk-based init (library mode).
-  // Otherwise load from ~/.config/mohdel/ (CLI / standalone mode).
-  const libraryMode = !!(models && configurations)
+  loadDefaultEnv()
 
-  if (!libraryMode) {
-    loadDefaultEnv()
+  // The session runtime keeps its own catalog cache (the seam thin-gate's
+  // `set_catalog` uses) and would otherwise lazy-load curated.json, so a
+  // replacement has to reach both caches.
+  if (models) {
+    setCuratedCache(models)
+    setCatalog(models)
+  } else {
     await loadCuratedCache()
   }
 
   // Provider config: user-specific rate limits per provider (~/.config/mohdel/providers.json)
-  const providersConfig = libraryMode ? {} : await getProvidersConfig()
+  const providersConfig = await getProvidersConfig()
 
   // Resolve verbosity tier once at init. Factory opt > env var > default.
   // Captured in the answer() closure below to gate per-call log lines.
@@ -248,7 +256,7 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
     get: (target, prop) => {
       if (prop === 'list') {
         return (tag) => { // Sync
-          const catalog = libraryMode ? models : getCuratedCacheSnapshot()
+          const catalog = getCuratedCacheSnapshot()
           let modelEntries = Object.entries(catalog)
             .filter(([, metadata]) => !metadata.deprecated)
 
@@ -267,7 +275,7 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
 
       if (prop === 'use') {
         return (modelId) => { // Sync
-          const catalog = libraryMode ? models : getCuratedCacheSnapshot()
+          const catalog = getCuratedCacheSnapshot()
 
           // Parse optional :outputEffort suffix (e.g. "claude-opus:max").
           // Effort levels vary per spec (`thinkingEffortLevels` keys —
@@ -284,7 +292,7 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
           // Fallback specs are excluded from that test on purpose:
           // providers that synthesize them resolve any string, which
           // would disable suffix parsing for them entirely.
-          const exactId = libraryMode ? modelId : expandModelAliasSync(modelId)
+          const exactId = expandModelAliasSync(modelId)
           const isCuratedId = !!catalog[exactId]
 
           // `@speed` is parsed off first so the two suffixes are read
@@ -299,7 +307,7 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
             // resolves the same as `x@fast`.
             const colon = base.lastIndexOf(':')
             const probe = colon > 0 ? base.slice(0, colon) : base
-            const probeResolved = libraryMode ? probe : expandModelAliasSync(probe)
+            const probeResolved = expandModelAliasSync(probe)
             if (catalog[probeResolved] || createFallbackModelSpec(probeResolved)) {
               aliasSpeed = candidate
               modelId = base
@@ -311,7 +319,7 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
           if (colonIdx > 0) {
             const candidate = modelId.slice(colonIdx + 1)
             const base = modelId.slice(0, colonIdx)
-            const baseResolved = libraryMode ? base : expandModelAliasSync(base)
+            const baseResolved = expandModelAliasSync(base)
             const baseSpec = catalog[baseResolved] || createFallbackModelSpec(baseResolved)
             if (baseSpec) {
               aliasOutputEffort = candidate
@@ -319,17 +327,14 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
             }
           }
 
-          let resolvedModelId = libraryMode ? modelId : expandModelAliasSync(modelId)
+          let resolvedModelId = expandModelAliasSync(modelId)
           let modelSpec = catalog[resolvedModelId]
 
           if (!modelSpec) {
             modelSpec = createFallbackModelSpec(resolvedModelId)
             if (!modelSpec) {
-              if (libraryMode) {
-                throw new Error(`Model '${modelId}' not found in provided models.`)
-              }
               const suggestions = suggestModels(modelId)
-              let msg = `Model '${modelId}' not found in curated models.`
+              let msg = `Model '${modelId}' not found in catalog.`
               if (suggestions.length) {
                 msg += ' Did you mean?\n' + suggestions.map(s => `  ${s.id}  ${s.label}`).join('\n')
               }
@@ -777,7 +782,7 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
 
       if (prop === 'info') {
         return () => { // Sync
-          const catalog = externalConfigurations ? null : getCuratedCacheSnapshot()
+          const catalog = getCuratedCacheSnapshot()
           return catalog?.[resolvedModelId] ? { ...catalog[resolvedModelId] } : { ...modelSpec }
         }
       }

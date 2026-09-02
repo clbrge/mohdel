@@ -154,7 +154,9 @@ const result = await mo.use('anthropic/claude-sonnet-4-6').answer('Hello')
 console.log(result.output, result.cost)
 ```
 
-No subprocess, no setup beyond your API key. Right for CLI tools (`mo ask`), scripts, tests, and single-process services — which is most projects.
+No subprocess, no setup beyond your API key. Right for CLI tools (`mo ask`), scripts, tests, and single-process services — which is most projects. Pass an `AbortSignal` as `answer(prompt, { signal })` to cancel in flight.
+
+The factory reads the catalog from `~/.config/mohdel/curated.json` and keys from the environment, the same defaults a gate session starts from. `mohdel({ models })` replaces the catalog for the process, factory and session runtime alike, the way `set_catalog` replaces it in a gate session. `mohdel({ configurations: { openai: { apiKey } } })` overrides the key per provider.
 
 ### Client — cross-process (the production gateway)
 

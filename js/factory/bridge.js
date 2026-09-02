@@ -35,7 +35,6 @@ import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
  *   Hook that returns `{rpmLimit, tpmLimit}` for a given provider —
  *   lets the factory keep its own `providersConfig` as source of
  *   truth instead of the module-level `providers.json` loader.
- * @property {AbortSignal} [signal]
  */
 
 /**
@@ -58,6 +57,7 @@ import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
  * | `providerOrder` / `providerAllow` / `providerDeny`| envelope.providerOptions.openrouter                  |
  * | `traceparent` / `baggage`                         | envelope transport metadata                          |
  * | `callId` / `authId`                               | envelope transport metadata                          |
+ * | `signal`                                          | not on the wire — `run()` deps, aborts the call      |
  * | `configuration.apiKey`                            | envelope.auth.key                                    |
  * | **`parentSpan`**                                  | **dropped** — use `traceparent` instead              |
  * | **`maybeThrowHandler`**                           | **dropped** — no factory-side validation hook        |
@@ -90,7 +90,7 @@ export async function runAnswer ({ provider, model, modelKey, configuration, pro
 
   let terminal
   try {
-    for await (const ev of run(envelope, deps)) {
+    for await (const ev of run(envelope, { ...deps, signal: options.signal })) {
       if (ev.type === 'delta' && ev.delta) {
         if (deltaBuffer) deltaBuffer.push(ev.delta.type, ev.delta.delta)
       } else if (ev.type === 'done' || ev.type === 'error') {

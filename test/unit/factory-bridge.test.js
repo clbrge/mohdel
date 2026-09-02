@@ -52,6 +52,25 @@ describe('factory bridge — runAnswer', () => {
     expect(result.timestamps).toHaveProperty('start')
   })
 
+  test('`options.signal` reaches the adapter as `deps.signal`', async () => {
+    const controller = new AbortController()
+    const seen = {}
+    const capturing = async function * (envelope, adapterDeps) {
+      seen.signal = adapterDeps.signal
+      yield * goneDoneAdapter()()
+    }
+    await runAnswer({ ...baseArgs, options: { signal: controller.signal } }, { ...deps, resolveAdapter: () => capturing })
+    expect(seen.signal).toBe(controller.signal)
+  })
+
+  test('an aborted `options.signal` cancels the call', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const result = await runAnswer({ ...baseArgs, options: { signal: controller.signal } }, deps)
+    expect(result.status).toBe('incomplete')
+    expect(result.warning).toBe('cancelled')
+  })
+
   test('unknown provider throws MohdelError carrying the error type', async () => {
     await expect(runAnswer({ ...baseArgs, modelKey: 'nonesuch/m' }, deps))
       .rejects.toMatchObject({

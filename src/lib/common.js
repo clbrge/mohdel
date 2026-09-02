@@ -112,12 +112,11 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
   const loadHandler = async () => {
     let loadedData
     try {
-      if (!existsSync(CONFIG_DIR)) {
-        await mkdir(CONFIG_DIR, { recursive: true })
-      }
-
       if (!existsSync(filePath)) {
         if (defaultValue && Object.keys(defaultValue).length > 0) {
+          if (!existsSync(CONFIG_DIR)) {
+            await mkdir(CONFIG_DIR, { recursive: true })
+          }
           await writeFile(filePath, JSON.stringify(defaultValue, null, 2))
           loadedData = JSON.parse(JSON.stringify(defaultValue))
         } else {

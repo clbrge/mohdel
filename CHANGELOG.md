@@ -4,6 +4,24 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.124.0] — Feat: `models` replaces the catalog end to end / Feat: `answer()` `signal` / Chore: bump dependencies
+
+### Added
+
+- `signal` option on `answer()`: an `AbortSignal` passed to `run()` and the
+  adapter. Listed in the bridge's option-mapping table.
+
+### Changed
+
+- Factory `models` and `configurations` are independent options. `models`
+  replaces the catalog for `use()`, `list()` and the session runtime.
+  `configurations[provider]` overrides the env key for that provider.
+- Factory init reads `~/.config/mohdel/.env` and `providers.json` regardless
+  of options. Loading a config file does not create `~/.config/mohdel/`.
+- `use()` reports an unknown model as `not found in catalog`.
+- `@anthropic-ai/sdk` `^0.122.0` → `^0.123.0`
+- `openai` `^7.8.0` → `^7.9.0`
+
 ## [0.123.0] — Feat: Lua, Gleam, Rust and OCaml clients / Refactor: `mohdel-protocol` crate
 
 ### Added

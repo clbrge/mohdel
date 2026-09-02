@@ -13,7 +13,7 @@ export const hintsForError = (err, modelId) => {
   const provider = modelId.includes('/') ? modelId.split('/')[0] : null
   const hints = []
 
-  if (/not found in curated models/i.test(both)) {
+  if (/not found in catalog/i.test(both)) {
     if (provider) {
       hints.push(`→ run:  mo curate ${provider}        # add upstream models from this provider`)
       hints.push(`→ or:   mo model add ${modelId}      # add this one manually`)

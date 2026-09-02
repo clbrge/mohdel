@@ -69,6 +69,11 @@ const rebuildAliasMap = () => {
 
 export const loadCuratedCache = ensureCuratedCache
 
+export const setCuratedCache = (table) => {
+  curatedCache = { ...table }
+  aliasMapCache = buildAliasMap(curatedCache)
+}
+
 export const getCuratedCacheSnapshot = () => curatedCache
 
 export const getAliasMapSnapshot = () => aliasMapCache

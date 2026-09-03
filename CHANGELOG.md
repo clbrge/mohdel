@@ -15,7 +15,29 @@ All notable changes to this project are documented here. Format follows
 
 ### Changed
 
+- `client/call`: a caller abort ends the event stream with the cancelled
+  `done` (status `incomplete`, warning `cancelled`, partial output, zero
+  tokens) instead of throwing `aborted`; an already-aborted signal yields it
+  without connecting. Same terminal as the in-process path.
 - `@google/genai` `^2.20.0` → `^2.21.0`
+
+### Tests
+
+- `test/unit/session-chat-completions.test.js` — abort at each runner
+  checkpoint: SDK stream ending silently, SDK stream still yielding after
+  abort, SDK stream throwing after abort, and the non-streaming request
+  throwing under an aborted signal.
+- `test/unit/session-driver.test.js` — a `{op:"cancel"}` line arriving on
+  stdin while an adapter is streaming aborts it and stdout ends with the
+  cancelled `done`. Previously only pre-dequeue cancel was covered.
+- `test/unit/factory-bridge.test.js` — a mid-stream abort resolves
+  `answer()` with the cancelled result and partial output rather than
+  throwing.
+- `test/unit/session-openai.test.js`, `session-anthropic.test.js`,
+  `session-gemini.test.js` — first cancel coverage for these adapters:
+  mid-stream abort and SDK throw under an aborted signal.
+- `test/unit/client-call.test.js` — abort mid-stream, before connecting,
+  after the terminal, and while response headers are pending.
 
 ## [0.124.0] — Feat: `models` replaces the catalog end to end / Feat: `answer()` `signal` / Chore: bump dependencies
 

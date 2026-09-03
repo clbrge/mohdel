@@ -170,3 +170,37 @@ describe('session/adapters/openai', () => {
     expect(done.result.cost).toBe(0.000125)
   })
 })
+
+describe('session/adapters/openai — cancel', () => {
+  test('abort mid-stream → cancelled done with the partial output', async () => {
+    const { client } = makeClient({
+      events: [
+        { type: 'response.output_text.delta', delta: 'Hel' },
+        { type: 'response.output_text.delta', delta: 'lo' },
+        { type: 'response.output_text.delta', delta: '!' },
+        { type: 'response.completed', response: { usage: { input_tokens: 8, output_tokens: 3 } } }
+      ]
+    })
+    const controller = new AbortController()
+    const events = []
+    for await (const ev of openai(envelope(), { client, signal: controller.signal })) {
+      events.push(ev)
+      if (events.filter(e => e.type === 'delta').length === 2) controller.abort()
+    }
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+    const done = events.at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.output).toBe('Hello')
+    expect(done.result.outputTokens).toBe(0)
+  })
+
+  test('SDK throwing under an aborted signal → cancelled done, not an error event', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const { client } = makeClient({ throws: new Error('Request was aborted.') })
+    const events = await collect(openai(envelope(), { client, signal: controller.signal }))
+    expect(events.map(e => e.type)).toEqual(['done'])
+    expect(events[0].result.warning).toBe('cancelled')
+  })
+})

@@ -840,3 +840,67 @@ describe('local adapter', () => {
     })
   })
 })
+
+describe('chat-completions runner — abort checkpoints', () => {
+  const streamingClient = (chunks, { throwOnAbort = false } = {}) => ({
+    chat: {
+      completions: {
+        create: async (args, { signal }) => (async function * () {
+          for (const c of chunks) {
+            if (signal.aborted) {
+              if (throwOnAbort) throw Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' })
+            }
+            yield c
+          }
+        })()
+      }
+    }
+  })
+  const chunks = [
+    { choices: [{ delta: { content: 'one ' } }] },
+    { choices: [{ delta: { content: 'two ' } }] },
+    { choices: [{ delta: { content: 'three' } }] },
+    { choices: [{ finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 3 } }
+  ]
+
+  test('in-loop guard: an SDK stream that keeps yielding after abort is cut at the next chunk', async () => {
+    const controller = new AbortController()
+    const events = []
+    for await (const ev of fireworks(envelope('fireworks', 'accounts/fireworks/models/k2p6'), { client: streamingClient(chunks), signal: controller.signal })) {
+      events.push(ev)
+      if (events.filter(e => e.type === 'delta').length === 2) controller.abort()
+    }
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.output).toBe('one two ')
+  })
+
+  test('stream catch: an SDK stream that throws after abort → cancelled done, no error event', async () => {
+    const controller = new AbortController()
+    const events = []
+    for await (const ev of fireworks(envelope('fireworks', 'accounts/fireworks/models/k2p6'), { client: streamingClient(chunks, { throwOnAbort: true }), signal: controller.signal })) {
+      events.push(ev)
+      if (events.filter(e => e.type === 'delta').length === 2) controller.abort()
+    }
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+    expect(events.at(-1).result.status).toBe('incomplete')
+    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.output).toBe('one two ')
+  })
+
+  test('non-streaming path: request throwing under an aborted signal → cancelled done', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const client = {
+      chat: {
+        completions: {
+          create: async () => { throw new Error('Request was aborted.') }
+        }
+      }
+    }
+    const events = await collect(deepseek(envelope('deepseek', 'deepseek-v4-flash'), { client, signal: controller.signal }))
+    expect(events.map(e => e.type)).toEqual(['done'])
+    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.output).toBe(null)
+  })
+})

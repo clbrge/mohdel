@@ -435,3 +435,41 @@ describe('session/driver', () => {
     expect(done.result.warning).not.toBe('cancelled')
   })
 })
+
+describe('session/driver — cancel control while a call is in flight', () => {
+  test('cancel op on stdin mid-stream aborts the running adapter; stdout ends with the cancelled done', async () => {
+    const { PassThrough } = await import('node:stream')
+    const stdin = new PassThrough()
+    const chunks = []
+    let deltas = 0
+    const stdout = new Writable({
+      write (chunk, _enc, cb) {
+        const text = chunk.toString('utf8')
+        chunks.push(text)
+        for (const line of text.split('\n').filter(l => l)) {
+          const ev = JSON.parse(line)
+          if (ev.type === 'delta' && ++deltas === 2) {
+            stdin.write(JSON.stringify({ op: 'cancel', callId: 'inflight' }) + '\n')
+          }
+          if (ev.type === 'done') stdin.end()
+        }
+        cb()
+      }
+    })
+
+    const driving = drive(stdin, stdout)
+    stdin.write(JSON.stringify(envelope({
+      callId: 'inflight',
+      model: 'fake/m',
+      prompt: JSON.stringify({ mode: 'cancel_after', tokens: 2 })
+    })) + '\n')
+    await driving
+
+    const events = parseNDJSON(chunks.join(''))
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+    const done = events.at(-1)
+    expect(done.result.status).toBe('incomplete')
+    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.output).toBe('tok0 tok1 ')
+  })
+})

@@ -179,7 +179,7 @@ The pool is not a naive blocking queue. Three properties on top of "N pre-warmed
 
    No separate scrape endpoint; metrics, spans, and logs all land in the same collector under the same service resource attributes. Choice rationale vs Prometheus-style scraping: stack alignment — the session subprocess already exports spans via OTLP, so reusing the transport avoids standing up another Prometheus.
 
-Cancel-mid-stream handling (`server.rs::PoolStreamState::drop`): when the client disconnects, the gate sends `{op:"cancel", callId}` on session stdin and drains events until the session emits a terminal. Clean drain → session released back to the pool. Timeout or error → session killed, replacement spawned.
+Cancel-mid-stream handling (`server.rs::PoolStreamState::drop`): when the client disconnects, the gate sends `{op:"cancel", callId}` on session stdin and drains events until the session emits a terminal. Clean drain → session released back to the pool. Timeout or error → session killed, replacement spawned. The drained terminal never reaches the caller (it hung up), so the client synthesizes the cancelled `done` on its side — `js/client/call.js` does; a client in another language must do the same to match the in-process path.
 
 ## Adapter contract (session side)
 

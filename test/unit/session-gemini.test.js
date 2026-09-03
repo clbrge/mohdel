@@ -187,3 +187,31 @@ describe('session/adapters/gemini', () => {
     expect(captured.request.config.abortSignal.aborted).toBe(true)
   })
 })
+
+describe('session/adapters/gemini — cancel', () => {
+  test('abort mid-stream → cancelled done with the partial output', async () => {
+    const { client } = makeClient({
+      chunks: [chunk('Hi'), chunk(' there'), chunk('!', 'STOP')]
+    })
+    const controller = new AbortController()
+    const events = []
+    for await (const ev of gemini(envelope(), { client, signal: controller.signal })) {
+      events.push(ev)
+      if (events.filter(e => e.type === 'delta').length === 2) controller.abort()
+    }
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+    const done = events.at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.output).toBe('Hi there')
+  })
+
+  test('SDK throwing under an aborted signal → cancelled done, not an error event', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const { client } = makeClient({ throws: new Error('Request was aborted.') })
+    const events = await collect(gemini(envelope(), { client, signal: controller.signal }))
+    expect(events.map(e => e.type)).toEqual(['done'])
+    expect(events[0].result.warning).toBe('cancelled')
+  })
+})

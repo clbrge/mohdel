@@ -233,7 +233,7 @@ With no session-bin configured, thin-gate runs in demo mode: `POST /v1/call` ret
 
 ### Calling from JS
 
-The client snippet under [Library Usage](#library-usage) above is the full surface: `call(envelope, { socketPath, signal? })` returns an async iterable of events. Pass an `AbortSignal` to cancel in flight; thin-gate forwards a cancel control message to the session and reuses it on the pool. The envelope is the flat `answer(prompt, options)` surface plus transport metadata (`callId`, `authId`, `auth.key`, optional `traceparent`); see [`js/core/envelope.js`](js/core/envelope.js) for the full field list.
+The client snippet under [Library Usage](#library-usage) above is the full surface: `call(envelope, { socketPath, signal? })` returns an async iterable of events. Pass an `AbortSignal` to cancel in flight; thin-gate forwards a cancel control message to the session and reuses it on the pool, and the client ends the stream with the same cancelled `done` the in-process path returns (status `incomplete`, warning `cancelled`, the partial output it relayed, zero tokens). The envelope is the flat `answer(prompt, options)` surface plus transport metadata (`callId`, `authId`, `auth.key`, optional `traceparent`); see [`js/core/envelope.js`](js/core/envelope.js) for the full field list.
 
 ### Other languages
 

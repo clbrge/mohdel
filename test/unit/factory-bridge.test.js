@@ -71,6 +71,30 @@ describe('factory bridge — runAnswer', () => {
     expect(result.warning).toBe('cancelled')
   })
 
+  test('abort mid-stream resolves with the cancelled result and partial output, never throws', async () => {
+    const controller = new AbortController()
+    const midStream = async function * (_envelope, adapterDeps) {
+      yield { type: 'delta', delta: { type: 'message', delta: 'par' } }
+      controller.abort()
+      expect(adapterDeps.signal.aborted).toBe(true)
+      yield {
+        type: 'done',
+        result: {
+          status: 'incomplete',
+          output: 'par',
+          inputTokens: 0,
+          outputTokens: 0,
+          thinkingTokens: 0,
+          cost: 0,
+          timestamps: { start: '0', first: '0', end: '0' },
+          warning: 'cancelled'
+        }
+      }
+    }
+    const pending = runAnswer({ ...baseArgs, options: { signal: controller.signal } }, { ...deps, resolveAdapter: () => midStream })
+    await expect(pending).resolves.toMatchObject({ status: 'incomplete', warning: 'cancelled', output: 'par' })
+  })
+
   test('unknown provider throws MohdelError carrying the error type', async () => {
     await expect(runAnswer({ ...baseArgs, modelKey: 'nonesuch/m' }, deps))
       .rejects.toMatchObject({

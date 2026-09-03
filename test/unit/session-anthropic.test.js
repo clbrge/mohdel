@@ -160,3 +160,39 @@ describe('session/adapters/anthropic', () => {
     expect(events.at(-1).result.cost).toBe(0)
   })
 })
+
+describe('session/adapters/anthropic — cancel', () => {
+  test('abort mid-stream → cancelled done with partial output and the input tokens already reported', async () => {
+    const { client } = makeClient({
+      events: [
+        { type: 'message_start', message: { usage: { input_tokens: 10 } } },
+        { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } },
+        { type: 'content_block_delta', delta: { type: 'text_delta', text: ' there' } },
+        { type: 'content_block_delta', delta: { type: 'text_delta', text: '!' } },
+        { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 3 } }
+      ]
+    })
+    const controller = new AbortController()
+    const events = []
+    for await (const ev of anthropic(envelope(), { client, signal: controller.signal })) {
+      events.push(ev)
+      if (events.filter(e => e.type === 'delta').length === 2) controller.abort()
+    }
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+    const done = events.at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.output).toBe('Hi there')
+    expect(done.result.inputTokens).toBe(10)
+    expect(done.result.outputTokens).toBe(0)
+  })
+
+  test('SDK throwing under an aborted signal → cancelled done, not an error event', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const { client } = makeClient({ throws: new Error('Request was aborted.') })
+    const events = await collect(anthropic(envelope(), { client, signal: controller.signal }))
+    expect(events.map(e => e.type)).toEqual(['done'])
+    expect(events[0].result.warning).toBe('cancelled')
+  })
+})

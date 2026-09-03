@@ -159,3 +159,93 @@ describe('client/call — HTTP error paths', () => {
     }
   })
 })
+
+// ---------- Caller abort → cancelled terminal ----------
+
+describe('client/call — abort', () => {
+  test('abort mid-stream → cancelled done with the relayed partial output, no throw', async () => {
+    handler = (req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.write(JSON.stringify({ type: 'delta', delta: { type: 'message', delta: 'hel' } }) + '\n')
+      res.write(JSON.stringify({ type: 'delta', delta: { type: 'function_call', delta: '{"a":1}' } }) + '\n')
+      // Never ends on its own: only the client's abort finishes this call.
+      req.on('close', () => res.destroy())
+    }
+
+    const controller = new AbortController()
+    const events = []
+    for await (const ev of call(envelope(), { socketPath: sockPath, signal: controller.signal })) {
+      events.push(ev)
+      if (events.length === 2) controller.abort()
+    }
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+    const done = events.at(-1)
+    expect(done.result.status).toBe('incomplete')
+    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.output).toBe('hel')
+    expect(done.result.inputTokens).toBe(0)
+    expect(done.result.cost).toBe(0)
+  })
+
+  test('already-aborted signal → cancelled done without connecting', async () => {
+    let connected = false
+    handler = (_req, res) => {
+      connected = true
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.end()
+    }
+
+    const controller = new AbortController()
+    controller.abort()
+    const events = await collect(call(envelope(), { socketPath: sockPath, signal: controller.signal }))
+    expect(connected).toBe(false)
+    expect(events.map(e => e.type)).toEqual(['done'])
+    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.output).toBe(null)
+  })
+
+  test('abort after the terminal arrived → single terminal, no synthesized second one', async () => {
+    handler = (req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.write(JSON.stringify({
+        type: 'done',
+        result: {
+          status: 'completed',
+          output: 'ok',
+          inputTokens: 1,
+          outputTokens: 1,
+          thinkingTokens: 0,
+          cost: 0,
+          timestamps: { start: '0', first: '0', end: '0' }
+        }
+      }) + '\n')
+      req.on('close', () => res.destroy())
+    }
+
+    const controller = new AbortController()
+    const events = []
+    for await (const ev of call(envelope(), { socketPath: sockPath, signal: controller.signal })) {
+      events.push(ev)
+      if (ev.type === 'done') controller.abort()
+    }
+    expect(events.map(e => e.type)).toEqual(['done'])
+    expect(events[0].result.status).toBe('completed')
+  })
+})
+
+describe('client/call — abort while the response headers are still pending', () => {
+  test('→ cancelled done, no throw', async () => {
+    handler = (req, res) => {
+      // Holds the request without answering; only the client's abort ends it.
+      req.on('close', () => res.destroy())
+    }
+
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 20)
+    const events = await collect(call(envelope(), { socketPath: sockPath, signal: controller.signal }))
+    expect(events.map(e => e.type)).toEqual(['done'])
+    expect(events[0].result.status).toBe('incomplete')
+    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.output).toBe(null)
+  })
+})

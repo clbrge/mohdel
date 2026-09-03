@@ -19,6 +19,7 @@
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { costFor } from './_pricing.js'
+import { cancelledDone } from './_cancelled.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 import {
   STATUS_COMPLETED,
@@ -98,6 +99,10 @@ export async function * runChatCompletions (envelope, client, config, deps = {})
   try {
     response = await client.chat.completions.create(args, { signal: deps.signal })
   } catch (e) {
+    if (deps.signal?.aborted) {
+      yield cancelledDone(start, null, envelope, '', 0, 0)
+      return
+    }
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] request failed`)
     yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: config.provider }) }
     return
@@ -161,6 +166,10 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
   try {
     stream = await client.chat.completions.create(args, { signal: deps.signal })
   } catch (e) {
+    if (deps.signal?.aborted) {
+      yield cancelledDone(start, null, envelope, '', 0, 0)
+      return
+    }
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] request failed`)
     yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: config.provider }) }
     return
@@ -168,6 +177,10 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
 
   try {
     for await (const chunk of stream) {
+      if (deps.signal?.aborted) {
+        yield cancelledDone(start, first, envelope, contentParts.join(''), 0, 0)
+        return
+      }
       const choice = chunk.choices?.[0]
       // DeepSeek V4 / deepseek-reasoner / Cerebras reasoning models emit
       // `delta.reasoning_content` chunks before visible content. Capture
@@ -225,8 +238,17 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
       if (chunk.usage) usage = chunk.usage
     }
   } catch (e) {
+    if (deps.signal?.aborted) {
+      yield cancelledDone(start, first, envelope, contentParts.join(''), 0, 0)
+      return
+    }
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] stream failed`)
     yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: config.provider }) }
+    return
+  }
+
+  if (deps.signal?.aborted) {
+    yield cancelledDone(start, first, envelope, contentParts.join(''), 0, 0)
     return
   }
 

@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [0.125.0] — Fix: abort on OpenAI-compatible adapters ends with the cancelled `done` / Chore: bump dependencies
+
+### Fixed
+
+- OpenAI-compatible adapters (`_chat_completions.js`): an abort mid-stream or
+  before the first byte now ends with the cancelled `done` (status `incomplete`,
+  warning `cancelled`) instead of a clean completion with zero tokens, or an
+  error event.
+
+### Changed
+
+- `@google/genai` `^2.20.0` → `^2.21.0`
+
 ## [0.124.0] — Feat: `models` replaces the catalog end to end / Feat: `answer()` `signal` / Chore: bump dependencies
 
 ### Added

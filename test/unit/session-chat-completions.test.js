@@ -301,6 +301,57 @@ describe('reasoning_content capture + roundtrip', () => {
     expect(done.result.output).toBe('visible')
   })
 
+  test('streaming: abort mid-stream → done with warning cancelled, not a clean completion', async () => {
+    const controller = new AbortController()
+    const chunks = [
+      { choices: [{ delta: { content: 'one ' } }] },
+      { choices: [{ delta: { content: 'two ' } }] },
+      { choices: [{ delta: { content: 'three' } }] },
+      { choices: [{ finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 3 } }
+    ]
+    // Mirrors the openai SDK: an aborted stream ends iteration without throwing.
+    const client = {
+      chat: {
+        completions: {
+          create: async (args, { signal }) => (async function * () {
+            for (const c of chunks) {
+              if (signal.aborted) return
+              yield c
+            }
+          })()
+        }
+      }
+    }
+    const events = []
+    for await (const ev of fireworks(envelope('fireworks', 'accounts/fireworks/models/k2p6'), { client, signal: controller.signal })) {
+      events.push(ev)
+      if (events.filter(e => e.type === 'delta').length === 2) controller.abort()
+    }
+    const done = events.at(-1)
+    expect(done.type).toBe('done')
+    expect(done.result.status).toBe('incomplete')
+    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.output).toBe('one two ')
+    expect(events.some(e => e.type === 'error')).toBe(false)
+  })
+
+  test('abort before first byte → done with warning cancelled, not an error event', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const client = {
+      chat: {
+        completions: {
+          create: async () => { throw new Error('Request was aborted.') }
+        }
+      }
+    }
+    const events = await collect(fireworks(envelope('fireworks', 'accounts/fireworks/models/k2p6'), { client, signal: controller.signal }))
+    const done = events.at(-1)
+    expect(done.type).toBe('done')
+    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.output).toBe(null)
+  })
+
   test('roundtrip: assistant MessagePart{type:reasoning} → wire reasoning_content', async () => {
     const { client, captured } = mockChat(basicResponse())
     await collect(deepseek(envelope('deepseek', 'deepseek-v4-flash', {

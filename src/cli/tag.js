@@ -1,6 +1,7 @@
 import mohdel, { silent } from '../lib/index.js'
 import { parseJsonFlag, jsonOutput } from './json-output.js'
 import { id, label, tag, meta, err } from './colors.js'
+import { EMPTY_CATALOG } from './model.js'
 
 // CLI logger: silent for noisy levels, console.error for errors and fatals.
 const cliLogger = { ...silent, error: console.error, fatal: console.error }
@@ -52,6 +53,7 @@ Usage:
       jsonOutput(sorted.map(t => ({ tag: t })), jsonFlag.fields)
       return
     }
+    if (!sorted.length) { console.log(meta(EMPTY_CATALOG)); return }
     for (const t of sorted) console.log(tag(t))
     return
   }

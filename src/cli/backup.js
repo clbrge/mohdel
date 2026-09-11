@@ -14,7 +14,8 @@ Usage:
   model backup restore <slot>      Restore from a backup slot
   model backup diff <slot>         Show changes between current and slot
 
-Slots: prev (last save), daily (first save of the day), weekly (first save of the week)`)
+Slots: prev (last save), daily (first save of the day),
+       weekly (first save of the week)`)
     process.exit(0)
   }
 

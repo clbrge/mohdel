@@ -46,6 +46,12 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **Alias** — alternative id that resolves to the same entry. Useful for accepting common short names (`opus` → `anthropic/claude-opus-4-7`).
 
+**Coding agent** — the agent you already run in your terminal (Claude Code, Codex CLI, Gemini CLI, opencode, Cursor Agent, Aider). Mohdel ships none; it writes a brief and hands it over. Prices, context limits and cache rates are on docs pages rather than in any provider API, which is why a web-capable agent fills them in.
+
+**Brief** — the instructions `mo model instructions [provider]` writes for that agent: the entry schema, this installation's conventions, the provider's reference links, and what to do when it is done. Default filename `mohdel-brief.md`.
+
+**Candidate file** — what the agent drafts, entries in `curated.json` shape, default filename `mohdel-candidate.json`. `mo model check --entry` validates it and diffs it against the catalog; `mo model apply` writes it after showing the diff. Neither the brief nor the candidate is a config file — both are working files in the directory you ran the command from.
+
 **Thinking effort** — symbolic level (`low`, `medium`, `high`, `xhigh`, `max`, `none`) that mohdel translates to the provider's native budget (Anthropic budget tokens, OpenAI `reasoning_effort`, Gemini `thinkingBudget`, …). Mapping lives in the entry's `thinkingEffortLevels`. The caller passes `outputEffort: 'medium'`; the entry decides what that means in upstream units.
 
 **Speed lane** — a named service speed the model sells, selected by a provider request parameter (OpenAI `service_tier`). Declared per entry under `speeds`, each lane carrying the prices and rate limits that differ from the base entry. Lane names come from the provider's own vocabulary; how one reaches the wire is the adapter's business, not the catalog's. Callers pass `speed: 'fast'` or the `@fast` id suffix. Unordered — a lane may be slower and cheaper as readily as faster and dearer. There is no default lane and no fallback to standard: an undeclared lane fails the call before dispatch. Where the provider reports which lane it served, cost is computed from that rather than from the request. Distinct from the `leaderboard` triple's *speed* axis, which is measured, not bought.
@@ -108,9 +114,11 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **`providers.json`** — provider-level rate limits (`rpmLimit`, `tpmLimit`). Per-model overrides go in `curated.json`.
 
-**`default.json`** — the model `mo ask` falls back to when none is given. Set with `mo default`.
+**`default.json`** — the model `mo ask` falls back to when none is given, and the coding agent `mo` hands briefs to. Set with `mo default` and `mo`.
 
 **`excluded.json`** — model ids `mo` should hide from `list`/`curate` results.
+
+**`catalog.local.json`** — this installation's own field and tag declarations, written by `mo model instructions --init-local`. The brief passes them to the coding agent so entries it drafts carry your conventions; nothing here is shipped with mohdel. See [CATALOG.md](CATALOG.md).
 
 **XDG paths** — mohdel uses `env-paths`, so on Linux this is `$XDG_CONFIG_HOME/mohdel/…` (defaulting to `~/.config/mohdel/`); on macOS it's `~/Library/Preferences/mohdel/`; on Windows it's `%APPDATA%\mohdel\Config\`.
 

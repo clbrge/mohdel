@@ -1,11 +1,28 @@
 import mohdel, { silent } from '../lib/index.js'
-import { loadDefaultEnv } from '../lib/common.js'
+import { getConfig, loadDefaultEnv } from '../lib/common.js'
 
 const noop = () => {}
 
 // Friendly next-step hints for common ask-time failures. Pure pattern match on
 // err.message — keeps the lib layer neutral, but gives CLI users a copy-pasteable
 // command instead of just an error. Shared with `mo transcribe`.
+// Waiting on a model is the one place mohdel has nothing to show for several
+// seconds. The frames carry the resolved id, so the id is visible while it is
+// useful and gone afterwards. stderr only, so pipes see nothing.
+const startSpinner = (text) => {
+  if (!process.stderr.isTTY) return null
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+  let i = 0
+  const timer = setInterval(() => {
+    process.stderr.write(`\r${frames[i++ % frames.length]} ${text}`)
+  }, 80)
+  timer.unref?.()
+  return () => {
+    clearInterval(timer)
+    process.stderr.write('\r\u001b[K')
+  }
+}
+
 export const hintsForError = (err, modelId) => {
   const msg = String(err?.message || '')
   const detail = String(err?.detail || '')
@@ -16,6 +33,7 @@ export const hintsForError = (err, modelId) => {
   if (/not found in catalog/i.test(both)) {
     if (provider) {
       hints.push(`→ run:  mo curate ${provider}        # add upstream models from this provider`)
+      hints.push(`→ then: mo model instructions ${provider}   # let your coding agent fill in the prices`)
       hints.push(`→ or:   mo model add ${modelId}      # add this one manually`)
     } else {
       hints.push('→ run:  mo ls                       # list available models')
@@ -49,18 +67,21 @@ Usage:
   mo ask <model> "question" < file     Combined: args + stdin
 
 Options:
-  --effort <level>     Thinking effort: high, medium, low, none
+  --effort <level>     Thinking effort: none, low, medium, high, xhigh, max
   --budget <tokens>    Output token budget
   --json               Output full result as JSON
   --stream             Stream output to stdout in real time
-  -v, --verbose        Show debug info on stderr (cooldown, rate limit, SDK calls)
+  -v, --verbose        Show debug info on stderr (cooldown, rate limits)
+  -q, --quiet          Nothing on stderr but errors — no usage summary
 
 Output:
   stdout: model output text (raw, no formatting — or JSON with --json)
-  stderr: model name + token usage summary
+  stderr: token usage summary, and errors
+          --json omits the summary (the same numbers are in the payload);
+          --quiet omits it too, leaving stderr for failures alone
 
 Examples:
-  mo ask gemini/gemini-3-flash-preview "why is the sky blue"
+  mo ask openai/gpt-5.6-luna "why is the sky blue"
   cat article.txt | mo ask anthropic/claude-sonnet-4-6 "summarize this"
   mo ask openai/gpt-5.4 --effort high "explain monads" --json | jq .cost`)
     process.exit(0)
@@ -86,18 +107,23 @@ Examples:
   const json = flag('--json')
   const stream = flag('--stream')
   const verbose = flag('--verbose') || flag('-v')
+  const quiet = flag('--quiet') || flag('-q')
   const effort = flagVal('--effort')
   const budget = flagVal('--budget')
 
   // First remaining arg is model
-  const modelId = args[0]
+  // A model id always carries a provider segment, so a first argument without
+  // a slash is prompt text and the configured default model applies. Typing a
+  // full id on every call is the first thing that wears out.
+  const given = args[0]?.includes('/') ? args[0] : null
+  const modelId = given ?? (await getConfig()).defaultModel
   if (!modelId) {
     console.error('Usage: mo ask <model> [prompt]')
+    console.error('→ or:   mo default                   # pick one, then "mo ask" needs no model')
     process.exit(1)
   }
 
-  // Remaining args form the prompt
-  const promptArgs = args.slice(1).join(' ').trim()
+  const promptArgs = args.slice(given ? 1 : 0).join(' ').trim()
 
   // Read stdin if piped
   let stdinContent = ''
@@ -140,15 +166,32 @@ Examples:
   const options = {}
   if (effort) options.outputEffort = effort
   if (budget) options.outputBudget = parseInt(budget, 10)
+
+  // --verbose puts log lines on stderr on purpose; a spinner would be
+  // overwritten by them and leave its last frame behind.
+  const stopSpinner = (json || verbose || quiet) ? null : startSpinner(model.id)
+  let stopped = false
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    stopSpinner?.()
+  }
+
   if (stream && !json) {
-    options.realtimeHandler = (delta) => process.stdout.write(delta)
+    options.realtimeHandler = (delta) => {
+      stop()
+      process.stdout.write(delta)
+    }
     options.bufferOpts = { maxChars: 1, maxMs: 0 }
   }
 
-  process.stderr.write(`${model.id}\n`)
+  // Without a terminal the id is worth echoing only when it is not what was
+  // typed — an alias or a partial that resolved to something else.
+  if (!stopSpinner && !quiet && model.id !== modelId) process.stderr.write(`${model.id}\n`)
 
   try {
     const result = await model.answer(prompt, options)
+    stop()
     const output = typeof result === 'string' ? result : result?.output || ''
     const tokens = typeof result === 'object' ? result : {}
 
@@ -170,7 +213,7 @@ Examples:
       if (output && !output.endsWith('\n')) process.stdout.write('\n')
     }
 
-    // Token + timing summary to stderr
+    // Token + timing summary to stderr.
     const summary = []
     if (tokens.inputTokens) summary.push(`${tokens.inputTokens} in`)
     if (tokens.outputTokens) summary.push(`${tokens.outputTokens} out`)
@@ -195,8 +238,11 @@ Examples:
       if (ttft != null) summary.push(`${Math.round(ttft)}ms ttft`)
       if (total != null) summary.push(`${Math.round(total)}ms total`)
     }
-    if (summary.length) process.stderr.write(`${summary.join(', ')}\n`)
+    // --json already carries these numbers in the payload; --quiet keeps
+    // stderr free so a caller can treat anything on it as a failure.
+    if (summary.length && !json && !quiet) process.stderr.write(`${summary.join(', ')}\n`)
   } catch (err) {
+    stop()
     console.error(`Error: ${err.detail || err.message}`)
     for (const h of hintsForError(err, modelId)) console.error(h)
     process.exit(1)

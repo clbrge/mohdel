@@ -2,8 +2,14 @@ import mohdel, { silent } from '../lib/index.js'
 import providerDefs from '../lib/providers.js'
 import { loadDefaultEnv, getAPIKey, getCuratedModels, saveCuratedModels } from '../lib/common.js'
 import { fieldDefs } from '../lib/schema.js'
+import { providerOf } from '#core/model-id.js'
 import { parseJsonFlag, printAvailableFields, jsonOutput, jsonOutputOne } from './json-output.js'
-import { id, label, tag, price, meta, err, ok } from './colors.js'
+import { id, label, tag, price, meta, err, warn, ok } from './colors.js'
+
+// An empty catalog is the fresh-install state, not an error — but printing
+// nothing at all reads as a broken command.
+export const EMPTY_CATALOG = 'Catalog is empty. "mo curate <provider>" adds a provider\'s models, ' +
+  'then "mo model instructions <provider>" fills in the prices.'
 
 // Fields available for --json on model list/show
 const MODEL_FIELDS = [
@@ -17,11 +23,13 @@ const MODEL_FIELDS = [
 ]
 
 export async function runModel (args) {
+  // parseJsonFlag consumes --json in place; delegated actions parse their own.
+  const rawArgs = [...args]
   const jsonFlag = parseJsonFlag(args)
   const [action, arg1] = args
 
   if (!action || action === '-h' || action === '--help') {
-    console.log(`mohdel model — browse models
+    console.log(`mohdel model — browse and maintain the catalog
 
 Usage:
   model list [--json [fields]]          List all curated models
@@ -33,16 +41,30 @@ Usage:
   model set <model> <key> <value>       Set a field (custom or reserved)
   model rm <model> <key>                Remove a field
   model add <provider>/<model-id>       Add a model manually (interactive)
-  model backup list|restore|diff       Manage catalog backups (prev/daily/weekly)
-  model check [--local] [--json]       Validate catalog (schema + upstream drift)
+  model instructions [provider]         Print a brief for your coding agent
+  model check [--entry <file|->]        Validate catalog or candidate entries
+  model apply <file|->                  Write reviewed entries to the catalog
+  model backup list|restore|diff        Catalog backups: prev, daily, weekly
   model rank [options]                  Rank models by benchmark performance
   model bench <model> [options]         Benchmark a model with live inference
   model bench --tag <tag> [options]     Benchmark all models with a tag
-  model curate [provider]               Add upstream models to catalog (interactive)
+  model curate [provider]               Add a provider's models to the catalog
 
 Flags:
   --json             List available JSON fields
   --json f1,f2,f3    Output only selected fields as JSON
+
+Catalog work with a coding agent:
+  mo model instructions openai > mohdel-brief.md
+  then start claude / codex / gemini / opencode / cursor-agent on:
+  "read mohdel-brief.md, then add gpt-5.6 to my mohdel catalog"
+
+  The agent drafts mohdel-candidate.json and checks it; you apply it:
+
+    mo model check --entry mohdel-candidate.json
+    mo model apply mohdel-candidate.json     ← prints the diff first
+
+  Launch lines for each agent: mo model instructions --help
 
 Aliases:
   mo ls              model list
@@ -84,6 +106,7 @@ Aliases:
       jsonOutput(items.map(m => ({ id: m.id, ...m.info })), jsonFlag.fields)
       return
     }
+    if (!items.length) { console.log(meta(EMPTY_CATALOG)); return }
     for (const m of items) {
       const tags = (m.info.tags || []).map(t => meta(t)).join(meta(', '))
       const p = formatPrice(m.info)
@@ -182,7 +205,7 @@ ${meta('tags:')}         ${(info.tags || []).map(t => tag(t)).join(', ') || meta
     const curated = await getCuratedModels()
     if (!curated[resolvedId]) {
       // Model resolved via fallback but not in curated
-      console.error(err(`Model '${modelId}' is not in the curated catalog. Use "mo model curate" to add it.`))
+      console.error(err(`Model '${modelId}' is not in your catalog. "mo model add ${modelId}" adds it, "mo curate ${providerOf(modelId)}" walks that provider's models.`))
       process.exit(1)
     }
 
@@ -227,7 +250,7 @@ ${meta('tags:')}         ${(info.tags || []).map(t => tag(t)).join(', ') || meta
     const resolvedId = resolved.id
     const curated = await getCuratedModels()
     if (!curated[resolvedId]) {
-      console.error(err(`Model '${modelId}' is not in the curated catalog.`))
+      console.error(err(`Model '${modelId}' is not in your catalog.`))
       process.exit(1)
     }
 
@@ -244,7 +267,7 @@ ${meta('tags:')}         ${(info.tags || []).map(t => tag(t)).join(', ') || meta
 
   if (action === 'backup') {
     const { runBackup } = await import('./backup.js')
-    await runBackup(args.slice(1))
+    await runBackup(rawArgs.slice(1))
     return
   }
 
@@ -259,7 +282,8 @@ Usage:
 What it does:
   1. Resolves <provider> against the known provider list (anthropic, openai, …)
   2. Pre-fills 'model', 'provider', 'sdk' from that resolution
-  3. If your API key is set, fetches upstream model metadata (context, pricing, …)
+  3. Fetches upstream model metadata where the API key is set
+     (context, pricing, …)
   4. Prompts for any missing required field
 
 Examples:
@@ -308,7 +332,7 @@ config/curated.example.json for ready-to-copy entries.`)
     if (apiKey && providerConfig.catalog !== false) {
       try {
         const sdkConfig = providerConfig.createConfiguration(apiKey)
-        const { default: API } = await import(`../lib/sdk/${providerConfig.sdk}.js`)
+        const { default: API } = await import(`../lib/catalog/${providerConfig.sdk}.js`)
         const noop = () => {}
         const api = API(sdkConfig, {}, { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop })
         if (api.getModelInfo) {
@@ -318,7 +342,19 @@ config/curated.example.json for ready-to-copy entries.`)
             console.log(meta('Fetched model info from upstream'))
           }
         }
-      } catch {}
+      } catch (e) {
+        console.log(warn(`upstream lookup failed: ${e.message}`))
+      }
+    }
+
+    if (providerConfig.pricesFromApi) {
+      console.log(meta(`${providerName} publishes prices in its model list, so they are filled in already.`))
+    } else {
+      const refs = providerConfig.references
+      if (refs) {
+        console.log(meta(`Prices and limits are in no provider API — read them at ${refs.pricing || refs.models}`))
+      }
+      console.log(meta(`Or hand the job to your coding agent: mo model instructions ${providerName}`))
     }
 
     // Interactive prompts for missing fields
@@ -333,19 +369,31 @@ config/curated.example.json for ready-to-copy entries.`)
 
   if (action === 'check') {
     const { runCheck } = await import('./check.js')
-    await runCheck(args.slice(1))
+    await runCheck(rawArgs.slice(1))
+    return
+  }
+
+  if (action === 'apply') {
+    const { runApply } = await import('./entry.js')
+    await runApply(rawArgs.slice(1))
+    return
+  }
+
+  if (action === 'instructions') {
+    const { runInstructions } = await import('./instructions.js')
+    await runInstructions(rawArgs.slice(1))
     return
   }
 
   if (action === 'rank') {
     const { runRank } = await import('./rank.js')
-    await runRank(args.slice(1))
+    await runRank(rawArgs.slice(1))
     return
   }
 
   if (action === 'bench') {
     const { runBench } = await import('./bench.js')
-    await runBench(args.slice(1))
+    await runBench(rawArgs.slice(1))
     return
   }
 
@@ -367,29 +415,31 @@ Examples:
   mo curate anthropic
   mo curate openai
 
-Tip: after curating, fill in the things only you know — prices, contextTokenLimit,
-tags, thinkingEffortLevels — with 'mo model set <id> <key> <value>' or by editing
-~/.config/mohdel/curated.json directly. See docs/CATALOG.md for the field reference
-and config/curated.example.json for ready-to-copy entries.
+A provider's model list carries ids, not prices. Fill the rest in with
+'mo model instructions <provider>', which briefs your coding agent, or by hand
+with 'mo model set <id> <key> <value>'. See docs/CATALOG.md for the field
+reference and config/curated.example.json for ready-to-copy entries.
 
 Requires an API key for the chosen provider — run 'mo' to configure one.`)
       process.exit(0)
     }
-    const { initializeAPIs, processModels } = await import('../lib/select.js')
-    const { api, providersWithKeys } = await initializeAPIs()
+    const { providerApi, providersWithKeys, processModels } = await import('../lib/select.js')
+    const withKeys = providersWithKeys()
 
-    if (!providersWithKeys.length) {
+    if (!withKeys.length) {
       console.error(err('No providers with API keys configured. Run "mo" to set up.'))
       process.exit(1)
     }
 
-    // mo model curate <provider> — curate specific provider
+    // mo model curate <provider> — only that provider's client is built
     if (arg1) {
-      if (!api[arg1]) {
-        console.error(err(`Provider "${arg1}" not found or no API key. Available: ${providersWithKeys.join(', ')}`))
+      const api = await providerApi(arg1)
+      if (!api) {
+        console.error(err(`Provider "${arg1}" not found or no API key. Available: ${withKeys.join(', ')}`))
         process.exit(1)
       }
-      await processModels(arg1, api[arg1])
+      if (!await processModels(arg1, api)) process.exit(1)
+      printCurateNext(arg1)
       return
     }
 
@@ -397,10 +447,11 @@ Requires an API key for the chosen provider — run 'mo' to configure one.`)
     const { select, isCancel } = await import('@clack/prompts')
     const selected = await select({
       message: 'Select a provider to curate:',
-      options: providersWithKeys.map(name => ({ value: name, label: name }))
+      options: withKeys.map(name => ({ value: name, label: name }))
     })
     if (isCancel(selected)) return
-    await processModels(selected, api[selected])
+    if (!await processModels(selected, await providerApi(selected))) process.exit(1)
+    printCurateNext(selected)
     return
   }
 
@@ -412,25 +463,48 @@ export async function runProvider (args) {
   const jsonFlag = parseJsonFlag(args)
   const [action, arg1] = args
 
+  if (action === '-h' || action === '--help') {
+    console.log(`mohdel provider — providers and their API keys
+
+Usage:
+  provider list [--json]           List every provider mohdel can route to
+  provider list <provider>         List your catalog entries for one provider
+  provider models <provider>       List the models your key reaches upstream
+  provider setup <provider>        Paste an API key (interactive)
+  provider rm <provider>           Remove an API key
+
+A provider is who serves the call. Who trained the model is its creator —
+see "mo creator --help".`)
+    process.exit(0)
+  }
+
   const mo = await mohdel({ logger: silent })
   const all = mo.list()
 
   if ((!action || action === 'list') && !arg1) {
     loadDefaultEnv()
-    const providerMap = new Map()
+    // Every provider mohdel can route to, not just the ones the catalog
+    // happens to mention — on a fresh install the catalog is empty and this
+    // list is how you find out what there is to curate.
+    const counts = new Map()
     for (const m of all) {
       const info = mo.use(m.value).info()
       if (!info.provider) continue
-      if (!providerMap.has(info.provider)) providerMap.set(info.provider, 0)
-      providerMap.set(info.provider, providerMap.get(info.provider) + 1)
+      counts.set(info.provider, (counts.get(info.provider) || 0) + 1)
     }
-    const rows = [...providerMap.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([provider, count]) => {
+    const rows = Object.keys(providerDefs)
+      .sort((a, b) => a.localeCompare(b))
+      .map(provider => {
         const def = providerDefs[provider]
-        const hasKey = def?.apiKeyEnv ? !!getAPIKey(def.apiKeyEnv) : null
+        const hasKey = def.apiKeyEnv ? !!getAPIKey(def.apiKeyEnv) : null
         const rl = mo.getProviderRateLimit(provider)
-        return { provider, count, hasKey, rpmLimit: rl?.rpmLimit || null, tpmLimit: rl?.tpmLimit || null }
+        return {
+          provider,
+          count: counts.get(provider) || 0,
+          hasKey,
+          rpmLimit: rl?.rpmLimit || null,
+          tpmLimit: rl?.tpmLimit || null
+        }
       })
 
     if (jsonFlag.json && !jsonFlag.fields) {
@@ -441,13 +515,17 @@ export async function runProvider (args) {
       jsonOutput(rows, jsonFlag.fields)
       return
     }
+    const nameWidth = Math.max(...rows.map(r => r.provider.length))
+    const countWidth = Math.max(...rows.map(r => String(r.count).length))
     for (const row of rows) {
       const dot = row.hasKey === null ? ' ' : row.hasKey ? ok('●') : meta('○')
       const rl = []
       if (row.rpmLimit) rl.push(`rpm=${row.rpmLimit}`)
       if (row.tpmLimit) rl.push(`tpm=${row.tpmLimit}`)
-      const rlStr = rl.length ? meta(rl.join(' ')) : ''
-      console.log(`  ${dot} ${id(row.provider)}  ${meta(`(${row.count} models)`)}  ${rlStr}`)
+      const models = `${String(row.count).padStart(countWidth)} model${row.count === 1 ? '' : 's'}`
+      const cells = [id(row.provider.padEnd(nameWidth)), meta(models)]
+      if (rl.length) cells.push(meta(rl.join(' ')))
+      console.log(`  ${dot} ${cells.join('  ')}`)
     }
     const hasUnconfigured = rows.some(r => r.hasKey === false)
     console.log(`\n${meta('Next:')}  mo provider show <name>  ${meta('│')}  mo curate <name>` +
@@ -475,6 +553,48 @@ export async function runProvider (args) {
       const info = mo.use(m.value).info()
       console.log(`${id(m.value)}  ${label(m.label)}  ${formatPrice(info)}`)
     }
+    return
+  }
+
+  if (action === 'models') {
+    if (!arg1) { console.error('Usage: provider models <provider> [--json]'); process.exit(1) }
+    const providerConfig = providerDefs[arg1]
+    if (!providerConfig) {
+      console.error(err(`Unknown provider: ${arg1}. Known: ${Object.keys(providerDefs).join(', ')}`))
+      process.exit(1)
+    }
+    loadDefaultEnv()
+    const { providerApi } = await import('../lib/select.js')
+    const api = await providerApi(arg1)
+    if (!api?.listModels) {
+      const why = providerConfig.catalog === false || !providerConfig.apiKeyEnv
+        ? `${arg1} publishes no model list`
+        : `no API key for ${arg1} — run "mo provider setup ${arg1}"`
+      console.error(err(why))
+      process.exit(1)
+    }
+
+    let upstream
+    try {
+      upstream = await api.listModels()
+    } catch (e) {
+      console.error(err(`${arg1}: ${e.message}`))
+      process.exit(1)
+    }
+
+    const curated = await getCuratedModels()
+    const rows = upstream.map(m => ({ id: m.id, label: m.label, curated: !!curated[`${arg1}/${m.id}`] }))
+
+    if (jsonFlag.json && !jsonFlag.fields) { printAvailableFields(['id', 'label', 'curated']); return }
+    if (jsonFlag.json) { jsonOutput(rows, jsonFlag.fields); return }
+
+    const width = Math.max(...rows.map(r => r.id.length))
+    for (const r of rows) {
+      console.log(`  ${r.curated ? ok('●') : meta('○')} ${id(r.id.padEnd(width))}  ${label(r.label)}`)
+    }
+    const fresh = rows.filter(r => !r.curated).length
+    console.log(`\n${meta(`${rows.length} upstream, ${fresh} not in your catalog`)}`)
+    console.log(`${meta('Next:')}  mo model instructions ${arg1}  ${meta('│')}  mo curate ${arg1}`)
     return
   }
 
@@ -535,6 +655,19 @@ export async function runCreator (args) {
   const jsonFlag = parseJsonFlag(args)
   const [action, arg1] = args
 
+  if (action === '-h' || action === '--help') {
+    console.log(`mohdel creator — who trained the model
+
+Usage:
+  creator list [--json]            List every creator in your catalog
+  creator list <creator>           List that creator's models
+  creator show <creator>           Same, by name
+
+One creator is hosted by many providers: Cerebras and Groq both serve
+Alibaba's Qwen. Routing follows the provider — see "mo provider --help".`)
+    process.exit(0)
+  }
+
   const mo = await mohdel({ logger: silent })
   const all = mo.list()
 
@@ -557,6 +690,7 @@ export async function runCreator (args) {
       jsonOutput(items, jsonFlag.fields)
       return
     }
+    if (!creators.size) { console.log(meta(EMPTY_CATALOG)); return }
     for (const [name, count] of [...creators.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
       console.log(`${id(name)}  ${meta(`(${count} models)`)}`)
     }
@@ -588,6 +722,19 @@ export async function runCreator (args) {
 
   console.error(`Unknown action: ${action}. Use "creator list" or "creator show <name>".`)
   process.exit(1)
+}
+
+// The provider API returns ids, never prices — curated entries land unpriced.
+function printCurateNext (providerName) {
+  const def = providerDefs[providerName]
+  if (def?.pricesFromApi) {
+    console.log(`\n${meta(`${providerName} publishes prices in its model list — the entries are complete.`)}`)
+    console.log(`${meta('Check them:')} mo ls  ${meta('│')}  mo check`)
+    return
+  }
+  const refs = def?.references
+  if (refs) console.log(`\n${meta('Prices and limits are in no provider API — read them at')} ${refs.pricing || refs.models}`)
+  console.log(`${meta('Or hand the job to your coding agent:')} mo model instructions ${providerName}`)
 }
 
 // Auto-detect value type from string input

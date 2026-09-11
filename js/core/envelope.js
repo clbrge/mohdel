@@ -35,7 +35,11 @@
  * --- Answer options (flat) ---
  *
  * @property {number} [outputBudget]
- *   Max output tokens (clamped to model's outputTokenLimit).
+ *   Max output tokens requested. Capped to the spec's `outputTokenLimit`
+ *   before the provider call — after any thinking headroom the adapter adds,
+ *   since the sum is what is sent. A spec without that limit cannot be
+ *   capped and the value goes out as given. See
+ *   `js/session/adapters/_output_cap.js`.
  * @property {('text'|'json')} [outputType]
  *   Default 'text'.
  * @property {('chat'|'coding'|'analysis'|'translation'|'creative')} [outputStyle]

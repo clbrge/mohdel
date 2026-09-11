@@ -15,7 +15,8 @@ Usage:
   model rank [options]
 
 Options:
-  --use-case <name>   Weight preset: ${USE_CASES.join(', ')} (default: balanced)
+  --use-case <name>   Weight preset (default: balanced)
+                      ${USE_CASES.join(', ')}
   --top N             Number of results (default: 20)
   --breakdown, -b     Show per-group sub-scores
   --all               Include all upstream models (default: curated only)

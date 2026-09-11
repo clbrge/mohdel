@@ -50,3 +50,16 @@ Thumbs.db
 *.log
 npm-debug.log*
 probes/
+
+# ── Local catalogs and scratch ───────────────────────────────────────
+# A catalog belongs at ~/.config/mohdel/curated.json. One copied into the
+# repo to test against carries the owner's model selection and pricing,
+# so it must never be committed by accident.
+curated.json
+tmp/
+
+# ── Generated type declarations ──────────────────────────────────────
+# Emitted from JSDoc by `npm run build:types`, and by `prerelease` so a
+# publish cannot ship stale ones. Built, not authored.
+js/**/*.d.ts
+src/lib/**/*.d.ts

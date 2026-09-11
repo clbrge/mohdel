@@ -16,6 +16,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai'
+import { capOutput } from './_output_cap.js'
 
 import {
   STATUS_COMPLETED,
@@ -264,6 +265,9 @@ function buildRequest (envelope, contents, systemInstruction) {
       }
     }
   }
+
+  config.maxOutputTokens = capOutput(config.maxOutputTokens, spec?.outputTokenLimit)
+  if (config.maxOutputTokens === undefined) delete config.maxOutputTokens
 
   /** @type {Record<string, any>} */
   const request = {

@@ -214,7 +214,7 @@ The `mohdel()` factory, `.use().answer()`, `.image()` surface is the library's P
 
 The bridge (`runAnswer`) builds a `CallEnvelope` from the prompt + options, drives `run()` from `js/session/` in-process (no subprocess, no gate — the factory still runs in the caller's process), drains events (piping `delta` payloads through `createRealtimeDeltaBuffer` when a `realtimeHandler` is set), and assembles the final `AnswerResult`. Error events become thrown `MohdelError` via `MohdelError.fromJSON()` — the wire fields carry over untouched, plus an in-process `context` of `{provider, model, modelKey}`. OTel spans and lifecycle callbacks stay in the factory layer.
 
-Three factory-era options are deliberately not carried into the envelope:
+Three factory options are not carried into the envelope:
 - **`parentSpan`** — replaced by `traceparent` (a W3C string is serializable across process boundaries; an OTel Span object isn't).
 - **`maybeThrowHandler`** — removed as dead API.
 - **`configuration.baseURL` / `defaultHeaders` / …** — adapters bake in baseURL. Only `configuration.apiKey` is threaded through. Non-apiKey configuration keys throw `CONFIGURATION_UNSUPPORTED` rather than silently dropping, since a dropped baseURL could leak traffic to an unintended provider.
@@ -252,6 +252,61 @@ Mohdel normalizes the interface to LLM providers: one `answer()` shape, unified 
 ### No pre-call context-window guard
 
 Mohdel does not count input tokens or reject oversized prompts. Trim or reject before calling. Provider APIs return clear 400s; duplicating that check here would require a tokenizer dependency, add latency, and create a third error source.
+
+### The output budget is capped to the model's ceiling
+
+`outputBudget` is what the caller asks for; `outputTokenLimit` is what the model will give. When the first exceeds the second, providers split two ways: some reject the call outright, others silently serve fewer tokens and say nothing about it. Mohdel sends `min(budget, limit)` so neither happens.
+
+This is not the input-side guard refused above, and the reasons that rule one out are the reasons to do this one. Capping output needs no tokenizer and no extra call — it is an integer comparison against a number the catalog already holds, decided while the request object is being built. And the failure it prevents is not the clear 400 that makes an input guard redundant: a provider that quietly caps returns a short answer with no signal, which is the worst of the three outcomes, because nothing in the result says the request was altered.
+
+The cap is applied **last**, after any thinking headroom an adapter adds on top of the budget, because the sum is what reaches the wire. Capping before the addition would let the headroom push the total back over the limit — which is how this went unnoticed for several releases.
+
+A spec carrying no `outputTokenLimit` cannot be capped, and the caller's number goes out as given. That is the concrete cost of leaving the field out of an entry.
+
+The catalog's `outputCapStrategy` records which of the two provider behaviours applies: `error` rejects, `accept` silently caps. It is informational — published for embedders that build their own provider requests instead of going through a session — and mohdel caps regardless of its value. `contextSemantics` is the same kind of published fact for the input side: `separate` means input and output budgets are independent (Gemini), `shared` means `input + max_output ≤ context`. Neither field changes what mohdel does; both exist so an embedder does not have to rediscover provider behaviour one 400 at a time.
+
+See `js/session/adapters/_output_cap.js`.
+
+### The session is given an empty environment
+
+`thin-gate` clears the environment before spawning a session and hands back
+only what the runtime reads. The session takes its provider key from each
+envelope, so it has no reason to see any other secret the host holds — and a
+subprocess that cannot read the container's credentials cannot leak them,
+whatever a model is persuaded to emit.
+
+This is defence in depth rather than a fix for a known path: nothing in the
+session executes, so injected content has no mechanism for reading an
+environment variable in the first place. The absence of that mechanism should
+not be the only barrier between a hostile prompt and a cloud credential, and
+the reported compromises of comparable tools went through this surface.
+
+The forwarded set is a deliberate allowlist, not a denylist of known-secret
+names: an unknown variable is dropped rather than guessed at. `OTEL_*` passes
+by prefix so telemetry keeps working, which does mean
+`OTEL_EXPORTER_OTLP_HEADERS` — commonly a credential — reaches the session.
+That is the one knowing exception.
+
+See `rust/thin-gate/src/session_pool.rs`.
+
+### Adapters load one at a time
+
+Each adapter statically imports its provider SDK, and the registry in
+`adapters/index.js` imports every adapter — so touching that registry costs
+around 300ms and pulls thirteen SDKs to use one of them. `run()` resolves an
+adapter by dynamic import instead, keyed on the provider name, and the same
+goes for the image adapters. A CLI command that never makes a call, or a
+session that calls one provider, pays for neither.
+
+The name comes off the envelope, so it is checked against `ADAPTER_NAMES` in
+`adapters/_registry.js` before it reaches an import specifier. A computed
+specifier must never take an arbitrary string; a traversal-shaped provider
+gets `unknown provider`, the same error any other unknown name gets.
+
+`_registry.js` also holds the facts *about* adapters that callers want without
+loading one: which providers have an image adapter, and which speed lanes a
+provider sells. Catalog validation reads a `speeds` block from there, so it
+loads no SDK.
 
 ### No projected-cost precheck
 
@@ -300,7 +355,7 @@ Throttle, don't reject: the enforcer returns ms-to-wait when over limit.
 
 ### Two-layer enforcement: gate + session
 
-Cooldown and rate-limit checks run on **two independent layers** in the gate path. This is by design, not a bug, but callers often expect a single chokepoint so it's worth spelling out.
+Cooldown and rate-limit checks run on **two independent layers** in the gate path, not one chokepoint.
 
 **Gate layer** (`rust/thin-gate/src/server.rs`, active only when the caller uses `mohdel/client`):
 - Cooldown key: `(authId, provider)` — per-user, per-provider.
@@ -362,7 +417,7 @@ Questions readers predictably ask that aren't answered by reading the code.
 
 Three hard reasons, in rough order of weight:
 
-1. **Provider ecosystems favor JS SDKs structurally.** OpenAI, Anthropic, Gemini, Groq, Cerebras, DeepSeek, Mistral, Fireworks, OpenRouter, xAI, Novita — every one ships a first-class TypeScript/JavaScript SDK, usually on API release day. Rust SDKs are community-maintained, months behind, and often DIY around `reqwest`. That asymmetry doesn't close — vendor priority follows their customers (JS + Python). Pegging on the vendor JS SDKs means we inherit new-API support for free.
+1. **Provider ecosystems favor JS SDKs structurally.** OpenAI, Anthropic, Gemini, Groq, Cerebras, DeepSeek, Mistral, Fireworks, OpenRouter, xAI, Novita — every one ships a first-class TypeScript/JavaScript SDK, usually on API release day. Rust SDKs are community-maintained, months behind, and often DIY around `reqwest`. That asymmetry doesn't close — vendor priority follows their customers (JS + Python). Pegging on the vendor JS SDKs means new-API support arrives with an SDK bump.
 
 2. **Fault isolation is the tagline.** "Process-isolated inference" falls apart if adapter code (which runs untrusted provider SDK logic) lives inside the gate process. An adapter OOM, hang, or panic today takes down one session subprocess; the gate respawns and the caller sees a recoverable `SESSION_DIED`. A Rust monolith would collapse that boundary — a bad adapter kills the gate serving every other tenant.
 

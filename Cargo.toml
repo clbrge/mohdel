@@ -34,6 +34,13 @@ opentelemetry_sdk = { version = "0.27", features = ["rt-tokio", "metrics"] }
 opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "metrics"] }
 clap = { version = "4", features = ["derive"] }
 
+# Dev profile, inherited by `test`. Full debuginfo made each test binary
+# ~91 MB, and cargo never collects the stale ones: five months of `cargo test`
+# left 625 copies and 73 GB in target/debug/deps. `line-tables-only` keeps
+# backtraces resolving to file and line, which is all a test binary needs.
+[profile.dev]
+debug = "line-tables-only"
+
 # Release profile used when packaging thin-gate for npm distribution.
 # `strip = true` drops debug symbols (~15 MB → ~3-4 MB), `lto = "thin"`
 # enables cross-crate inlining for ~10-15% runtime improvement on the

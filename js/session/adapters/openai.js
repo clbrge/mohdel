@@ -16,6 +16,7 @@
  */
 
 import OpenAI from 'openai'
+import { SPEED_LANES } from './_registry.js'
 
 import {
   STATUS_COMPLETED,
@@ -230,7 +231,7 @@ export async function * openai (envelope, deps = {}) {
  * Lane names the OpenAI adapter can put on `service_tier`. `run.js`
  * reads this before dispatch; a lane outside it never reaches here.
  */
-openai.speedLanes = new Set(['fast', 'priority', 'flex', 'scale'])
+openai.speedLanes = SPEED_LANES.openai
 
 /**
  * Lane the response says was served, given the one requested.

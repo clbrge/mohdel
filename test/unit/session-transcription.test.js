@@ -107,9 +107,9 @@ describe('openai-compatible transcription adapter', () => {
 
   test('language and prompt are forwarded only when set', async () => {
     const capture = {}
-    await groq(envelope({ language: 'en', prompt: 'Coppersmith, mohdel' }), { fetch: okFetch({ text: '' }, capture) })
+    await groq(envelope({ language: 'en', prompt: 'Aldebaran, mohdel' }), { fetch: okFetch({ text: '' }, capture) })
     expect(capture.init.body.get('language')).toBe('en')
-    expect(capture.init.body.get('prompt')).toBe('Coppersmith, mohdel')
+    expect(capture.init.body.get('prompt')).toBe('Aldebaran, mohdel')
 
     const capture2 = {}
     await groq(envelope(), { fetch: okFetch({ text: '' }, capture2) })

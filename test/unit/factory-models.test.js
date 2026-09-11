@@ -68,3 +68,32 @@ describe('factory `models` / `configurations` overrides', () => {
     })
   })
 })
+
+describe('the fresh-install dead end', () => {
+  test('an empty catalog names both ways out, not just "not found"', async () => {
+    const { setCuratedCache } = await import('../../src/lib/curated-cache.js')
+    setCuratedCache({})
+    const mohdel = (await import('../../src/lib/index.js')).default
+    const mo = await mohdel({ logger: { } })
+    expect(() => mo.use('anthropic/claude-haiku-4-5')).toThrow(/catalog is empty/)
+    expect(() => mo.use('anthropic/claude-haiku-4-5')).toThrow(/mo curate <provider>/)
+    expect(() => mo.use('anthropic/claude-haiku-4-5')).toThrow(/mohdel\(\{ models/)
+  })
+
+  test('a populated catalog suggests near matches instead', async () => {
+    const { setCuratedCache } = await import('../../src/lib/curated-cache.js')
+    setCuratedCache({ 'anthropic/claude-haiku-4-5': { model: 'h', creator: 'anthropic', inputFormat: ['text'] } })
+    const mohdel = (await import('../../src/lib/index.js')).default
+    const mo = await mohdel({ logger: { } })
+    expect(() => mo.use('anthropic/claude-haiku-9')).toThrow(/Did you mean/)
+    expect(() => mo.use('anthropic/claude-haiku-9')).not.toThrow(/catalog is empty/)
+  })
+
+  test('catalog meta keys do not count as entries', async () => {
+    const { setCuratedCache } = await import('../../src/lib/curated-cache.js')
+    setCuratedCache({ $schema: 'x', _comment: 'y' })
+    const mohdel = (await import('../../src/lib/index.js')).default
+    const mo = await mohdel({ logger: { } })
+    expect(() => mo.use('openai/gpt-5')).toThrow(/catalog is empty/)
+  })
+})

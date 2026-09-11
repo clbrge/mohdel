@@ -17,6 +17,7 @@
  */
 
 import { getSpec } from './_catalog.js'
+import { capOutput } from './_output_cap.js'
 import { classifyProviderError } from './_errors.js'
 import { costFor } from './_pricing.js'
 import { cancelledDone } from './_cancelled.js'
@@ -391,6 +392,8 @@ function buildRequest (envelope, spec, config) {
   if (envelope.identifier) {
     args[config.identifierField || 'user'] = envelope.identifier
   }
+
+  args.max_tokens = capOutput(args.max_tokens, spec?.outputTokenLimit)
 
   return args
 }

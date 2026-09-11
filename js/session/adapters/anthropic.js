@@ -15,6 +15,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
+import { capOutput } from './_output_cap.js'
 
 import {
   STATUS_COMPLETED,
@@ -354,6 +355,8 @@ function buildRequest (envelope, conversation, system, conversationCacheTtl = nu
 
   applyCacheBreakpoints(request, conversationCacheTtl)
 
+  request.max_tokens = capOutput(request.max_tokens, outputTokenLimit)
+
   return request
 }
 
@@ -453,11 +456,11 @@ function splitPrompt (prompt) {
       }
     }
     if (m.role === 'system') {
-      // Translate spore-style cache markers ({text, cache: '5m'|'1h'}) into
-      // Anthropic's cache_control. Preserves the block boundary that spore
-      // chose; collapsing into a single string would silently disable
-      // caching even when the upstream tier composed the prompt with
-      // explicit breakpoints.
+      // Translate caller-supplied cache markers ({text, cache: '5m'|'1h'})
+      // into Anthropic's cache_control. Preserves the block boundary the
+      // caller chose; collapsing into a single string would silently disable
+      // caching even when the prompt was composed with explicit
+      // breakpoints.
       if (Array.isArray(m.content)) {
         for (const p of m.content) {
           if (!p?.text) continue

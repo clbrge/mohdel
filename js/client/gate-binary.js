@@ -32,6 +32,11 @@
  * @throws if no sub-package matches the current host
  */
 export async function resolveGateBinary () {
+  // Advertised by both error messages below, so it has to work: an explicit
+  // path wins over the prebuilt package on any platform.
+  const override = process.env.MOHDEL_GATE_BINARY
+  if (override) return override
+
   const pkg = platformPackageName()
   if (!pkg) {
     throw new Error(

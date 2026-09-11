@@ -170,7 +170,7 @@ const resolveProviderConfiguration = async (provider, providerName) => {
 // unchanged.
 const buildHandlers = ({ logger, onSuccess, onFailure }) => {
   const log = logger || silent
-  return {
+  const bag = {
     trace: typeof log.trace === 'function' ? (...args) => log.trace(...args) : noop,
     debug: typeof log.debug === 'function' ? (...args) => log.debug(...args) : noop,
     info: typeof log.info === 'function' ? (...args) => log.info(...args) : noop,
@@ -180,6 +180,13 @@ const buildHandlers = ({ logger, onSuccess, onFailure }) => {
     onSuccess,
     onFailure
   }
+  // The session scopes its logger with per-call context before using it. A
+  // logger that understands context gets it; one that does not keeps its
+  // levels rather than being replaced by the session's own default.
+  bag.withContext = typeof log.withContext === 'function'
+    ? (context) => buildHandlers({ logger: log.withContext(context), onSuccess, onFailure })
+    : () => bag
+  return bag
 }
 
 // @internal — exported under an underscore-prefixed alias for unit tests only.
@@ -335,7 +342,14 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
             if (!modelSpec) {
               const suggestions = suggestModels(modelId)
               let msg = `Model '${modelId}' not found in catalog.`
-              if (suggestions.length) {
+              // An empty catalog is a fresh install, not a typo. Saying only
+              // "not found" leaves a library caller with nowhere to go — the
+              // CLI prints these next steps, and nothing else did.
+              if (!Object.keys(catalog).some(k => !k.startsWith('$') && !k.startsWith('_'))) {
+                msg += ' The catalog is empty.' +
+                  '\n  Populate it:  mo curate <provider>   then   mo model instructions <provider>' +
+                  '\n  Or pass one:  mohdel({ models: { "<provider>/<model>": { … } } })'
+              } else if (suggestions.length) {
                 msg += ' Did you mean?\n' + suggestions.map(s => `  ${s.id}  ${s.label}`).join('\n')
               }
               throw new Error(msg)
@@ -581,7 +595,7 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
               configuration: effectiveConfiguration,
               prompt,
               options: sdkOptions
-            }, { cooldown, limiter: rateLimiter, resolveProviderLimits })
+            }, { cooldown, limiter: rateLimiter, resolveProviderLimits, logger: handlers })
 
             // End span with result attributes
             const endAttrs = {

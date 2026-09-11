@@ -1,5 +1,6 @@
 import * as clack from '@clack/prompts'
 import providers from './providers.js'
+import creators, { creatorFromModelId } from './creators.js'
 import {
   getAPIKey,
   getCuratedModels,
@@ -17,39 +18,20 @@ import { silent } from './logger.js'
 loadEnvFile('.env')
 loadDefaultEnv()
 
-export const initializeAPIs = async () => {
-  const api = {}
-  const providersWithKeys = []
-
-  for (const [name, config] of Object.entries(providers)) {
-    try {
-      if (config.catalog === false || !config.apiKeyEnv) {
-        continue
-      }
-
-      // Get API key using the common.js functionality
-      const apiKey = getAPIKey(config.apiKeyEnv)
-
-      if (!apiKey) {
-        console.warn(`Warning: No API key found for ${name} (env var: ${config.apiKeyEnv})`)
-        continue
-      }
-
-      // Create configuration
-      const sdkConfig = config.createConfiguration(apiKey)
-
-      const sdkPath = `./catalog/${config.sdk}.js`
-      const { default: API } = await import(sdkPath)
-
-      api[name] = API({ ...sdkConfig, baseURL: config.baseURL }, {}, silent)
-      providersWithKeys.push(name)
-    } catch (err) {
-      console.error(`Error initializing provider ${name} api:`, err.message)
-    }
-  }
-
-  return { api, providersWithKeys }
+// One provider's catalog client, for callers that don't need all of them.
+export const providerApi = async (name) => {
+  const config = providers[name]
+  if (!config || config.catalog === false || !config.apiKeyEnv) return null
+  const apiKey = getAPIKey(config.apiKeyEnv)
+  if (!apiKey) return null
+  const { default: API } = await import(`./catalog/${config.sdk}.js`)
+  return API({ ...config.createConfiguration(apiKey), baseURL: config.baseURL }, {}, silent)
 }
+
+export const providersWithKeys = () =>
+  Object.entries(providers)
+    .filter(([, c]) => c.catalog !== false && c.apiKeyEnv && getAPIKey(c.apiKeyEnv))
+    .map(([name]) => name)
 
 const getModelDetails = async (providerName, modelId, api) => {
   try {
@@ -183,33 +165,45 @@ const isModelTrackedInCollection = (collection, providerName, modelId) => {
   return false
 }
 
+// Which creators a provider serves is a fact of the catalog, not a property of
+// the provider: a router's line-up changes week to week. Offer the ones this
+// provider already serves first, then every creator mohdel has a label for.
+const creatorOptions = async (providerName, guess) => {
+  const catalog = await getCuratedModels()
+  const served = new Set()
+  for (const [key, spec] of catalogEntries(catalog)) {
+    if (spec.deprecated || !spec.creator) continue
+    if (key.split('/')[0] === providerName) served.add(spec.creator)
+  }
+  served.delete(guess)
+  const rest = Object.keys(creators).filter(c => c !== guess && !served.has(c)).sort()
+  return [
+    ...(guess ? [{ value: guess, label: guess, hint: 'matches the model id' }] : []),
+    ...[...served].sort().map(c => ({ value: c, label: c, hint: `already served by ${providerName}` })),
+    ...rest.map(c => ({ value: c, label: c })),
+    { value: '__other', label: 'Other… (enter a name)' }
+  ]
+}
+
 export const promptMissingFields = async (entry, curatedKey) => {
   if (!entry.creator) {
-    const [providerName] = curatedKey.split('/')
-    const providerConfig = providers[providerName]
-    const creatorsList = providerConfig?.creators || []
-
-    if (creatorsList.length === 1) {
-      entry.creator = creatorsList[0]
-    } else {
-      const creatorVal = await clack.select({
-        message: `Creator for ${curatedKey}:`,
-        options: [
-          ...creatorsList.map(c => ({ value: c, label: c })),
-          { value: '__other', label: 'Other… (enter a name)' }
-        ]
+    const [providerName, ...bare] = curatedKey.split('/')
+    const guess = creatorFromModelId(bare.join('/'))
+    const creatorVal = await clack.select({
+      message: `Creator for ${curatedKey}:`,
+      initialValue: guess || undefined,
+      options: await creatorOptions(providerName, guess)
+    })
+    if (clack.isCancel(creatorVal)) return entry
+    if (creatorVal === '__other') {
+      const custom = await clack.text({
+        message: `New creator name for ${curatedKey}:`,
+        validate: (v) => v?.trim() ? undefined : 'Creator is required'
       })
-      if (clack.isCancel(creatorVal)) return entry
-      if (creatorVal === '__other') {
-        const custom = await clack.text({
-          message: `New creator name for ${curatedKey}:`,
-          validate: (v) => v?.trim() ? undefined : 'Creator is required'
-        })
-        if (clack.isCancel(custom)) return entry
-        entry.creator = custom.trim()
-      } else {
-        entry.creator = creatorVal
-      }
+      if (clack.isCancel(custom)) return entry
+      entry.creator = custom.trim()
+    } else {
+      entry.creator = creatorVal
     }
   }
 
@@ -268,6 +262,38 @@ const filterUncurated = (models, providerName, curated, excluded) => {
   })
 }
 
+// A model list only carries prices when the provider publishes them
+// (`pricesFromApi`). Where it does, the ones that cost nothing are the whole
+// no-agent story, and a free-text search over hundreds of ids is no way to
+// find them.
+export const freeModels = (models) =>
+  models.filter(m => m.inputPrice === 0 && m.outputPrice === 0)
+
+const buildEntry = async (providerName, model, providerInstance) => {
+  const info = await getModelDetails(providerName, model.id, providerInstance)
+  const entry = stripUnknown({
+    provider: providerName,
+    sdk: providers[providerName].sdk,
+    model: model.id,
+    label: model.label || model.id,
+    ...(info || {})
+  })
+  // Upstream lists name the provider, never the creator. An OpenRouter id is
+  // `<vendor>/<model>`, so the vendor segment is the answer when the creator
+  // table does not recognize the name.
+  if (!entry.creator) entry.creator = creatorFromModelId(model.id) || model.id.split('/')[0]
+  return entry
+}
+
+export const addModels = async (providerName, providerInstance, models) => {
+  const curated = await getCuratedModels()
+  for (const model of models) {
+    curated[`${providerName}/${model.id}`] = await buildEntry(providerName, model, providerInstance)
+  }
+  await saveCuratedModels(curated)
+  return models.length
+}
+
 const searchModels = (models, query) => {
   const q = query.toLowerCase()
   const terms = q.split(/\s+/).filter(Boolean)
@@ -278,11 +304,31 @@ const searchModels = (models, query) => {
 }
 
 const processModelsSearchMode = async (providerName, providerInstance, allModels) => {
-  const curated = await getCuratedModels()
+  let curated = await getCuratedModels()
   const excluded = await getExcludedModels()
-  const uncurated = filterUncurated(allModels, providerName, curated, excluded)
+  let uncurated = filterUncurated(allModels, providerName, curated, excluded)
 
   clack.log.info(`${providerName}: ${allModels.length} models upstream, ${uncurated.length} uncurated`)
+
+  const free = freeModels(uncurated)
+  if (free.length) {
+    const chosen = await clack.multiselect({
+      message: `${free.length} model${free.length > 1 ? 's' : ''} cost${free.length > 1 ? '' : 's'} nothing. Add them?`,
+      options: free.map(m => ({ value: m.id, label: m.id, hint: m.label !== m.id ? m.label : undefined })),
+      initialValues: free.map(m => m.id),
+      maxItems: 12,
+      required: false
+    })
+    if (!clack.isCancel(chosen) && chosen.length) {
+      const picked = free.filter(m => chosen.includes(m.id))
+      const s = clack.spinner()
+      s.start(`Adding ${picked.length} model${picked.length > 1 ? 's' : ''}...`)
+      await addModels(providerName, providerInstance, picked)
+      s.stop(`Added ${picked.length} model${picked.length > 1 ? 's' : ''}, priced at $0`)
+      curated = await getCuratedModels()
+      uncurated = filterUncurated(allModels, providerName, curated, excluded)
+    }
+  }
 
   while (true) {
     const query = await clack.text({
@@ -451,27 +497,35 @@ const processModelsSelectMode = async (providerName, providerInstance, allModels
 export const processModels = async (providerName, providerInstance) => {
   if (!providerInstance.listModels) {
     console.log(`Provider ${providerName} does not support listModels`)
-    return
+    return false
   }
 
-  try {
-    const s = clack.spinner()
-    s.start(`Fetching model list from ${providerName}...`)
+  // The spinner is started outside the try so a failed fetch can stop it. It
+  // used to be created inside, and any error left it spinning forever.
+  const s = clack.spinner()
+  let spinning = true
+  const stop = (message) => {
+    if (!spinning) return
+    spinning = false
+    s.stop(message)
+  }
+  s.start(`Fetching model list from ${providerName}...`)
 
+  try {
     const models = await providerInstance.listModels()
     if (!Array.isArray(models)) {
-      s.stop(`${providerName} returned an invalid model list`)
-      return
+      stop(`${providerName} returned an invalid model list`)
+      return false
     }
 
     const curated = await getCuratedModels()
     const excluded = await getExcludedModels()
     const uncurated = filterUncurated(models, providerName, curated, excluded)
-    s.stop(`${providerName}: ${models.length} models upstream, ${uncurated.length} uncurated`)
+    stop(`${providerName}: ${models.length} models upstream, ${uncurated.length} uncurated`)
 
     if (!uncurated.length) {
       clack.log.info(`Nothing new to curate. To add a model not in the upstream catalog:\n  mo model add ${providerName}/<model-id>`)
-      return
+      return true
     }
 
     if (uncurated.length > SEARCH_MODE_THRESHOLD) {
@@ -479,7 +533,11 @@ export const processModels = async (providerName, providerInstance) => {
     } else {
       await processModelsSelectMode(providerName, providerInstance, models)
     }
+    return true
   } catch (err) {
-    console.error(`Error processing models for ${providerName}:`, err.message)
+    stop(`${providerName}: could not fetch the model list`)
+    console.error(err.message)
+    console.error(`Check the key with "mo doctor", or reset it with "mo provider setup ${providerName}".`)
+    return false
   }
 }

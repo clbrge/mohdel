@@ -4,6 +4,268 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.0.0] — Feat: agent-authored catalog / Feat: free models in one step / Security: session environment cleared
+
+### Stability
+
+`1.0.0` fixes the public API under SemVer:
+
+- the library API — `mohdel()`, `answer()`, the factory and the client;
+- the `CallEnvelope`, `Event` and `AnswerResult` shapes, and the single
+  `MohdelError` type;
+- the NDJSON wire protocol between client, gate and session, frozen since
+  `0.90.0` and enforced by the cross-language parity tests.
+
+Catalog entries, the `curated.json` field set and the JSON Schema are additive.
+CLI flags are deprecated before removal.
+
+### Security
+
+- The session subprocess starts from `env_clear()` and receives only `PATH`,
+  `HOME`, `TMPDIR`, locale, Node runtime and TLS/proxy settings, mohdel's own
+  dials, the OpenRouter attribution headers, and `OTEL_*`. Every `*_API_SK` is
+  dropped at the process boundary; the session takes its key from the envelope.
+  `OTEL_EXPORTER_OTLP_HEADERS` is forwarded and commonly carries a credential.
+
+### Added
+
+- `mo model instructions [provider]` — a brief for a coding agent editing the
+  catalog: field table generated from the validator, meanings from
+  `config/curated.schema.json`, the provider's reference links, an existing
+  entry for shape, and the review commands. At a terminal it writes
+  `mohdel-brief.md` and prints the launch line; redirected or piped, the brief
+  goes to stdout and the recipe to stderr. `--print` forces stdout.
+  `--init-local` scaffolds `catalog.local.json` and refuses to overwrite one.
+- `mo model check --entry <file|->` — validates candidate entries in
+  curated.json shape and reports what they would change against the catalog,
+  including every field a candidate would remove. Never writes; exits non-zero
+  while an error stands. `--json` for the machine-readable form.
+- `mo model apply <file|->` — writes reviewed entries after printing the diff.
+  Refuses on a validation error, and refuses unconfirmed with no terminal to
+  prompt on unless `--yes`. Offers to delete the candidate once applied; `--rm`
+  deletes without asking; a candidate that failed validation is kept.
+- `mo provider models <provider> [--json]` — the model ids a key can reach,
+  read from the provider and written nowhere.
+- `mo completion bash` — completes model ids, provider names, `mo model set`
+  field names, tags, and commands and their aliases, resolving an alias the way
+  the router does. Deprecated ids excluded. Backed by a hidden `mo __complete`
+  routed before any other import: about 90ms per tab press.
+- Free models in one step. Where a provider publishes prices in its own model
+  list (`pricesFromApi`, which is OpenRouter), first-run setup offers *Add the
+  free models (N)* as its first option and writes the entries without
+  prompting, creator derived from the id. `mo curate` offers the same set as a
+  preselected multiselect ahead of its search prompt. `listModels()` carries
+  `inputPrice` / `outputPrice` where the provider publishes them.
+- Local conventions: `~/.config/mohdel/catalog.local.json` declares the custom
+  fields and tags an installation adds to its own catalog. Absent by default.
+  `fields` are type-checked by `mo check` and no longer reported as unknown;
+  `tags[].requires` rejects an entry carrying a tag without the fields that tag
+  needs, at a per-tag `severity` of `error` (default) or `warn`; `adding` and
+  `notes` are prose. All of it renders into the brief, with a rule against
+  guessing a `measured` value or applying a tag whose requirements are unmet.
+  Values stay in `curated.json`; the file only describes them.
+- TypeScript declarations ship with the package: generated from the source's
+  JSDoc by `npm run build:types`, emitted beside each module, wired into
+  `prerelease`, and listed in `files`. Every `exports` subpath carries a `types`
+  condition. `js/core` types exactly (6 `any` across 1019 lines, none in
+  `js/client`); the factory's Proxy surface stays loose.
+- `mo default <model>` sets the default without the picker.
+- `mo ask -q` / `--quiet` — nothing on stderr but failures.
+- First-run `mo` asks which coding agent you use and stores it in
+  `~/.config/mohdel/default.json`. `mo --help`, `mo model instructions` and the
+  hand-off name that agent; one mohdel has no entry for — anything taking a
+  prompt as one argument — is accepted by name. `mo doctor` shows the choice.
+- The hand-off recipe in `mo --help`, `mo model --help` and
+  `mo model instructions`, with a launch line for Claude Code, Codex CLI,
+  Gemini CLI, opencode and Cursor CLI (Aider in the long form), marking those
+  found on `PATH`. Launch forms are the vendor-documented ones for opening a
+  session on an initial prompt. It states that the agent must be able to fetch
+  a web page, and the brief tells an agent without web access to stop rather
+  than fill the entry in. Where nothing on `PATH` looks like an agent, mohdel
+  names three that install from npm.
+- The brief states which providers have a free tier and that the paid rates are
+  what to record. With an empty catalog it gains a section telling the agent to
+  read `mo provider models`, price from the docs page, and propose a starter set
+  for confirmation. Its workflow opens with `mo provider models <provider>
+  --json`.
+- `references` on each provider in `src/lib/providers.js` — `pricing`, `models`
+  and `rateLimits` doc URLs. `local` and `xiaomi` ship none.
+- Catalog fields `source` (URL the numbers were read from) and `sourcedAt`
+  (`YYYY-MM-DD`).
+- `src/lib/catalog-review.js` — per-entry review, entry diffing and candidate
+  parsing, shared by `mo check` and `mo model check --entry`.
+- `src/lib/assistants.js`, `src/lib/local-conventions.js`, `src/cli/local.js`,
+  `src/lib/provider-info.js` (moved from `src/cli/onboard.js`), `buildBrief()`
+  exported from `src/cli/instructions.js`, and `tildePath` / `portablePath` in
+  `src/lib/common.js`. A `catalog.local.json` that exists but does not parse
+  stops the command instead of reading as "no conventions declared".
+
+### Changed
+
+- One name for the agent that writes catalog entries: a coding agent.
+  `docs/GLOSSARY.md` defines *Coding agent*, *Brief*, *Candidate file* and
+  `catalog.local.json`.
+- Adapters load one at a time. `run()` and `runImage()` resolve an adapter by
+  dynamic import keyed on the provider name, checked against a known list
+  first. Catalog validation reads speed lanes from `adapters/_registry.js`, and
+  `isImageProvider` moved there. `mo ls` 455ms → 117ms; importing the factory
+  350ms → 45ms. The `adapters` map exported from `mohdel/session` is unchanged.
+- `outputBudget` is capped to the model's `outputTokenLimit` before the provider
+  call, on every adapter, after any thinking headroom the adapter adds. A spec
+  with no `outputTokenLimit` is sent as given.
+- `mo model add` and `mo curate` preselect a creator guessed from the model id
+  — vendor namespace, then family prefix, matching only on a token boundary. An
+  unrecognised id offers no default. 46 of 46 correct on a 130-model catalog.
+  `creators.js` entries carry `prefixes`; the module exports
+  `creatorFromModelId(bare)`.
+- `mo model add` no longer auto-assigns a creator from a provider record. The
+  prompt always appears, offering the creators that provider already serves in
+  your catalog first.
+- Bare `mo` on a configured install prints the providers, the catalog size and
+  how many entries have no price, then the commands that follow from that
+  state. It also notices a brief already in the working directory and offers
+  the launch line.
+- First-run `mo` asks how to fill the catalog once, instead of offering curate
+  and the brief as separate prompts. The hand path names what it did not do.
+- `mo doctor` names the count of unset provider keys rather than a row each;
+  `mo doctor --all` restores the list.
+- `mo curate <provider>` builds only the requested provider's client, and an
+  absent key for another provider is no longer announced.
+- `mo ask` carries the resolved model id on a stderr spinner that clears when
+  the answer arrives. Without a terminal the id prints only when it differs
+  from what was typed. `--json` prints neither, and stdout is untouched.
+- The brief is `mohdel-brief.md` and the candidate `mohdel-candidate.json`. A
+  brief mohdel wrote before is replaced; a file it did not write is left alone
+  and the brief goes to `mohdel-brief-2.md`.
+- The sentence pasted to an agent names the provider instead of a literal
+  `<model>` placeholder.
+- `mo curate` and `mo model add` end by naming the provider's pricing page and
+  `mo model instructions <provider>`.
+- `config/curated.schema.json` drops `tokenizerHeadroom`, which no code reads;
+  adds `source`, `sourcedAt`, `inputCeilingMargin`,
+  `reasoningContentPlaceholder` and `outputCapStrategy`; every field the
+  validator knows carries a description.
+- `outputCapStrategy` is a validated catalog field (`'error' | 'accept'`),
+  overriding the provider-level default per model. Informational, published for
+  embedders that build their own provider requests; documented in
+  `ARCHITECTURE.md` and `docs/CATALOG.md`.
+- Removed: `js/session/adapters/image/index.js` and `getImageAdapter`;
+  `exampleAgent` from `src/lib/assistants.js`; `initializeAPIs` from
+  `src/lib/select.js`, replaced by `providerApi(name)` and
+  `providersWithKeys()`. None was a package export.
+- Removed: `creators` on provider records in `src/lib/providers.js`, part of the
+  `mohdel/providers` export. It drifted on 5 of 14 providers and duplicated a
+  fact the catalog holds.
+
+### Fixed
+
+- `mo provider --help` and `mo creator --help` printed an error instead of
+  help, and `mo default --help` opened the interactive picker. All three print
+  a help screen.
+- The environment block in `mo --help` listed 11 of 13 provider keys. It is
+  generated from the provider table now, so `QWEN_API_SK`, `XIAOMI_API_SK` and
+  `MOHDEL_LOCAL_API_SK` appear. The npm description had the same drift and said
+  "11 providers".
+- `mo model --help` listed `model check` twice, the second row advertising a
+  `--local` flag that does not exist and an upstream-drift check removed in
+  0.90. `mo ask --help` omitted the `xhigh` and `max` effort levels.
+- `resolveGateBinary()` and `MOHDEL_GATE_BINARY` were advertised and unwired.
+  The prebuilt binary is on `PATH` as `mohdel-thin-gate` after an install;
+  `INTEGRATION.md` said to build it with cargo. `resolveGateBinary()` is
+  exported from `mohdel/client`, and `MOHDEL_GATE_BINARY` overrides the
+  resolved path.
+- The `logger` passed to `mohdel()` never reached the session runtime: the
+  bridge forwarded none, so `run()` fell back to its module default at `warn`
+  and wrote pino-shape JSON to stderr. `buildHandlers` exposes `withContext`
+  and the factory passes the handlers through. A logger implementing
+  `withContext` receives the per-call context; one that does not keeps its own
+  levels. `runImage` and `runTranscription` log nothing and were unaffected.
+- `mo default` set a model nothing used: `mo ask` required the id as its first
+  argument. `mo ask "…"` uses the default when the first argument carries no
+  provider segment; an explicit id wins. The library, session and gate never
+  read it, and a test asserts that.
+- `mo default` replaced the whole config file, erasing the stored coding-agent
+  choice. It merges now, and no longer writes an `apiKeyInfo` note nothing read.
+- `mo curate` hung forever when the model list could not be fetched — the
+  spinner was created inside the `try`. It stops the spinner, prints the
+  provider's message with the two commands that check a key, and exits 1.
+  `processModels` reports failure.
+- `mo model add`: the upstream metadata lookup imported `../lib/sdk/<sdk>.js`,
+  which does not exist, inside a `catch {}`. It imports `../lib/catalog/` and
+  reports a failed lookup.
+- `--json` reached no delegated `model` subcommand: the router consumed the
+  flag before dispatching, so `mo check --json`, `mo model rank --json`,
+  `mo model bench --json` and `mo model backup --json` printed human output.
+- `mo ask --json` no longer writes the usage summary to stderr; the numbers are
+  in the payload. `mo ask` runs no spinner under `--verbose`.
+- `mo doctor` printed warnings only when there were no errors. Both print now.
+  An empty catalog is a warning rather than a tick, and config paths render as
+  `~/…`.
+- A library caller on a fresh install got `Model '…' not found in catalog.` and
+  nothing else. An empty catalog names both ways out: `mo curate` /
+  `mo model instructions`, or `mohdel({ models })`.
+- `mo provider list` built its list from the catalog, so a fresh install
+  reported no providers while telling the user to run `mo curate <name>`. It
+  lists every provider mohdel can route to, with model counts and key status.
+- `mo ls`, `mo creator list` and `mo tag list` printed nothing on an empty
+  catalog. They name the state and the two commands that fix it.
+- `mo ask` on a model not in the catalog names `mo model instructions
+  <provider>` alongside the two manual ways to add it.
+- Xiaomi was missing from `PROVIDER_INFO`, so first-run `mo` offered 12 of the
+  13 providers that take a key.
+- The free-tier flags in first-run setup were wrong both ways: OpenRouter has a
+  no-card free tier and was marked paid; Cerebras is $5 of expiring starter
+  credit and was marked free.
+- Provider descriptions in first-run setup named model generations and had gone
+  stale. They describe capability and commercial terms, and a test rejects any
+  digit in a description.
+- `inputCeilingMargin` is a known catalog field. `effectiveContextLimit()`
+  always subtracted it from `contextTokenLimit`; it was in neither the validator
+  nor the JSON Schema.
+- `reasoningContentPlaceholder` is a known catalog field. The chat-completions
+  adapter always read it off the entry; it was in neither the validator nor the
+  JSON Schema, so `mo check` called it unknown.
+- `mo check`: a catalog key carrying a `:effort` or `@speed` suffix is an error
+  — those are call-time suffixes, never entry keys.
+- `mo check`: an `inputFormat` entry outside `text`, `image`, `video`, `audio`
+  is an error. `docs/CATALOG.md` claimed the envelope validator rejected it;
+  nothing did.
+
+### Docs
+
+- `README.md`: four-line opening fence; cost bullet answers the objection it
+  raises; LiteLLM comparison covers central price map versus your own catalog;
+  *What mohdel is not* gains "not an AI wrapper"; two dead anchors repointed.
+- `CONTRIBUTING.md`: how providers and creators are named, and why neither
+  records the other.
+- `docs/CATALOG.md`: *Editing the catalog* and *Editing with a coding agent* move
+  above the field reference.
+
+### Chore
+
+- `@anthropic-ai/sdk` `^0.123.0` → `^0.125.0`
+- `@google/genai` `^2.21.0` → `^2.22.0`
+- `openai` `^7.9.0` → `^7.15.0`
+- `@clack/prompts` `^1.7.0` → `^1.8.8`
+- `lint-staged` `^17.4.1` → `^17.5.1`
+- `typescript` `^7.0.2` added, for the declaration build
+
+### Tests
+
+- `test/unit/onboard-env-write.test.js` — every keyed provider is offered by
+  first-run setup, no description carries a version number, every entry has the
+  fields the picker renders.
+- `test/unit/session-output-cap.test.js` — the cap on all three request
+  builders, thinking headroom not pushing a capped budget back over the limit,
+  and a spec without `outputTokenLimit` passing through.
+- `test/unit/catalog-review.test.js` — entry review, catalog walk, entry
+  diffing, candidate parsing and classification, and that the validator's
+  fields and the JSON Schema's describe the same set.
+- `test/unit/cli-instructions.test.js` — brief content and per-provider
+  narrowing, provider link coverage, and the hand-off recipe on stderr.
+- `test/unit/curate-free.test.js`, `test/unit/public-claims.test.js`,
+  `test/unit/package-exports.test.js`.
+
 ## [0.125.0] — Fix: abort on OpenAI-compatible adapters ends with the cancelled `done` / Chore: bump dependencies
 
 ### Fixed

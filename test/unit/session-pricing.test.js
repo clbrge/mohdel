@@ -265,7 +265,7 @@ describe('setCatalog / getSpec / setPricing / costFor', () => {
     expect(costFor({ model: 'unknown' }, { inputTokens: 100, outputTokens: 200 })).toBe(0)
   })
 
-  // Regression for the model-id unification: when the cs-core/mohdel
+  // Regression for the model-id unification: when the mohdel
   // catalog id ("anthropic/claude-haiku-4-5") differs from the SDK
   // wire string stored in spec.model ("claude-haiku-4-5-20251001"),
   // costFor must look up by the catalog key (the id), not by

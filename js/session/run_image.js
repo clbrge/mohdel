@@ -13,7 +13,7 @@
  * @module session/run_image
  */
 
-import { getImageAdapter } from './adapters/image/index.js'
+import { IMAGE_ADAPTER_NAMES } from './adapters/_registry.js'
 import { classifyProviderError } from './adapters/_errors.js'
 import { providerOf } from '#core/model-id.js'
 
@@ -31,10 +31,19 @@ import { providerOf } from '#core/model-id.js'
  *   | {ok: false, error: import('#core/errors.js').TypedError}
  * >}
  */
-export async function runImage (envelope, { resolveAdapter = getImageAdapter, spec } = {}) {
+// Loaded per provider rather than as a registry: the image adapters pull the
+// OpenAI SDK, which a text-only caller never needs. Checked against the known
+// list first — the name comes off the envelope.
+const loadImageAdapter = async (provider) => {
+  if (!IMAGE_ADAPTER_NAMES.includes(provider)) throw new Error(`no image adapter for provider: ${provider}`)
+  const module = await import(`./adapters/image/${provider}.js`)
+  return module[`${provider}Image`]
+}
+
+export async function runImage (envelope, { resolveAdapter = loadImageAdapter, spec } = {}) {
   let adapter
   try {
-    adapter = resolveAdapter(providerOf(envelope.model))
+    adapter = await resolveAdapter(providerOf(envelope.model))
   } catch (e) {
     return {
       ok: false,

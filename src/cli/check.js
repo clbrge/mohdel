@@ -1,104 +1,33 @@
 import { label, err, warn, ok } from './colors.js'
-import providers from '../lib/providers.js'
-import { validate, isValidTag } from '../lib/schema.js'
-import { adapters } from '../../js/session/adapters/index.js'
-import { getCuratedModels, loadDefaultEnv, catalogEntries, catalogValues } from '../lib/common.js'
-
-// --- Local validation ---
-
-const checkLocal = (curated) => {
-  const errors = []
-  const warnings = []
-  const knownProviders = new Set(Object.keys(providers))
-
-  for (const [key, spec] of catalogEntries(curated)) {
-    const [keyProvider] = key.split('/')
-
-    if (spec.deprecated) {
-      if (!curated[spec.deprecated]) {
-        errors.push(`${key}: deprecated target '${spec.deprecated}' not in curated`)
-      }
-      continue
-    }
-
-    for (const issue of validate(spec, key)) {
-      if (issue.severity === 'error') errors.push(`${key}: ${issue.field} — ${issue.message}`)
-      else warnings.push(`${key}: ${issue.field} — ${issue.message}`)
-    }
-
-    if (!knownProviders.has(keyProvider)) {
-      errors.push(`${key}: provider '${keyProvider}' not in providers.js`)
-    }
-    if (spec.provider && spec.provider !== keyProvider) {
-      errors.push(`${key}: spec.provider '${spec.provider}' doesn't match key prefix '${keyProvider}'`)
-    }
-
-    const providerConfig = providers[keyProvider]
-    if (providerConfig && spec.sdk && spec.sdk !== providerConfig.sdk) {
-      errors.push(`${key}: spec.sdk '${spec.sdk}' doesn't match provider sdk '${providerConfig.sdk}'`)
-    }
-
-    if (!spec.label) warnings.push(`${key}: missing label`)
-
-    for (const priceField of ['inputPrice', 'outputPrice', 'thinkingPrice']) {
-      const val = spec[priceField]
-      if (val != null && typeof val === 'object' && val.default == null) {
-        errors.push(`${key}: ${priceField} is tiered but missing 'default' key`)
-      }
-    }
-
-    if (spec.thinkingEffortLevels && !spec.defaultThinkingEffort) {
-      warnings.push(`${key}: has thinkingEffortLevels but no defaultThinkingEffort`)
-    }
-
-    const lanes = adapters[keyProvider]?.speedLanes
-    for (const [lane, overlay] of Object.entries(spec.speeds || {})) {
-      if (!lanes?.has(lane)) {
-        const detail = lanes ? `accepts: ${[...lanes].join(', ')}` : 'implements no speed lanes'
-        errors.push(`${key}: speeds.${lane} — provider '${keyProvider}' ${detail}; calls on that lane would fail at dispatch`)
-      }
-      for (const priceField of ['inputPrice', 'outputPrice', 'thinkingPrice']) {
-        const val = overlay[priceField]
-        if (val != null && typeof val === 'object' && val.default == null) {
-          errors.push(`${key}: speeds.${lane}.${priceField} is tiered but missing 'default' key`)
-        }
-      }
-      const priced = ['inputPrice', 'outputPrice'].some(f => overlay[f] != null)
-      if (!priced) {
-        warnings.push(`${key}: speeds.${lane} restates no prices — the lane will bill at base rates`)
-      }
-    }
-
-    if (Array.isArray(spec.tags)) {
-      for (const t of spec.tags) {
-        if (!isValidTag(t)) warnings.push(`${key}: invalid tag "${t}" — must match /^[a-zA-Z][a-zA-Z0-9._-]{0,31}$/`)
-      }
-    }
-  }
-
-  return { errors, warnings }
-}
+import { reviewCatalog } from '../lib/catalog-review.js'
+import { localConventionsOrExit } from './local.js'
+import { getCuratedModels, loadDefaultEnv, catalogValues } from '../lib/common.js'
 
 // --- CLI ---
 
 export async function runCheck (args) {
   if (args.includes('-h') || args.includes('--help')) {
-    console.log(`mohdel model check — validate curated catalog
+    console.log(`mohdel model check — validate the catalog
 
 Usage:
   model check [options]
+  model check --entry <file|->   Validate entries not yet in the catalog
 
 Options:
   --json               Output as JSON
+  --entry <file|->     Read entries in curated.json shape and report what they
+                       would change, without writing. 'mo model apply' writes.
 
 Checks:
   Schema types, required fields, deprecated targets, provider/sdk
-  consistency, tiered pricing, thinking config.
-
-Note: 0.90 drops the upstream-drift check that piggybacked on the
-legacy per-provider SDK factory. If you need upstream drift
-detection, file an issue — it'll be rebuilt on the /session stack.`)
+  consistency, tiered pricing, thinking config.`)
     process.exit(0)
+  }
+
+  if (args.includes('--entry')) {
+    const { runCheckEntry } = await import('./entry.js')
+    await runCheckEntry(args)
+    return
   }
 
   loadDefaultEnv()
@@ -114,7 +43,7 @@ detection, file an issue — it'll be rebuilt on the /session stack.`)
     console.log(`${label('Catalog:')} ${active} active, ${deprecated} deprecated\n`)
   }
 
-  const { errors, warnings: localWarnings } = checkLocal(curated)
+  const { errors, warnings: localWarnings } = reviewCatalog(curated, { local: await localConventionsOrExit() })
 
   if (!json) {
     if (errors.length) {

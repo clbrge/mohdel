@@ -1,0 +1,21 @@
+{
+  "//defaults": "strict, types and noUncheckedSideEffectImports are pinned because TypeScript 7 changed their defaults (verified identical output on 6.0.3 and 7.0.2) — declaration emit from unchecked JSDoc should not depend on the compiler's era.",
+  "//": "Declaration-only build. The source is JavaScript with JSDoc; this emits .d.ts beside each file. That placement is load-bearing, not cosmetic: the emitted declarations reference each other through the `#core/*` subpath imports, which resolve to `./js/core/*.js`, so a consumer finds their types only at `js/core/*.d.ts`. Emitting to a separate `types/` tree leaves every such reference unresolvable, and the near-universal `skipLibCheck: true` turns that into a silent `any` rather than an error. `npm run build:types` deletes the previous output first, because on a second run tsc resolves those same specifiers to the stale .d.ts and refuses to overwrite its own input (TS5055). Run by `npm run build:types`, and by `prerelease` so a publish can never ship stale declarations.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "skipLibCheck": true,
+    "rootDir": ".",
+    "outDir": ".",
+    "strict": false,
+    "types": [],
+    "noUncheckedSideEffectImports": false
+  },
+  "include": ["src/lib/**/*.js", "js/**/*.js"],
+  "exclude": ["node_modules", "test", "bench", "probes", "clients", "target"]
+}

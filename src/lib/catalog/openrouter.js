@@ -21,7 +21,12 @@ export default (sdkConfig) => {
     return cache
   }
   return {
-    listModels: async () => (await load()).map(m => ({ id: m.id, label: m.name || m.id })),
+    listModels: async () => (await load()).map(m => ({
+      id: m.id,
+      label: m.name || m.id,
+      inputPrice: toPerMillion(m.pricing?.prompt),
+      outputPrice: toPerMillion(m.pricing?.completion)
+    })),
     getModelInfo: async (id) => {
       const m = (await load()).find(x => x.id === id)
       if (!m) return null

@@ -32,8 +32,24 @@ For callers that want fault isolation, a cross-process shared pool, or non-Node 
 
 ## Running thin-gate
 
+Installing mohdel from npm puts the prebuilt gate on your `PATH` — the
+per-platform binary ships as an optional dependency, so there is nothing to
+compile:
+
 ```bash
-# Release binary (recommended)
+mohdel-thin-gate /tmp/mohdel-data.sock /tmp/mohdel-admin.sock ./js/session/bin.js
+```
+
+To spawn it from your own code, `resolveGateBinary()` from `mohdel/client`
+returns its absolute path, or throws naming the reason if the optional
+dependency was skipped. `MOHDEL_GATE_BINARY` overrides it with a path of your
+own.
+
+Building from source is for development, or a platform with no prebuilt
+binary yet:
+
+```bash
+# From a checkout
 cargo build --release
 ./target/release/mohdel-thin-gate \
   /tmp/mohdel-data.sock \
@@ -432,7 +448,7 @@ model.answer({
 })
 ```
 
-Tool histories via legacy shape:
+Tool histories:
 
 ```js
 model.answer({
@@ -597,9 +613,9 @@ naming one the provider's adapter cannot emit throws
 `SESSION_SPEED_NOT_IMPLEMENTED`. Both are raised before the provider call, so
 a rejected lane costs nothing.
 
-The strictness is deliberate: some models accept an unsupported lane, run at
-standard speed, and bill standard rates, which is invisible from the request
-side. Letting that through would bill every such call at the lane's rates.
+Some models accept an unsupported lane, run at standard speed, and bill
+standard rates, which is invisible from the request side. Letting that through
+would bill every such call at the lane's rates.
 
 Where the provider reports which tier it served, mohdel prices the call from
 that rather than from the request, and `response.servedSpeed` carries it —
@@ -667,7 +683,7 @@ const result = await whisper.transcribe(
   { fileUri: 'file:///absolute/path/to/meeting.mp3', mimeType: 'audio/mpeg' },
   {
     language: 'fr',                  // optional ISO-639-1 hint
-    prompt: 'Coppersmith, mohdel'    // optional spelling/context hint
+    prompt: 'Aldebaran, mohdel'      // optional spelling/context hint
   }
 )
 

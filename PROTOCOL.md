@@ -1,6 +1,8 @@
 # Mohdel Wire Protocol
 
-**Version:** 0.90. Frozen on release; additive extensions only.
+**Version:** 0.90. Frozen on release; additive extensions only. This is the
+wire version and it moves independently of the npm package version — a 1.x
+package speaks wire 0.90.
 **Audience:** implementors of mohdel session subprocesses and
 cross-language callers hitting `thin-gate` directly.
 **Authority:** JS types in `js/core/*.js` and Rust types in
@@ -66,8 +68,8 @@ interface CallEnvelope {
                                    // with optional `:<effort>` and
                                    // `@<speed>` suffixes, in that order
                                    // (e.g. `"anthropic/claude-opus-4:max@fast"`).
-                                   // Same shape as `mo model list` and
-                                   // cs-core's catalog keys. The gate
+                                   // Same shape as `mo model list`.
+                                   // The gate
                                    // splits the provider prefix server-
                                    // side (see §3.1.1). Callers MUST NOT
                                    // send a separate `provider` field —
@@ -190,7 +192,7 @@ convenience so factory and wire callers see identical ergonomics.
 
 #### Operational note — auth.key lifetime asymmetry
 
-By design, `auth.key` crosses the gate → session boundary as plain
+`auth.key` crosses the gate → session boundary as plain
 JSON on stdin; the session needs it in cleartext to construct the
 provider SDK client. On the Rust side, `SecretString` zeroizes on
 `Drop`; V8 has no string-zeroize primitive, so once in the session

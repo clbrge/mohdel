@@ -365,7 +365,7 @@ describe('factory bridge — runAnswer', () => {
     })
   })
 
-  test('canonical tool role preserves toolCallId (spore emits tool, not tool_result)', async () => {
+  test('canonical tool role preserves toolCallId (callers emit tool, not tool_result)', async () => {
     let captured
     const capturing = async function * (env) {
       captured = env
@@ -658,6 +658,41 @@ describe('compat bridge — configuration normalization', () => {
       expect(e.detail).toContain('baseURL')
       expect(e.detail).toContain('organization')
       expect(e.detail).toContain('timeout')
+    }
+  })
+})
+
+describe('the caller-supplied logger reaches the session', () => {
+  test('handlers carry withContext so the session can scope them', async () => {
+    const { _buildHandlersForTests } = await import('../../src/lib/index.js')
+    const seen = []
+    const bag = _buildHandlersForTests({ logger: { warn: (...a) => seen.push(a) } })
+    expect(typeof bag.withContext).toBe('function')
+    bag.withContext({ callId: 'c1' }).warn({ err: 'x' }, 'boom')
+    expect(seen).toEqual([[{ err: 'x' }, 'boom']])
+  })
+
+  test('a logger that understands context gets it; one that does not still logs', async () => {
+    const { _buildHandlersForTests } = await import('../../src/lib/index.js')
+    const contexts = []
+    const aware = {
+      warn: () => {},
+      withContext: (ctx) => { contexts.push(ctx); return { warn: () => {} } }
+    }
+    _buildHandlersForTests({ logger: aware }).withContext({ callId: 'c1' })
+    expect(contexts).toEqual([{ callId: 'c1' }])
+
+    const plain = { warn: () => {} }
+    const bag = _buildHandlersForTests({ logger: plain })
+    expect(bag.withContext({ callId: 'c1' })).toBe(bag)
+  })
+
+  test('a silent logger stays silent once scoped', async () => {
+    const { _buildHandlersForTests } = await import('../../src/lib/index.js')
+    const { silent } = await import('../../src/lib/logger.js')
+    const scoped = _buildHandlersForTests({ logger: silent }).withContext({ callId: 'c1' })
+    for (const level of ['trace', 'debug', 'info', 'warn', 'error', 'fatal']) {
+      expect(typeof scoped[level]).toBe('function')
     }
   })
 })

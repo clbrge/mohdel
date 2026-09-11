@@ -15,6 +15,13 @@ const validateSpeeds = (speeds) => {
   return null
 }
 
+const INPUT_FORMATS = ['text', 'image', 'video', 'audio']
+
+const validateInputFormat = (formats) => {
+  const unknown = formats.filter(f => !INPUT_FORMATS.includes(f))
+  return unknown.length ? `unknown modality '${unknown.join("', '")}' (allowed: ${INPUT_FORMATS.join(', ')})` : null
+}
+
 const fieldDefs = {
   model: { type: 'string', required: true },
   baseURL: { type: 'string' },
@@ -32,6 +39,7 @@ const fieldDefs = {
   cacheWritePrice: { type: 'number', altType: 'object' },
   cacheWrite1hPrice: { type: 'number', altType: 'object' },
   contextTokenLimit: { type: 'number' },
+  inputCeilingMargin: { type: 'number' },
   outputTokenLimit: { type: 'number' },
   thinkingTokenLimit: { type: 'number' },
   thinkingEffortLevels: { type: 'object', nullable: true, default: null },
@@ -42,7 +50,7 @@ const fieldDefs = {
   replaces: { type: 'array', itemType: 'string', default: [] },
   leaderboard: { type: 'array', itemType: 'number', validate: (v) => Array.isArray(v) && v.length === 3 ? null : 'must be [intelligence, speed, latency]' },
   leaderboardNote: { type: 'string' },
-  inputFormat: { type: 'array', itemType: 'string', required: true, default: ['text'] },
+  inputFormat: { type: 'array', itemType: 'string', required: true, default: ['text'], validate: validateInputFormat, severity: 'error' },
   version: { type: 'string' },
   createdAt: { type: 'string' },
   created: { type: 'number' },
@@ -55,7 +63,11 @@ const fieldDefs = {
   rpmLimit: { type: 'number' },
   tpmLimit: { type: 'number' },
   rateLimitScope: { type: 'string', validate: (v) => ['model', 'provider'].includes(v) ? null : 'must be "model" or "provider"' },
-  supportsTools: { type: 'boolean' }
+  outputCapStrategy: { type: 'string', validate: (v) => ['error', 'accept'].includes(v) ? null : "must be 'error' or 'accept'" },
+  supportsTools: { type: 'boolean' },
+  reasoningContentPlaceholder: { type: 'string' },
+  source: { type: 'string' },
+  sourcedAt: { type: 'string' }
 }
 
 const knownFields = new Set(Object.keys(fieldDefs))
@@ -106,7 +118,7 @@ const validate = (entry, curatedKey, { strict = false } = {}) => {
     if (def.validate) {
       const msg = def.validate(value)
       if (msg) {
-        issues.push({ field, message: msg, severity: 'warn' })
+        issues.push({ field, message: msg, severity: def.severity || 'warn' })
       }
     }
 

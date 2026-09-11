@@ -3,7 +3,7 @@ import { label, meta, ok, warn, err, inactive } from './colors.js'
 import providers from '../lib/providers.js'
 import { validate, isValidTag } from '../lib/schema.js'
 import {
-  CONFIG_DIR, CURATED_PATH, CONFIG_PATH, ENV_PATH,
+  CONFIG_DIR, CURATED_PATH, CONFIG_PATH, ENV_PATH, tildePath,
   getCuratedModels, getConfig, loadDefaultEnv, getAPIKey, catalogEntries
 } from '../lib/common.js'
 
@@ -11,11 +11,15 @@ const row = (status, name, detail = '') =>
   `  ${status}  ${name.padEnd(20)} ${meta(detail)}`
 
 export async function runDoctor (args) {
+  const all = args.includes('--all')
   if (args.includes('-h') || args.includes('--help')) {
     console.log(`mohdel doctor — check that your install is wired up
 
 Usage:
-  mo doctor [--json]
+  mo doctor [--all] [--json]
+
+Options:
+  --all      List every provider's API key variable, set or not
 
 What it checks:
   - Config directory and environment file exist
@@ -45,9 +49,10 @@ Exit code:
 
   // 1. Config dir + env file
   report.configDir.ok = existsSync(CONFIG_DIR)
+  report.assistant = (await getConfig()).assistant || null
   report.envFile.ok = existsSync(ENV_PATH)
   if (!report.configDir.ok) report.warnings.push('config directory does not exist (will be created on first save)')
-  if (!report.envFile.ok) report.warnings.push(`no ${ENV_PATH} — set API keys there or via shell env`)
+  if (!report.envFile.ok) report.warnings.push(`no ${tildePath(ENV_PATH)} — set API keys there or via shell env`)
 
   // 2. API keys per provider
   for (const [name, def] of Object.entries(providers)) {
@@ -70,6 +75,9 @@ Exit code:
     const entries = catalogEntries(curated)
     report.curatedFile.active = entries.filter(([, s]) => !s.deprecated).length
     report.curatedFile.deprecated = entries.length - report.curatedFile.active
+    if (report.curatedFile.active === 0) {
+      report.warnings.push('catalog is empty — "mo curate <provider>" adds a provider\'s models, then "mo model instructions <provider>" fills in the prices')
+    }
 
     // Schema validation (same logic as 'mo check', condensed)
     const knownProviders = new Set(Object.keys(providers))
@@ -126,13 +134,15 @@ Exit code:
   }
 
   // Pretty output
-  console.log(label('Mohdel doctor\n'))
+  console.log(label('mohdel doctor\n'))
 
   console.log(label('Configuration'))
-  console.log(row(report.configDir.ok ? ok('✓') : warn('!'), 'Config dir', report.configDir.path))
-  console.log(row(report.envFile.ok ? ok('✓') : warn('!'), 'Env file', report.envFile.ok ? report.envFile.path : `${report.envFile.path} (missing)`))
+  console.log(row(report.configDir.ok ? ok('✓') : warn('!'), 'Config dir', tildePath(report.configDir.path)))
+  if (report.assistant) console.log(row(ok('✓'), 'Coding agent', report.assistant))
+  console.log(row(report.envFile.ok ? ok('✓') : warn('!'), 'Env file', report.envFile.ok ? tildePath(report.envFile.path) : `${tildePath(report.envFile.path)} (missing)`))
   if (report.curatedFile.ok) {
-    console.log(row(ok('✓'), 'curated.json', `${report.curatedFile.active} active, ${report.curatedFile.deprecated} deprecated`))
+    const mark = report.curatedFile.active === 0 ? warn('!') : ok('✓')
+    console.log(row(mark, 'curated.json', `${report.curatedFile.active} active, ${report.curatedFile.deprecated} deprecated`))
   } else {
     console.log(row(err('✗'), 'curated.json', 'failed to load'))
   }
@@ -142,13 +152,22 @@ Exit code:
   for (const k of report.keys.configured) {
     console.log(row(ok('✓'), k.provider, k.envVar))
   }
-  for (const k of report.keys.missing) {
-    console.log(row(inactive('○'), k.provider, `${k.envVar} (unset)`))
+  // A row per unset provider is a dozen lines of nothing on a fresh install,
+  // but the variable names are what you came for when a key isn't picked up.
+  if (all) {
+    for (const k of report.keys.missing) {
+      console.log(row(inactive('○'), k.provider, `${k.envVar} (unset)`))
+    }
+  } else if (report.keys.missing.length) {
+    console.log(row(inactive('○'), `${report.keys.missing.length} unset`,
+      meta('"mo providers" lists them, "mo doctor --all" their variables')))
   }
 
   console.log()
   console.log(label('Catalog validation'))
-  if (report.schema.errors.length) {
+  if (report.curatedFile.ok && report.curatedFile.active === 0 && report.curatedFile.deprecated === 0) {
+    console.log(`  ${inactive('○')} nothing to validate`)
+  } else if (report.schema.errors.length) {
     console.log(`  ${err('✗')} ${report.schema.errors.length} error(s) ${meta('— run "mo check" for details')}`)
   } else {
     console.log(`  ${ok('✓')} no errors`)
@@ -171,11 +190,11 @@ Exit code:
   if (report.errors.length) {
     console.log(`${err('✗')} ${report.errors.length} error(s):`)
     for (const e of report.errors) console.log(`  ${err('✗')} ${e}`)
-    process.exit(1)
-  } else if (report.warnings.length) {
+  }
+  if (report.warnings.length) {
     console.log(`${warn('!')} ${report.warnings.length} warning(s) — install is usable but not fully configured`)
     for (const w of report.warnings) console.log(`  ${warn('!')} ${w}`)
-  } else {
-    console.log(`${ok('✓')} ready`)
   }
+  if (report.errors.length) process.exit(1)
+  if (!report.warnings.length) console.log(`${ok('✓')} ready`)
 }

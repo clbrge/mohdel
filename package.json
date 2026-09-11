@@ -6,7 +6,7 @@
     "name": "Christophe Le Bars",
     "email": "clb@toort.net"
   },
-  "description": "Self-hosted LLM gateway and SDK for Node — a LiteLLM-style unified API for 11 providers (Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, DeepSeek, OpenRouter, …) with per-call USD cost tracking, streaming, tool calls, vision, speech-to-text, and built-in OpenTelemetry. Run in-process, or behind the process-isolated thin-gate for fault containment.",
+  "description": "Self-hosted LLM gateway and SDK for Node — a LiteLLM-style unified API for 13 providers (Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, DeepSeek, OpenRouter, …) with per-call USD cost tracking, streaming, tool calls, vision, speech-to-text, and built-in OpenTelemetry. Run in-process, or behind the process-isolated thin-gate for fault containment.",
   "type": "module",
   "keywords": [
     "llm",
@@ -42,14 +42,38 @@
   },
   "main": "src/lib/index.js",
   "exports": {
-    ".": "./src/lib/index.js",
-    "./providers": "./src/lib/providers.js",
-    "./creators": "./src/lib/creators.js",
-    "./utils": "./src/lib/utils.js",
-    "./errors": "./js/core/errors.js",
-    "./client": "./js/client/index.js",
-    "./session": "./js/session/index.js",
-    "./session/bin": "./js/session/bin.js"
+    ".": {
+      "types": "./src/lib/index.d.ts",
+      "default": "./src/lib/index.js"
+    },
+    "./providers": {
+      "types": "./src/lib/providers.d.ts",
+      "default": "./src/lib/providers.js"
+    },
+    "./creators": {
+      "types": "./src/lib/creators.d.ts",
+      "default": "./src/lib/creators.js"
+    },
+    "./utils": {
+      "types": "./src/lib/utils.d.ts",
+      "default": "./src/lib/utils.js"
+    },
+    "./errors": {
+      "types": "./js/core/errors.d.ts",
+      "default": "./js/core/errors.js"
+    },
+    "./client": {
+      "types": "./js/client/index.d.ts",
+      "default": "./js/client/index.js"
+    },
+    "./session": {
+      "types": "./js/session/index.d.ts",
+      "default": "./js/session/index.js"
+    },
+    "./session/bin": {
+      "types": "./js/session/bin.d.ts",
+      "default": "./js/session/bin.js"
+    }
   },
   "imports": {
     "#core": "./js/core/index.js",
@@ -64,7 +88,9 @@
     "src/cli",
     "config",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "js/**/*.d.ts",
+    "src/lib/**/*.d.ts"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
@@ -73,10 +99,12 @@
   },
   "scripts": {
     "lint": "standard",
+    "clean:types": "find js src/lib -name '*.d.ts' -delete",
+    "build:types": "npm run clean:types && tsc -p tsconfig.build.json",
     "test": "npm run test:js && npm run test:rust",
     "test:js": "vitest run test/unit",
     "test:rust": "cargo test --manifest-path rust/thin-gate/Cargo.toml && cargo test --manifest-path rust/napi-addon/Cargo.toml",
-    "prerelease": "npm run lint && npm run test",
+    "prerelease": "npm run lint && npm run build:types && npm run test",
     "release": "release-it",
     "test:provider": "vitest run test/integration/provider.test.js",
     "test:multiturn": "vitest run test/integration/multiturn.test.js",
@@ -104,20 +132,20 @@
     }
   },
   "optionalDependencies": {
-    "@clack/prompts": "^1.7.0",
+    "@clack/prompts": "^1.8.8",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.222.0",
     "@opentelemetry/sdk-node": "^0.222.0",
     "chalk": "^6.0.0",
     "mohdel-thin-gate-linux-x64-gnu": "0.125.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.123.0",
+    "@anthropic-ai/sdk": "^0.125.0",
     "@cerebras/cerebras_cloud_sdk": "^1.91.0",
-    "@google/genai": "^2.21.0",
+    "@google/genai": "^2.22.0",
     "@opentelemetry/api": "^1.9.1",
     "env-paths": "^4.0.0",
     "groq-sdk": "^1.6.0",
-    "openai": "^7.9.0",
+    "openai": "^7.15.0",
     "undici": "^7.29.0"
   },
   "lint-staged": {
@@ -125,9 +153,11 @@
   },
   "devDependencies": {
     "gpt-tokenizer": "^4.0.0",
-    "lint-staged": "^17.4.1",
+    "lint-staged": "^17.5.1",
     "release-it": "^21.0.2",
     "standard": "^17.1.2",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11"
-  }
+  },
+  "types": "./src/lib/index.d.ts"
 }

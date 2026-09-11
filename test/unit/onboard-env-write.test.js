@@ -66,3 +66,35 @@ describe('appendToEnvFile', () => {
     expect(os.tmpdir().length).toBeGreaterThan(0)
   })
 })
+
+describe('provider catalogue shown by first-run setup', () => {
+  test('every provider that takes a key can be configured interactively', async () => {
+    const { default: providers } = await import('../../src/lib/providers.js')
+    const { default: PROVIDER_INFO } = await import('../../src/lib/provider-info.js')
+    const keyed = Object.entries(providers).filter(([, d]) => d.apiKeyEnv).map(([n]) => n)
+    expect(keyed.filter(n => !PROVIDER_INFO[n])).toEqual([])
+  })
+
+  test('descriptions carry no model version number', async () => {
+    const { default: PROVIDER_INFO } = await import('../../src/lib/provider-info.js')
+    // A generation in prose ("Gemini 2.5/3", "Llama 4") is stale the moment
+    // the provider ships the next one, and nothing here updates it.
+    const versioned = Object.entries(PROVIDER_INFO)
+      .filter(([, info]) => /\d/.test(info.description))
+      .map(([name, info]) => `${name}: ${info.description}`)
+    expect(versioned).toEqual([])
+  })
+
+  test('every entry carries the fields the picker renders', async () => {
+    const { default: PROVIDER_INFO } = await import('../../src/lib/provider-info.js')
+    for (const [name, info] of Object.entries(PROVIDER_INFO)) {
+      expect(info, name).toMatchObject({
+        label: expect.any(String),
+        description: expect.any(String),
+        url: expect.stringMatching(/^https:\/\//),
+        hint: expect.any(String),
+        free: expect.any(Boolean)
+      })
+    }
+  })
+})

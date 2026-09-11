@@ -97,14 +97,17 @@
           "description": "Human-readable name shown in UIs."
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Free-text note about the model, for your own reference."
         },
         "version": {
-          "type": "string"
+          "type": "string",
+          "description": "Provider-side version or snapshot label, when the provider publishes one."
         },
         "createdAt": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "Release timestamp reported by the provider."
         },
         "created": {
           "type": "number",
@@ -253,6 +256,11 @@
           "minimum": 1,
           "description": "Maximum total tokens (input + output)."
         },
+        "inputCeilingMargin": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Tokens held back from contextTokenLimit when sizing an input, for a model whose usable window is smaller than the published one. Subtracted by effectiveContextLimit()."
+        },
         "outputTokenLimit": {
           "type": "integer",
           "minimum": 1,
@@ -263,12 +271,8 @@
           "minimum": 1,
           "description": "Maximum thinking tokens per call (when separate from output)."
         },
-        "tokenizerHeadroom": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Multiplier applied to local token estimates to account for tokenizer drift."
-        },
         "thinkingEffortLevels": {
+          "description": "Map effort name \u2192 provider-native thinking budget, or null to disable thinking. Standard names: low/medium/high/xhigh/max/none.",
           "oneOf": [
             {
               "type": "null"
@@ -471,11 +475,29 @@
           "description": "[intelligence, speed, latency] triple \u2014 drives 'mo rank'."
         },
         "leaderboardNote": {
-          "type": "string"
+          "type": "string",
+          "description": "Where the 'leaderboard' triple came from."
         },
         "supportsTools": {
           "type": "boolean",
           "description": "Set false to mark a model as tool-less."
+        },
+        "outputCapStrategy": {
+          "type": "string",
+          "enum": ["error", "accept"],
+          "description": "What this model does when max_tokens exceeds outputTokenLimit: 'error' rejects the call, 'accept' silently serves less. Informational — overrides the provider-level default for embedders building their own requests; mohdel caps the budget either way."
+        },
+        "reasoningContentPlaceholder": {
+          "type": "string",
+          "description": "Filler text sent in place of an empty assistant reasoning turn, for OpenAI-compatible providers that reject one. Read by the chat-completions adapter."
+        },
+        "source": {
+          "type": "string",
+          "description": "URL the prices and limits in this entry were read from."
+        },
+        "sourcedAt": {
+          "type": "string",
+          "description": "Date the 'source' page was last read, as YYYY-MM-DD."
         },
         "imagePrice": {
           "type": "number",
@@ -515,7 +537,7 @@
         },
         "deprecated": {
           "type": "string",
-          "description": "If present, this entry is treated as a stub (use 'deprecatedStub' shape)."
+          "description": "Replacement catalog key. An entry carrying this field is a redirect stub and holds no other fields."
         },
         "suspended": {
           "type": "string",

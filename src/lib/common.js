@@ -1,4 +1,5 @@
-import { join } from 'path'
+import { join, sep } from 'path'
+import { homedir } from 'os'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir, copyFile, stat } from 'fs/promises'
 import envPaths from 'env-paths'
@@ -16,6 +17,18 @@ export const CURATED_PATH = join(CONFIG_DIR, 'curated.json')
 export const EXCLUDED_PATH = join(CONFIG_DIR, 'excluded.json')
 export const PROVIDERS_CONFIG_PATH = join(CONFIG_DIR, 'providers.json')
 export const ENV_PATH = join(CONFIG_DIR, 'environment')
+
+export const tildePath = (path) => {
+  const home = homedir()
+  return home && path.startsWith(home + sep) ? '~' + path.slice(home.length) : path
+}
+
+// A path that must stay readable off this machine: the portable form leads,
+// the resolved one follows only when they differ.
+export const portablePath = (path) => {
+  const short = tildePath(path)
+  return short === path ? path : `${short} (${path} on this machine)`
+}
 
 // Meta keys (e.g. $schema for JSON Schema editors, _* for inline notes) live at
 // the top level of curated.json alongside model entries. They're preserved on

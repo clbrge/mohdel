@@ -94,7 +94,7 @@ Run it three ways:
 ```bash
 MODEL=anthropic/claude-haiku-4-5    node script.js
 MODEL=openai/gpt-5.4-mini           node script.js
-MODEL=gemini/gemini-3-flash-preview node script.js
+MODEL=openai/gpt-5.6-luna node script.js
 ```
 
 Tokens, cost, and the `{ status, output, … }` shape are identical across all three. Differences in thinking budget, cache pricing, and output limits are absorbed by the catalog entry — see [docs/CATALOG.md](CATALOG.md).
@@ -192,7 +192,7 @@ Catalog entries advertise vision support via `inputFormat` containing `"image"`.
 import mohdel from 'mohdel'
 
 const mo = await mohdel()
-const model = mo.use('gemini/gemini-3-flash-preview') // pick something cheap + fast
+const model = mo.use('openai/gpt-5.6-luna') // pick something cheap + fast
 
 const prompts = [
   'Translate "good morning" to Japanese.',

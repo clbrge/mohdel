@@ -79,6 +79,46 @@ pub struct PooledSession {
     catalog_version: u64,
 }
 
+/// Environment the session is allowed to inherit.
+///
+/// Everything else is dropped, including every `*_API_SK` a host may hold.
+/// `OTEL_*` is forwarded as a prefix so telemetry keeps working; note that
+/// `OTEL_EXPORTER_OTLP_HEADERS` is the one forwarded variable that commonly
+/// carries a credential of its own.
+const FORWARDED_ENV: &[&str] = &[
+    // process basics
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "TZ",
+    "LANG",
+    "LC_ALL",
+    // node runtime and corporate TLS / proxy setups
+    "NODE_OPTIONS",
+    "NODE_EXTRA_CA_CERTS",
+    "NODE_USE_ENV_PROXY",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    // mohdel's own runtime dials
+    "MOHDEL_VERBOSITY",
+    "MOHDEL_LOG_LEVEL",
+    "MOHDEL_MEDIA_ROOTS",
+    // provider-specific attribution headers, not credentials
+    "OPENROUTER_REFERER",
+    "OPENROUTER_TITLE",
+];
+
+/// Whether a variable survives `env_clear()`.
+pub fn is_forwarded(key: &str) -> bool {
+    FORWARDED_ENV.contains(&key) || key.starts_with("OTEL_")
+}
+
 impl PooledSession {
     pub fn spawn(cfg: &SessionConfig) -> Result<Self, PoolError> {
         let mut cmd = Command::new(&cfg.command);
@@ -87,6 +127,19 @@ impl PooledSession {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+
+        // The session receives its provider key on every envelope, so it never
+        // needs one from the environment. Inheriting the supervisor's
+        // environment would hand a subprocess every other secret the host
+        // happens to hold — provider keys for models it will never call, cloud
+        // credentials, database URLs — none of which it has any use for. Start
+        // from nothing and add back only what the runtime reads.
+        cmd.env_clear();
+        for (key, value) in std::env::vars() {
+            if is_forwarded(&key) {
+                cmd.env(key, value);
+            }
+        }
 
         // When the embedder has wired a catalog source, tell the
         // session to skip its disk fallback entirely. One source of
@@ -665,5 +718,48 @@ mod tests {
         counter.fetch_add(1, Ordering::Release);
         counter.fetch_add(1, Ordering::Release);
         assert_eq!(counter.load(Ordering::Acquire), 3);
+    }
+}
+
+#[cfg(test)]
+mod env_forwarding_tests {
+    use super::is_forwarded;
+
+    #[test]
+    fn provider_keys_are_never_forwarded() {
+        for key in [
+            "ANTHROPIC_API_SK",
+            "OPENAI_API_SK",
+            "GEMINI_API_SK",
+            "MOHDEL_LOCAL_API_SK",
+            "AWS_SECRET_ACCESS_KEY",
+            "DATABASE_URL",
+            "GITHUB_TOKEN",
+        ] {
+            assert!(!is_forwarded(key), "{key} must not reach the session");
+        }
+    }
+
+    #[test]
+    fn the_runtime_still_gets_what_it_reads() {
+        for key in [
+            "PATH",
+            "HOME",
+            "MOHDEL_VERBOSITY",
+            "MOHDEL_LOG_LEVEL",
+            "MOHDEL_MEDIA_ROOTS",
+            "OPENROUTER_REFERER",
+            "NODE_EXTRA_CA_CERTS",
+            "HTTPS_PROXY",
+        ] {
+            assert!(is_forwarded(key), "{key} is read by the session");
+        }
+    }
+
+    #[test]
+    fn telemetry_is_forwarded_by_prefix() {
+        assert!(is_forwarded("OTEL_EXPORTER_OTLP_ENDPOINT"));
+        assert!(is_forwarded("OTEL_SERVICE_NAME"));
+        assert!(!is_forwarded("OTELLO_SECRET"));
     }
 }

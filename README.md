@@ -4,26 +4,42 @@ Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. On
 
 ```bash
 npm install -g mohdel
-mo                                     # interactive setup — pick a provider, paste your API key
-mo ask gemini/gemini-3-flash-preview "why is the sky blue"
+mo                                       # pick a provider, paste your key, pull its models
+mo model instructions openai > mohdel-brief.md  # prices live on a docs page — hand it to your agent
+mo ask openai/gpt-5.6-luna "why is the sky blue"
 ```
+
+Almost no provider API returns prices, context limits or thinking budgets.
+They live on a docs page, so mohdel writes a brief and the coding agent you
+already run reads the page and drafts the entries. `mo` offers this at the end
+of setup. Nothing runs on your key but that agent.
+
+**No coding agent?** OpenRouter is the exception — it publishes per-token
+prices in its own model list, so mohdel can read them. Setup counts the models
+that cost nothing and offers to add all of them in one keystroke; `mo curate
+openrouter` writes complete, priced entries for the paid ones. Free tier, no
+card, and a working catalog without a pricing page or a brief.
 
 Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, OpenRouter, Novita. Node 22+, ES modules.
 
+Mohdel runs the inference layer of production stacks, among them [docAnalyzer](https://docanalyzer.ai), a document analysis and chat platform serving hundreds of thousands of users.
+
 ## Why mohdel
 
-- **Real numbers on every call.** Token counts and per-call USD cost computed from your own pricing catalog (`curated.json`) — not estimates, not provider-specific shapes. Bill tenants, alert on spend, reconcile invoices. See [docs/CATALOG.md](docs/CATALOG.md) for the catalog format.
+- **Real numbers on every call.** Token counts and per-call USD cost computed from your own pricing catalog (`curated.json`) — not estimates, not provider-specific shapes. Bill tenants, alert on spend, reconcile invoices. Your own catalog means your negotiated rates and your own tags, and it is not a spreadsheet you maintain: `mo model instructions` hands the provider's docs page to your coding agent, which drafts the entries for you to review. See [docs/CATALOG.md](docs/CATALOG.md).
 - **One interface across providers.** Same `answer()` call, same event stream, same `{ status, output, inputTokens, outputTokens, cost }` result. Switching from `anthropic/claude-sonnet-4-6` to `openai/gpt-5.4-mini` is one string change — adapter differences stay inside mohdel.
 - **Self-hosted, no vendor in the path.** API keys live in `~/.config/mohdel/`. Mohdel calls provider APIs directly; nothing routes through a third party, nothing marks up your tokens, no extra hop of availability risk.
+- **Nothing to compromise.** No network listener, no credential store, no tool execution. Mohdel runs a model call and returns the result; it cannot read a file, run a command, or hand back a key. See [Attack surface](#attack-surface).
 - **Observability without instrumentation.** OpenTelemetry spans, trace-linked logs, and OTLP metrics over one endpoint. Set `OTEL_EXPORTER_OTLP_ENDPOINT`; everything else is wired.
+- **Fully typed.** Declarations are generated from the source's own JSDoc and ship with the package — `CallEnvelope`, `Event`, `AnswerResult` and `MohdelError` are the frozen wire contract, typed as such. No `@types` package, no separate TypeScript build to keep in sync.
 - **Two integration paths, same API.** In-process factory for CLI tools, scripts, single-process services. Optional `thin-gate` subprocess for fault isolation, cross-process quota, and any-language HTTP callers — no code change to switch.
 
 ## How it compares
 
-The one-paragraph version: **LiteLLM** is the closest analog but lives in
-Python; **Vercel AI SDK** is an application toolkit, not an infra layer;
-**OpenRouter** is the same one-API promise as a SaaS in your request path;
-**raw provider SDKs** are N different shapes with no cost accounting.
+**LiteLLM** is the closest analog but lives in Python. **Vercel AI SDK** is an
+application toolkit, not an infra layer. **OpenRouter** is the same one-API
+promise as a SaaS in your request path. **Raw provider SDKs** are N different
+shapes with no cost accounting.
 
 |  | mohdel | LiteLLM | Vercel AI SDK | OpenRouter | Raw SDKs |
 |---|---|---|---|---|---|
@@ -32,25 +48,28 @@ Python; **Vercel AI SDK** is an application toolkit, not an infra layer;
 | Self-hosted, keys never leave your infra | yes | yes | yes | no | yes |
 | Provider-SDK process isolation | yes (thin-gate) | proxy only | no | n/a | no |
 | OTel spans + metrics out of the box | yes | via callbacks | no | no | no |
-| UI streaming helpers, structured output, agents | no — by design | no | yes | no | varies |
+| UI streaming helpers, structured output, agents | no | no | yes | no | varies |
 
 - **vs LiteLLM** — same core promise (unified calls, cost tracking,
   self-hosted gateway), but Node-native: if your stack is JS, there's no
-  Python sidecar to deploy, version, and monitor. The honest gap: LiteLLM's
-  proxy exposes an OpenAI-compatible endpoint and admin features (virtual
-  keys, budgets); thin-gate speaks its own [wire protocol](PROTOCOL.md) —
-  callers use the JS client or implement the protocol.
-- **vs Vercel AI SDK** — different layer, not a rival. The AI SDK is an
-  application toolkit (UI streaming, structured outputs, agent loops) with no
-  per-call cost, no gateway, no process isolation. Use it *above* mohdel if
-  you like it — mohdel is the inference primitive underneath.
+  Python sidecar to deploy, version, and monitor. LiteLLM's proxy exposes an
+  OpenAI-compatible endpoint and admin features (virtual keys, budgets);
+  thin-gate speaks its own [wire protocol](PROTOCOL.md), so callers use the JS
+  client or implement the protocol. LiteLLM also ships a central price map you
+  inherit, where mohdel has you keep your own — your negotiated rates,
+  per-model tuning and the tags your code selects on, authored by a coding
+  agent from a brief.
+- **vs Vercel AI SDK** — a different layer. The AI SDK is an application
+  toolkit (UI streaming, structured outputs, agent loops) with no per-call
+  cost, no gateway, no process isolation. It sits above mohdel, which is the
+  inference primitive underneath.
 - **vs OpenRouter** — the self-hosted version of the same idea. With a SaaS
   router you accept their uptime, their markup, and your prompts transiting
   their infra. Mohdel goes direct to providers with your keys — and ships an
   `openrouter` adapter for when you want both.
-- **vs raw provider SDKs** — no abstraction tax to escape later: mohdel's
-  envelope is flat and close to the SDKs underneath, and `cost`/`tokens`
-  come back normalized so you never parse five different usage shapes.
+- **vs raw provider SDKs** — mohdel's envelope is flat and close to the SDKs
+  underneath, and `cost` / `tokens` come back normalized, so there are not five
+  usage shapes to parse.
 
 ## Documentation
 
@@ -64,26 +83,73 @@ Python; **Vercel AI SDK** is an application toolkit, not an infra layer;
 
 ## Quick Start
 
-The three lines at the top of this README are the whole onboarding: install, run `mo` to pick a provider and paste your API key, then `mo ask`. Gemini, Groq, and Cerebras all have free tiers — start there if you don't already have a paid key.
+Install, run `mo` to pick a provider and paste your API key, then `mo ask`. Gemini, Groq, Mistral and OpenRouter all have free tiers that need no card, and `mo` lists them first if you have no paid key set.
+
+`cost` stays `0` until the catalog carries prices. `mo` pulls the provider's model list, but that list carries ids, not prices. `mo model instructions <provider>` writes a brief carrying the field reference, the provider's own pricing and rate-limit links, and the commands that verify a draft; hand it to the coding agent you already run:
+
+```bash
+mo model instructions openai > mohdel-brief.md
+claude "read mohdel-brief.md, then add gpt-5.6-luna to my mohdel catalog"
+```
+
+The agent drafts `mohdel-candidate.json` and loops on `mo model check --entry mohdel-candidate.json` until it reports no errors. You run `mo model apply mohdel-candidate.json`, which prints the full diff — including any field the draft would remove — before writing anything. Entries carry `source` and `sourcedAt`, so a price can be traced back to the page it came from.
+
+By hand: `mo curate <provider>` with the worked entries in [`config/curated.example.json`](config/curated.example.json), and `mo model set <id> <key> <value>` a field at a time.
 
 Model IDs always use the `<provider>/<model>` format:
 
 ```
-gemini/gemini-3-flash-preview
+openai/gpt-5.6-luna
 anthropic/claude-sonnet-4-6
 openai/gpt-5.4-mini
 groq/llama-4-scout-17b-16e-instruct
 ```
 
+## Attack surface
+
+Anthropic's 2026 threat report describes actors compromising AI wrapper
+services built on LiteLLM, using prompt injection to exfiltrate the production
+API keys held in their cloud containers. That attack needs two things: keys
+sitting where a process can read them, and a component that injected content
+can steer into reading them. Mohdel is built so neither is present.
+
+- **Nothing executes.** No `eval`, no `new Function`, no `child_process`
+  anywhere in the session, factory or library, and no automatic tool loop. A
+  prompt-injected response cannot make mohdel read a file, run a shell, or make
+  a call of its own. Tool execution belongs to the caller, in the caller's
+  process.
+- **No network listener.** `thin-gate` binds **unix sockets**, not TCP, for
+  both its data and admin planes, and chmods them `0600` — the default umask
+  would otherwise leave them world-connectable. There is no port to reach.
+- **No credential store.** The provider key rides on each call envelope and
+  goes straight to the SDK client. Mohdel never accumulates a pool of tenant
+  keys, because it never holds one.
+- **The session subprocess starts from an empty environment.** It is given
+  back only what the runtime reads — `PATH`, proxy and TLS settings, mohdel's
+  own dials, `OTEL_*`. Every `*_API_SK`, cloud credential and database URL the
+  host happens to hold is dropped at the process boundary. The session gets
+  its key from the envelope, so it has no reason to see any other.
+- **Keys are scrubbed and wiped.** Provider error text has the key removed
+  before it reaches `detail`, so a 401 body cannot carry your credential into
+  your logs. In Rust, envelope bytes are zeroized after each call.
+
+What this does **not** cover: if you run an agent loop, injection can still
+bite there — mohdel moves that risk into your process rather than removing it.
+And `mo` does keep keys on disk in `~/.config/mohdel/environment` (mode
+`0600`), which is a key store, for a developer machine.
+
+Report a vulnerability per [SECURITY.md](SECURITY.md).
+
 ## What mohdel is not
 
-Scope-capping is deliberate. If you're shopping for any of the following, mohdel is the wrong layer — use it *alongside* your framework of choice, not instead of it.
+For any of the following, mohdel is the wrong layer. Use it alongside a framework that does them, not instead of one.
 
 - **Not an orchestrator.** No chains, no agents, no memory, no prompt templates, no retrieval. Wrap mohdel with LangChain, LangGraph, LlamaIndex, Vercel AI SDK, or your own tool loop — mohdel exposes the inference primitive, orchestration stays in your application.
-- **Not a retry / fallback engine.** Errors are classified (`retryable`, `severity`, `type`) so the caller can decide, but mohdel never retries or swaps models silently. Silent model-swapping would conflict with existing multi-model logic upstream; the caller owns the retry budget and fallback choice.
-- **Not a response cache.** The `cache: true` flag on envelopes is for provider-side prompt caching (Anthropic, OpenAI) — not mohdel-level memoization. Caching inference *results* is orchestration-policy territory and depends on invariants only the caller knows.
+- **Not a retry / fallback engine.** Errors are classified (`retryable`, `severity`, `type`) for the caller to decide on. Mohdel never retries and never swaps models; the retry budget and the fallback choice are the caller's.
+- **Not a response cache.** The `cache: true` flag on envelopes is for provider-side prompt caching (Anthropic, OpenAI), not mohdel-level memoization of results.
 - **Not a context-window / token manager.** No pre-call token count, no projected-cost guard. The caller owns what goes in the prompt and is the source of truth for what counts.
 - **Not a SaaS proxy.** Self-hosted. Your API keys, your infra. No routing through a third party, no vendor lock-in.
+- **Not an AI wrapper.** `mo model instructions` prints a brief — text. It drives no model, ships no prompts, and spends nothing. The agent that reads it is one you already run, on your own tokens, and it never writes your catalog: `mo model apply` shows you the diff and waits.
 
 See [ARCHITECTURE.md §Design principles](ARCHITECTURE.md#design-principles) for the full rationale behind each.
 
@@ -93,7 +159,8 @@ See [ARCHITECTURE.md §Design principles](ARCHITECTURE.md#design-principles) for
 # One-shot inference — pipeable
 mo ask anthropic/claude-sonnet-4-6 "explain monads"
 cat article.txt | mo ask openai/gpt-5.4 "summarize in 3 bullets"
-echo "hello" | mo ask gemini/gemini-3-flash-preview --json | jq .cost
+echo "hello" | mo ask openai/gpt-5.6-luna --json | jq .cost
+mo ask openai/gpt-5.6-luna -q "…" 2>err.log   # stderr carries failures only
 
 # Streaming
 mo ask anthropic/claude-sonnet-4-6 --stream "write a haiku about recursion"
@@ -127,7 +194,12 @@ mo setup anthropic                     # configure API key
 mo model add fireworks/deepseek-r1     # add a model manually
 mo model set <model> <key> <value>     # set any field on a model
 mo model rm <model> <key>              # remove a field
-mo check                               # validate schema + upstream drift
+mo check                               # validate the catalog
+
+# Let a coding agent write the entry
+mo model instructions anthropic        # brief: fields, doc links, review commands
+mo model check --entry mohdel-candidate.json  # validate + diff, no write
+mo model apply mohdel-candidate.json          # write, after showing the diff
 
 # Rate limits
 mo rl show anthropic                   # provider or model limits
@@ -139,6 +211,56 @@ mo bench --tag fast --effort low       # suite by tag
 ```
 
 All list/show commands support `--json [fields]` — bare `--json` lists available fields (like `gh`).
+
+### Tab completion
+
+```bash
+source <(mo completion bash)      # add to ~/.bashrc
+```
+
+Completes model ids from your catalog, provider names, field names for
+`mo model set`, tags, and the commands themselves — `mo ask gemini/gemini-3.<TAB>`.
+Deprecated ids are left out: they exist so old pins keep resolving, not to be
+picked fresh. Completion reads the catalog directly and never loads the
+inference stack, so a tab press costs about 90ms rather than half a second.
+
+### Catalog entries, written by an assistant
+
+Provider APIs return model *ids*, not prices — OpenRouter alone publishes
+them, and `mo curate openrouter` fills a catalog unaided. Everything that makes cost
+accounting work — prices, context and output limits, thinking budgets, cache
+rates — is published as prose on a docs page and changes often. `mo model
+instructions` prints a brief that hands your coding agent the field table, the
+provider's reference links, and a verifier it can run in a loop:
+
+```bash
+mo model instructions openai > mohdel-brief.md
+```
+
+Then start whichever agent you already run on the prompt *read mohdel-brief.md, then
+add gpt-5.6 to my mohdel catalog*:
+
+| agent | launch |
+|---|---|
+| Claude Code | `claude "<prompt>"` |
+| Codex CLI | `codex "<prompt>"` |
+| Gemini CLI | `gemini -i "<prompt>"` |
+| opencode | `opencode --prompt "<prompt>"` |
+| Cursor CLI | `cursor-agent "<prompt>"` (installs as `agent` on some platforms) |
+
+`mo` asks which one you use and remembers it. It has to be able to fetch a web
+page, because that is where the prices are. Mohdel ships no agent of its own;
+Claude Code, Codex CLI and opencode all install from npm. A session, rather
+than a one-shot, lets you settle which model you want before anything is
+drafted. For a one-shot, pipe instead —
+`mo model instructions openai | claude -p "add gpt-5.6 to my catalog"`, or
+`| codex exec -`.
+
+The agent writes `mohdel-candidate.json` and runs `mo model check --entry` until it
+reports no errors; you run `mo model apply`, which prints the full diff —
+including any field the candidate would remove — before writing. Entries carry
+`source` and `sourcedAt` so a price can be traced back to the page it came
+from. See [docs/CATALOG.md](docs/CATALOG.md#editing-with-a-coding-agent).
 
 ## Library Usage
 
@@ -174,7 +296,7 @@ for await (const ev of call(envelope, { socketPath: '/tmp/mohdel-data.sock' })) 
 }
 ```
 
-Same API, but inference runs in a pooled subprocess behind the `thin-gate` supervisor (Rust): a crashing provider SDK can't take your service down, quota is enforced across processes, and non-JS callers can speak the same wire. Switching from factory to client is a configuration change, not a rewrite. See [INTEGRATION.md §Client](INTEGRATION.md#client-cross-process--primary-production-integration) for setup.
+Same API, but inference runs in a pooled subprocess behind the `thin-gate` supervisor (Rust): a crashing provider SDK can't take your service down, quota is enforced across processes, and non-JS callers can speak the same wire. Switching from factory to client is a configuration change, not a rewrite. See [INTEGRATION.md §Client](INTEGRATION.md#calling-from-javascript) for setup.
 
 For the full API — initialization, alias resolution, answer options, response shape, tool use, streaming, vision, error handling, OpenTelemetry, sub-path exports — see **[INTEGRATION.md](INTEGRATION.md)**.
 
@@ -272,7 +394,7 @@ Extending the frozen wire types is breaking — additive changes only on trait m
 
 ### Adding a new provider adapter
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-session-adapter-090). Short version:
+See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-session-adapter). Short version:
 
 1. Create `js/session/adapters/<provider>.js` exporting `async function* <provider>(envelope, { client?, signal? })`.
 2. Map provider-native events to the canonical Event union.
@@ -298,6 +420,8 @@ FIREWORKS_API_SK=fw_...
 DEEPSEEK_API_SK=sk-...
 OPENROUTER_API_SK=sk-or-...
 NOVITA_API_SK=...
+QWEN_API_SK=sk-...
+XIAOMI_API_SK=...
 MOHDEL_LOCAL_API_SK=...
 ```
 
@@ -310,8 +434,9 @@ Only set keys for providers you use. Run `mo` with no arguments for interactive 
 | Path | Purpose |
 |------|---------|
 | `~/.config/mohdel/environment` | API keys |
-| `~/.config/mohdel/default.json` | Default model selection |
+| `~/.config/mohdel/default.json` | Default model, and the coding agent you chose |
 | `~/.config/mohdel/curated.json` | Model catalog with metadata, tags, pricing |
+| `~/.config/mohdel/catalog.local.json` | This installation's own fields and tags, declared for the agent |
 | `~/.config/mohdel/providers.json` | Provider-level rate limits |
 | `~/.config/mohdel/excluded.json` | Excluded models |
 | `~/.cache/mohdel/uploaded-files.json` | Gemini file upload cache |

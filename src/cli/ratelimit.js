@@ -19,9 +19,9 @@ Usage:
   ratelimit provider rm <provider>               Remove provider-level limits
 
 Examples:
-  ratelimit show anthropic                     Show provider limits
-  ratelimit show gemini/gemini-2.0-flash       Show model limits (with provider fallback)
-  ratelimit set gemini/gemini-2.0-flash 15 1000000
+  ratelimit show anthropic                   Provider limits
+  ratelimit show gemini/gemini-flash-latest  Model limits, then provider
+  ratelimit set gemini/gemini-flash-latest 15 1000000
   ratelimit provider set anthropic 60 100000
 
 Aliases:

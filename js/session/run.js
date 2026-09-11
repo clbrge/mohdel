@@ -22,8 +22,7 @@
  * @module session/run
  */
 
-import { getAdapter } from './adapters/index.js'
-import { isImageProvider } from './adapters/image/index.js'
+import { ADAPTER_NAMES, isImageProvider } from './adapters/_registry.js'
 import { getSpec } from './adapters/_catalog.js'
 import { getProviderLimits } from './adapters/_providers.js'
 import { hasSpeed, mergeSpeed, speedHasOwnQuota, speedNames } from './adapters/_speed.js'
@@ -57,8 +56,19 @@ import { STATUS_INCOMPLETE, WARNING_CANCELLED } from '#core/status.js'
  * }} [options]
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
+// Load one adapter rather than the registry: importing every adapter pulls
+// every provider SDK, which is ~300ms a caller pays to use one of them. The
+// name is checked against the known list before it reaches the import path —
+// it comes off the envelope, and a computed specifier must never take an
+// arbitrary string.
+const loadAdapter = async (provider) => {
+  if (!ADAPTER_NAMES.includes(provider)) throw new Error(`unknown provider: ${provider}`)
+  const module = await import(`./adapters/${provider}.js`)
+  return module[provider]
+}
+
 export async function * run (envelope, {
-  resolveAdapter = getAdapter,
+  resolveAdapter = loadAdapter,
   resolveSpec = getSpec,
   resolveProviderLimits = getProviderLimits,
   cooldown = defaultCooldown,
@@ -92,7 +102,7 @@ export async function * run (envelope, {
 
   let adapter
   try {
-    adapter = resolveAdapter(provider)
+    adapter = await resolveAdapter(provider)
   } catch (e) {
     // Distinguish "image-only provider invoked via answer" from
     // truly-unknown. Novita-and-friends have no text adapter but a

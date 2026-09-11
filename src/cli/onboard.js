@@ -1,97 +1,11 @@
-import { intro, outro, select, text, isCancel, cancel, note } from '@clack/prompts'
+import { intro, outro, select, text, isCancel, cancel, note, spinner } from '@clack/prompts'
 import { id, label, meta, ok } from './colors.js'
-import { chmodSync, existsSync } from 'fs'
+import { chmodSync, existsSync, readFileSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
-import { dirname } from 'path'
-import { loadDefaultEnv, getAPIKey, ENV_PATH } from '../lib/common.js'
+import { dirname, resolve } from 'path'
+import { loadDefaultEnv, getAPIKey, getConfig, saveConfig, getCuratedModels, catalogEntries, ENV_PATH } from '../lib/common.js'
 import providers from '../lib/providers.js'
-
-const PROVIDER_INFO = {
-  gemini: {
-    label: 'Google Gemini',
-    description: 'Gemini 2.5/3 — long context, vision, video. Free tier, no card required.',
-    url: 'https://aistudio.google.com/apikey',
-    hint: 'Create an API key at aistudio.google.com → Get API Key',
-    free: true
-  },
-  groq: {
-    label: 'Groq',
-    description: 'Llama 4 — fastest inference available. Free tier, no card required.',
-    url: 'https://console.groq.com/keys',
-    hint: 'Create an API key at console.groq.com → API Keys',
-    free: true
-  },
-  cerebras: {
-    label: 'Cerebras',
-    description: 'Llama, Qwen — fast inference on custom hardware. Free tier available.',
-    url: 'https://cloud.cerebras.ai/platform',
-    hint: 'Create an API key at cloud.cerebras.ai → Platform → API Keys',
-    free: true
-  },
-  anthropic: {
-    label: 'Anthropic',
-    description: 'Claude Opus, Sonnet, Haiku — reasoning, coding, vision, tool use.',
-    url: 'https://console.anthropic.com/settings/keys',
-    hint: 'Create an API key at console.anthropic.com → Settings → API Keys',
-    free: false
-  },
-  openai: {
-    label: 'OpenAI',
-    description: 'GPT-5, o-series — reasoning, vision, image generation.',
-    url: 'https://platform.openai.com/api-keys',
-    hint: 'Create an API key at platform.openai.com → API Keys',
-    free: false
-  },
-  xai: {
-    label: 'xAI',
-    description: 'Grok — reasoning and tool use.',
-    url: 'https://console.x.ai',
-    hint: 'Create an API key at console.x.ai',
-    free: false
-  },
-  mistral: {
-    label: 'Mistral',
-    description: 'Mistral Large, Codestral, Pixtral — coding, reasoning, vision. Free tier available.',
-    url: 'https://console.mistral.ai/api-keys',
-    hint: 'Create an API key at console.mistral.ai → API Keys',
-    free: true
-  },
-  deepseek: {
-    label: 'DeepSeek',
-    description: 'DeepSeek R1/V3 — reasoning, coding. Low cost.',
-    url: 'https://platform.deepseek.com/api_keys',
-    hint: 'Create an API key at platform.deepseek.com → API Keys',
-    free: false
-  },
-  fireworks: {
-    label: 'Fireworks',
-    description: 'Llama, Qwen, DeepSeek — serverless inference with reasoning.',
-    url: 'https://fireworks.ai/account/api-keys',
-    hint: 'Create an API key at fireworks.ai → Account → API Keys',
-    free: false
-  },
-  openrouter: {
-    label: 'OpenRouter',
-    description: 'Multi-provider router — access 200+ models with one key.',
-    url: 'https://openrouter.ai/settings/keys',
-    hint: 'Create an API key at openrouter.ai → Settings → Keys',
-    free: false
-  },
-  novita: {
-    label: 'Novita',
-    description: 'Image generation — Flux, SDXL.',
-    url: 'https://novita.ai/dashboard/key',
-    hint: 'Create an API key at novita.ai → Dashboard → API Key',
-    free: false
-  },
-  qwen: {
-    label: 'Qwen Cloud',
-    description: 'Qwen 3.7 Max/Plus, 3.6 Flash — reasoning, coding, long context. Free quota for new users.',
-    url: 'https://home.qwencloud.com/api-keys',
-    hint: 'Create an API key at home.qwencloud.com → API Keys',
-    free: false
-  }
-}
+import PROVIDER_INFO from '../lib/provider-info.js'
 
 export { PROVIDER_INFO, appendToEnvFile }
 
@@ -138,26 +52,54 @@ export async function runOnboard () {
   loadDefaultEnv()
   const { configured, unconfigured } = getConfiguredProviders()
 
-  // Has providers configured — show status
+  // Already set up: a status line and the step that follows from it, not a
+  // menu. `mo --help` is the menu.
   if (configured.length > 0) {
-    console.log(label('mohdel') + meta(` — ${configured.length} provider${configured.length > 1 ? 's' : ''} configured\n`))
-    for (const name of configured) {
-      console.log(`  ${ok('●')} ${id(name)}`)
+    const curated = await getCuratedModels()
+    const active = catalogEntries(curated).filter(([, s]) => !s.deprecated)
+    const unpriced = active.filter(([, s]) => s.inputPrice == null).length
+
+    const catalog = active.length === 0
+      ? 'catalog empty'
+      : `${active.length} model${active.length > 1 ? 's' : ''}` +
+        (unpriced ? `, ${unpriced} without prices` : '')
+    const shown = configured.slice(0, 4).map(n => id(n)).join(meta(', '))
+    const more = configured.length > 4 ? meta(` +${configured.length - 4} more`) : ''
+    console.log(`${label('mohdel')} ${meta('—')} ${shown}${more}  ${meta('·')} ${meta(catalog)}\n`)
+
+    const first = configured[0]
+    const next = []
+    let handOver = null
+    if (active.length === 0) {
+      next.push([`mo curate ${first}`, 'add the models this key can reach'])
+      // An interrupted run leaves the brief behind. Telling someone to write
+      // one that is already sitting in front of them is the wrong step.
+      const { BRIEF_FILE, BRIEF_HEADING } = await import('./instructions.js')
+      const briefPath = resolve(process.cwd(), BRIEF_FILE)
+      const briefReady = existsSync(briefPath) &&
+        readFileSync(briefPath, 'utf8').startsWith(BRIEF_HEADING)
+      if (briefReady) {
+        const { detectAssistants, preferredAgent, briefPrompt } = await import('../lib/assistants.js')
+        const agent = preferredAgent((await getConfig()).assistant, detectAssistants())
+        handOver = { file: BRIEF_FILE, line: agent.start(`"${briefPrompt(BRIEF_FILE, first)}"`) }
+      } else {
+        next.push([`mo model instructions ${first}`, 'let your agent fill in the prices'])
+      }
+    } else {
+      if (unpriced) next.push([`mo model instructions ${first}`, 'fill in the missing prices'])
+      next.push(['mo ask <model> "..."', 'one-shot inference'])
+      next.push(['mo ls', 'browse the catalog'])
     }
     if (unconfigured.length) {
-      console.log('')
-      for (const name of unconfigured) {
-        console.log(`  ${meta('○')} ${meta(name)}`)
-      }
+      next.push(['mo providers', `${unconfigured.length} more providers available`])
     }
-    console.log(`\n${meta('Commands:')}
-  mo ask <model> "..."     One-shot inference (pipeable)
-  mo doctor                Check install health
-  mo model list            Browse curated models
-  mo model show <model>    Model details
-  mo default               Set default model
-  mo provider setup <p>    Add another provider
-  mo --help                All commands`)
+    next.push(['mo --help', 'everything else'])
+
+    const width = Math.max(...next.map(([cmd]) => cmd.length))
+    for (const [cmd, why] of next) console.log(`  ${id(cmd.padEnd(width))}  ${meta(why)}`)
+    if (handOver) {
+      console.log(`\n  ${meta(`${handOver.file} is written — hand it over:`)}\n    ${id(handOver.line)}`)
+    }
     return
   }
 
@@ -221,27 +163,150 @@ export async function runOnboard () {
 
   note(`${ok('✓')} Saved ${envVar} to ${meta(ENV_PATH)}`, 'Done')
 
-  // Reload env so the new key is visible, then offer to curate models
+  // Reload env so the new key is visible, then fill the catalog.
   loadDefaultEnv()
-  const { confirm } = await import('@clack/prompts')
-  const shouldCurate = await confirm({
-    message: `Fetch and curate models from ${info.label}?`,
-    initialValue: true
+
+  // OpenRouter's model list carries prices, so picking by hand is complete
+  // there and needs no agent at all.
+  const selfPricing = !!providers[selected]?.pricesFromApi
+
+  // Where the prices are published, the models that cost nothing are the whole
+  // offer for someone with no coding agent. The count belongs on the menu: put
+  // it behind a search over hundreds of ids and nobody finds it.
+  let api = null
+  let free = []
+  if (selfPricing) {
+    const { providerApi, freeModels } = await import('../lib/select.js')
+    api = await providerApi(selected)
+    if (api?.listModels) {
+      const s = spinner()
+      s.start(`Reading ${info.label}'s model list...`)
+      try {
+        free = freeModels(await api.listModels())
+        s.stop(`${info.label}: ${free.length} of its models cost nothing`)
+      } catch (e) {
+        s.stop(`Could not read ${info.label}'s model list: ${e.message}`)
+      }
+    }
+  }
+
+  const how = await select({
+    message: 'How do you want to fill your catalog?',
+    initialValue: free.length ? 'free' : selfPricing ? 'hand' : 'agent',
+    options: selfPricing
+      ? [
+          ...(free.length
+            ? [{ value: 'free', label: `Add the free models (${free.length})`, hint: 'nothing to pay, nothing to type' }]
+            : []),
+          { value: 'hand', label: 'Pick models by hand', hint: `${info.label} publishes prices — nothing else needed` },
+          { value: 'agent', label: 'Let my coding agent do it', hint: 'for anything the model list omits' },
+          { value: 'later', label: 'Later' }
+        ]
+      : [
+          { value: 'agent', label: 'Let my coding agent do it', hint: 'fetches the model list and the prices' },
+          { value: 'hand', label: 'Pick models by hand', hint: 'ids only — prices left for later' },
+          { value: 'later', label: 'Later' }
+        ]
   })
-
-  if (isCancel(shouldCurate) || !shouldCurate) {
-    outro(`Run ${id('mo model curate ' + selected)} later to browse available models.`)
+  if (isCancel(how) || how === 'later') {
+    outro(`Later: ${id('mo model instructions ' + selected)}  ${meta('│')}  ${id('mo curate ' + selected)}`)
     return
   }
 
-  const { initializeAPIs, processModels } = await import('../lib/select.js')
-  const { api } = await initializeAPIs()
-
-  if (!api[selected]) {
-    outro(`Could not initialize ${info.label}. Run ${id('mo model curate ' + selected)} to retry.`)
+  if (how === 'free') {
+    const { addModels } = await import('../lib/select.js')
+    const s = spinner()
+    s.start(`Adding ${free.length} model${free.length > 1 ? 's' : ''}...`)
+    await addModels(selected, api, free)
+    s.stop(`Added ${free.length} model${free.length > 1 ? 's' : ''}, priced at $0`)
+    outro(`Ready — ${id('mo ls')} lists them, then ${id('mo ask <model> "…"')}. ` +
+      `${id('mo curate ' + selected)} adds the paid ones.`)
     return
   }
 
-  await processModels(selected, api[selected])
-  outro(`Run ${id('mo model list')} to see your curated models.`)
+  if (how === 'hand') {
+    const { providerApi, processModels } = await import('../lib/select.js')
+    api = api || await providerApi(selected)
+    if (!api) {
+      outro(`Could not reach ${info.label}. Run ${id('mo curate ' + selected)} to retry.`)
+      return
+    }
+    if (!await processModels(selected, api)) {
+      outro(`Nothing curated. Retry with ${id('mo curate ' + selected)}.`)
+      return
+    }
+    outro(selfPricing
+      ? `Catalog complete — ${id('mo ls')} to see it, then ${id('mo ask <model> "…"')}.`
+      : `Prices are still missing — ${id('mo model instructions ' + selected)} fills them in.`)
+    return
+  }
+
+  await writeCatalogBrief(selected)
+}
+
+// The provider API returns model ids, never prices — entries land unpriced and
+// `cost` stays 0 on every result until the numbers are filled in. This is the
+// moment the user is still in the flow.
+async function writeCatalogBrief (selected) {
+  const { AGENTS, detectAssistants, preferredAgent, briefPrompt } = await import('../lib/assistants.js')
+  const installed = detectAssistants()
+
+  const stored = (await getConfig()).assistant
+  if (!installed.length && !stored) {
+    note(
+      `Nothing on your PATH looks like a coding agent. Mohdel does not ship
+one — Claude Code, Codex CLI and opencode all install from npm.
+
+Whichever you use has to be able to fetch a web page: it is being sent to
+read the provider's pricing page.
+
+To skip the agent entirely, use OpenRouter: it publishes prices in its own
+model list, so "mo curate openrouter" writes a complete catalog by itself.`,
+      'You will need an agent'
+    )
+  }
+  const chosen = await select({
+    message: 'Which coding agent do you use?',
+    initialValue: stored || installed[0] || AGENTS[0].bin,
+    options: [
+      ...AGENTS.map(a => ({
+        value: a.bin,
+        label: a.label,
+        hint: installed.includes(a.bin) ? 'found on your PATH' : undefined
+      })),
+      { value: '__other', label: 'Other…', hint: 'any command that takes a prompt' }
+    ]
+  })
+  if (isCancel(chosen)) return
+
+  let bin = chosen
+  if (chosen === '__other') {
+    const typed = await text({
+      message: 'Command that starts it:',
+      placeholder: 'my-agent',
+      validate: (v) => v?.trim() ? undefined : 'A command is required'
+    })
+    if (isCancel(typed)) return
+    bin = typed.trim()
+  }
+
+  const config = await getConfig()
+  await saveConfig({ ...config, assistant: bin })
+
+  const { writeBrief } = await import('./instructions.js')
+  const name = await writeBrief(selected)
+
+  const agent = preferredAgent(bin, installed)
+  const prompt = `"${briefPrompt(name, selected)}"`
+  note(
+    `${ok('✓')} Wrote ${meta(name)} in this directory.
+
+${agent.start(prompt)}
+
+The agent drafts mohdel-candidate.json and checks it with
+${meta('mo model check --entry mohdel-candidate.json')}; you apply it with
+${meta('mo model apply mohdel-candidate.json')}, which shows the diff first.`,
+    `Hand it to ${agent.label}`
+  )
+  outro(`Launch lines for other agents: ${id('mo model instructions --help')}`)
 }

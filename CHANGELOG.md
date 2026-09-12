@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.0.2] — Fix: `mo` was uninstallable since 1.0.0
+
+### Fixed
+
+- `@clack/prompts` was pinned to `^1.8.8`, which does not exist. An
+  unsatisfiable optional dependency is skipped silently, so `mo` died with
+  `ERR_MODULE_NOT_FOUND` on a clean install of 1.0.0 and 1.0.1. Now `^1.8.0`,
+  and a regular dependency, since three modules import it at load time.
+
+### Tests
+
+- `test/unit/dependency-declarations.test.js` — a shipped module's load-time
+  imports are declared, and not optional.
+
 ## [1.0.1] — Fix: atomic catalog writes / Fix: Qwen Cloud reference links
 
 ### Fixed

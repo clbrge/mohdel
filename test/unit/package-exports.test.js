@@ -11,10 +11,7 @@ describe('package exports', () => {
     }
   })
 
-  // The declarations reference each other through `#core/*`, which the imports
-  // map resolves to ./js/core/*.js — a consumer finds their types only at
-  // js/core/*.d.ts. Emitting anywhere but beside the source leaves every such
-  // reference unresolvable, and skipLibCheck turns that into a silent `any`.
+  // Emitting anywhere but beside the source leaves `#core/*` unresolvable, which skipLibCheck turns into a silent `any`.
   it('every types path sits beside the module it describes', () => {
     for (const [subpath, entry] of Object.entries(pkg.exports)) {
       expect(entry.types, subpath).toBe(entry.default.replace(/\.js$/, '.d.ts'))

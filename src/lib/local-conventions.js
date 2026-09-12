@@ -79,8 +79,7 @@ export const parseLocalConventions = (text) => {
   return { fields, tags, adding, notes: doc.notes || '' }
 }
 
-// Absent is the default state, not an error. A file that exists but does not
-// parse is broken policy — it must not read as "no conventions".
+// Absent is the default state; a file that exists but does not parse is not.
 export const loadLocalConventions = async (path = LOCAL_PATH) => {
   if (!existsSync(path)) return null
   try {

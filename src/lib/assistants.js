@@ -1,9 +1,6 @@
 import { statSync } from 'node:fs'
 import { join, delimiter } from 'node:path'
 
-// Launch forms are the vendor-documented ones for starting a session on an
-// initial prompt — not the one-shot/print flags, since picking a model is a
-// conversation.
 const AGENTS = [
   { bin: 'claude', label: 'Claude Code', start: p => `claude ${p}` },
   { bin: 'codex', label: 'Codex CLI', start: p => `codex ${p}` },
@@ -46,9 +43,6 @@ export const launchLines = (installed = detectAssistants(), chosen = null, inden
 // one argument is the form every agent CLI accepts.
 const custom = (bin) => ({ bin, label: bin, start: p => `${bin} ${p}` })
 
-// Which agent the recipe should name. A stated preference beats detection —
-// PATH cannot see which of two installed agents someone actually uses, nor an
-// agent that lives in an editor.
 export const preferredAgent = (chosen, installed = detectAssistants()) => {
   if (chosen) return AGENTS.find(a => a.bin === chosen) || custom(chosen)
   return TOP.find(a => installed.includes(a.bin)) || TOP[0]

@@ -26,10 +26,7 @@ const LEVELS = {
   silent: 100
 }
 
-// Real sessions want "warn" (anomalies visible) but tests would
-// otherwise flood stderr with the lines we deliberately induce.
-// Under vitest, default to silent unless MOHDEL_LOG_LEVEL is set
-// explicitly.
+// Under vitest, default to silent unless MOHDEL_LOG_LEVEL is set: induced anomalies would otherwise flood stderr.
 const DEFAULT_LEVEL = process.env.VITEST ? 'silent' : 'warn'
 const DEFAULT_VERBOSITY = 1
 
@@ -131,8 +128,4 @@ function mergeFields (target, source, includeStack) {
   }
 }
 
-// Module-level default — used when a caller doesn't pass their own.
-// Keeping the stream open lets adapters import the singleton
-// directly; `withContext` spawns scoped children per call without
-// allocating a new writer.
 export const logger = createLogger()

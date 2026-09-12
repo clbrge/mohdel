@@ -107,11 +107,11 @@ groq/llama-4-scout-17b-16e-instruct
 
 ## Attack surface
 
-Anthropic's 2026 threat report describes actors compromising AI wrapper
-services built on LiteLLM, using prompt injection to exfiltrate the production
-API keys held in their cloud containers. That attack needs two things: keys
-sitting where a process can read them, and a component that injected content
-can steer into reading them. Mohdel is built so neither is present.
+Anthropic's 2026 threat report describes actors compromising LLM wrapper
+services through prompt injection, exfiltrating the production API keys held
+in their cloud containers. That attack needs two things: keys sitting where a
+process can read them, and a component that injected content can steer into
+reading them. Mohdel is built so neither is present.
 
 - **Nothing executes.** No `eval`, no `new Function`, no `child_process`
   anywhere in the session, factory or library, and no automatic tool loop. A

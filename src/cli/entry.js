@@ -155,9 +155,6 @@ Write an entry with your coding agent: mo model instructions <provider>`)
     console.log(`${meta('Undo:')}  mo model backup diff prev  ${meta('│')}  mo model backup restore prev`)
   }
 
-  // The candidate was written by the agent, not by mohdel, so it is never
-  // removed unasked. It has served its purpose though, and the catalog's own
-  // backups are what an undo uses — not this file.
   if (path === '-') return
   if (args.includes('--rm')) {
     await rm(path, { force: true })

@@ -76,14 +76,6 @@ import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
 export async function runAnswer ({ provider, model, modelKey, configuration, prompt, options = {} }, deps = {}) {
   const envelope = markTrustedMedia(toEnvelope({ modelKey, configuration, prompt, options }))
 
-  // If the caller passed a `realtimeHandler`, feed every `delta`
-  // event into a buffer that invokes the handler on batches matching
-  // `bufferOpts` cadence. Without this, streaming callbacks silently
-  // never fire — `mo ask --stream` and any integration that relies
-  // on streaming callbacks stops working.
-  //
-  // Skip the buffer allocation entirely when no handler was
-  // supplied — the common case.
   const deltaBuffer = options.realtimeHandler
     ? createRealtimeDeltaBuffer(options.realtimeHandler, options.bufferOpts)
     : null
@@ -99,9 +91,6 @@ export async function runAnswer ({ provider, model, modelKey, configuration, pro
       }
     }
   } finally {
-    // Flush any pending buffered content regardless of terminal
-    // path (success, error, or exception) so the handler sees the
-    // tail of the stream.
     deltaBuffer?.flush()
   }
 
@@ -233,9 +222,7 @@ function toEnvelope ({ modelKey, configuration, prompt, options }) {
   if (options.identifier) envelope.identifier = options.identifier
   if (options.idleHeartbeatMs !== undefined) envelope.idleHeartbeatMs = options.idleHeartbeatMs
 
-  // OpenRouter routing prefs ride in their own bag to keep the flat
-  // envelope clean. The openrouter adapter reads this via
-  // `config.mutateArgs`.
+  // OpenRouter routing prefs ride in their own bag; the adapter reads them via `config.mutateArgs`.
   if (options.providerOrder || options.providerAllow || options.providerDeny) {
     envelope.providerOptions = {
       openrouter: {
@@ -361,10 +348,7 @@ function toEnvelopePrompt (prompt) {
     return out
   }
 
-  // Unknown shape — reject early with a clear error. Letting this
-  // fall through would land a raw non-iterable in the envelope and
-  // produce a confusing `prompt.map is not a function` deep inside
-  // the adapter.
+  // Rejected here; falling through lands a non-iterable in the envelope and fails as `prompt.map is not a function` inside the adapter.
   throw new MohdelError('invalid prompt shape', {
     type: 'SESSION_INVALID_PROMPT',
     retryable: false,

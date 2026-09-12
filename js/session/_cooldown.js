@@ -104,9 +104,6 @@ export function createCooldownTracker (
   return { check, recordFailure, reset, coolingDownError, threshold, durationMs }
 }
 
-// Single session-local tracker. Re-exported as named members so
-// callers can `import * as cooldown from './_cooldown.js'` and use
-// `cooldown.reset(key)` / `cooldown.coolingDownError(key)`.
 const defaultTracker = createCooldownTracker()
 export const check = defaultTracker.check
 export const recordFailure = defaultTracker.recordFailure

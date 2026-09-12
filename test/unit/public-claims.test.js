@@ -7,8 +7,6 @@ const read = name => readFileSync(fileURLToPath(new URL(`../../${name}`, import.
 const pkg = JSON.parse(read('package.json'))
 const readme = read('README.md')
 
-// The npm description shipped "11 providers" from the first public release
-// until two more had been added, because nothing checked it.
 const remote = Object.keys(providers).filter(name => name !== 'local')
 
 describe('provider count claimed to the public', () => {

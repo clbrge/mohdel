@@ -6,8 +6,6 @@ import { providerOf } from '#core/model-id.js'
 import { parseJsonFlag, printAvailableFields, jsonOutput, jsonOutputOne } from './json-output.js'
 import { id, label, tag, price, meta, err, warn, ok } from './colors.js'
 
-// An empty catalog is the fresh-install state, not an error — but printing
-// nothing at all reads as a broken command.
 export const EMPTY_CATALOG = 'Catalog is empty. "mo curate <provider>" adds a provider\'s models, ' +
   'then "mo model instructions <provider>" fills in the prices.'
 

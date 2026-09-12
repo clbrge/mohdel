@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.0.1] — Fix: atomic catalog writes / Fix: Qwen Cloud reference links
+
+### Fixed
+
+- Catalog writes are atomic: the save goes to a sibling temp file and is
+  renamed over the target. An interrupted write left `curated.json` truncated.
+  Covers `excluded.json`, `providers.json` and `default.json`, which share the
+  write path.
+- Qwen Cloud `references` point at `docs.qwencloud.com` for pricing and rate
+  limits and `qwencloud.com/models` for the model list. `baseURL` unchanged.
+
 ## [1.0.0] — Feat: agent-authored catalog / Feat: free models in one step / Security: session environment cleared
 
 ### Stability

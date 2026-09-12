@@ -60,8 +60,6 @@ export const reviewEntry = (key, spec, catalog, { strict = false, local = null }
   }
 
   for (const issue of validate(spec, key, { strict })) {
-    // Custom fields are namespaced by convention (docs/CATALOG.md) and
-    // round-trip untouched, so they are not drift.
     if (issue.message === 'unknown field' && issue.field.includes(':')) continue
     if (issue.message === 'unknown field' && local?.fields[issue.field]) continue
     if (issue.severity === 'error') errors.push(`${key}: ${issue.field} — ${issue.message}`)

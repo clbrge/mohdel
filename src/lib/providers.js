@@ -146,9 +146,9 @@ const providers = {
     baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
     createConfiguration: apiKey => ({ apiKey }),
     references: {
-      pricing: 'https://www.alibabacloud.com/help/en/model-studio/models',
-      models: 'https://www.alibabacloud.com/help/en/model-studio/models',
-      rateLimits: 'https://www.alibabacloud.com/help/en/model-studio/rate-limit'
+      pricing: 'https://docs.qwencloud.com/developer-guides/getting-started/pricing',
+      models: 'https://www.qwencloud.com/models',
+      rateLimits: 'https://docs.qwencloud.com/developer-guides/administration/rate-limits'
     },
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'

@@ -8,10 +8,7 @@
 
 const argsObj = (args) => args || {}
 
-// Tool argument parse failures are expected (models routinely send
-// malformed JSON before retrying with corrections). Fall back to
-// returning the raw string — downstream adapter code handles the
-// type mismatch. Logging here would create warn-level noise.
+// Malformed tool-call JSON is routine, not an anomaly: return the raw string and let the adapter handle the mismatch.
 const parseArgs = (_name, args) => {
   if (typeof args !== 'string') return argsObj(args)
   try {

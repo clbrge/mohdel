@@ -94,21 +94,12 @@ const replaceModel = async (modelToReplace, newCuratedKey, newModelLabel, newMod
   }
   delete curated[modelToReplace.key]
 
-  // Preserve custom properties from the old model entry,
-  // but explicitly exclude 'model' and 'models' fields from the old entry.
-  // This prevents old model identifiers from polluting the new entry if the
-  // new model's details (newModelDetails) don't specify them, ensuring consistent `upstreamIds`.
   const {
     model: _discardedOldModelIdentifier, // eslint-disable-line no-unused-vars
     models: _discardedOldModelIdentifiers, // eslint-disable-line no-unused-vars
     ...restOfOldModelDataProperties
   } = oldModelDataFromCurated || {}
 
-  // Add new model to curated.
-  // Merge properties: Start with applicable old properties (restOfOldModelDataProperties),
-  // then layer new model details (newModelDetails), which includes new provider & sdk.
-  // Finally, ensure the new label (newModelLabel) is set.
-  // Properties in newModelDetails and newModelLabel will override any from restOfOldModelDataProperties.
   curated[newCuratedKey] = {
     ...restOfOldModelDataProperties,
     ...newModelDetails,
@@ -165,9 +156,6 @@ const isModelTrackedInCollection = (collection, providerName, modelId) => {
   return false
 }
 
-// Which creators a provider serves is a fact of the catalog, not a property of
-// the provider: a router's line-up changes week to week. Offer the ones this
-// provider already serves first, then every creator mohdel has a label for.
 const creatorOptions = async (providerName, guess) => {
   const catalog = await getCuratedModels()
   const served = new Set()
@@ -262,10 +250,6 @@ const filterUncurated = (models, providerName, curated, excluded) => {
   })
 }
 
-// A model list only carries prices when the provider publishes them
-// (`pricesFromApi`). Where it does, the ones that cost nothing are the whole
-// no-agent story, and a free-text search over hundreds of ids is no way to
-// find them.
 export const freeModels = (models) =>
   models.filter(m => m.inputPrice === 0 && m.outputPrice === 0)
 
@@ -278,9 +262,7 @@ const buildEntry = async (providerName, model, providerInstance) => {
     label: model.label || model.id,
     ...(info || {})
   })
-  // Upstream lists name the provider, never the creator. An OpenRouter id is
-  // `<vendor>/<model>`, so the vendor segment is the answer when the creator
-  // table does not recognize the name.
+  // An upstream list names the provider, never the creator; an OpenRouter id carries the vendor in its first segment.
   if (!entry.creator) entry.creator = creatorFromModelId(model.id) || model.id.split('/')[0]
   return entry
 }

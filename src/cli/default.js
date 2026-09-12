@@ -1,10 +1,6 @@
 import { intro, outro, select, isCancel, cancel } from '@clack/prompts'
 import { getConfig, getCuratedModels, saveConfig, catalogEntries } from '../lib/common.js'
 
-// CLI-only. The default model is a convenience for someone typing `mo ask`;
-// the library and the gate never read it. A program picks a model by id or by
-// tag, where the choice is explicit and reviewable — a machine inheriting a
-// human's terminal preference is how a call ends up on a model nobody chose.
 export async function runDefault (args = []) {
   if (args.includes('-h') || args.includes('--help')) {
     console.log(`mohdel default — the model "mo ask" uses when you name none
@@ -49,8 +45,7 @@ read it: a program names its model, or selects one by tag.`)
   }
 
   try {
-    // Merge: the file also holds the chosen coding agent, and replacing the
-    // object wholesale would drop it.
+    // The file also holds the chosen coding agent; replacing it wholesale drops that.
     await saveConfig({ ...(await getConfig()), defaultModel: selectedModelId })
     outro(`Default set to ${selectedModelId} — "mo ask" uses it when you give no model.`)
   } catch (err) {

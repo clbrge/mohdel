@@ -3,9 +3,7 @@ import { fieldDefs } from '../lib/schema.js'
 import { getCuratedModels, catalogEntries } from '../lib/common.js'
 import { ALIASES } from './aliases.js'
 
-// Completion must never import the factory (`src/lib/index.js`), which pulls
-// every adapter, provider SDK and the OTel stack — 350ms that would be paid on
-// every press of the tab key. Reading the catalog costs about 30ms.
+// Never import the factory here: it loads every provider SDK, on every tab press.
 
 const NOUNS = ['model', 'provider', 'creator', 'tag', 'ratelimit', 'ask', 'transcribe', 'default', 'doctor']
 
@@ -18,9 +16,6 @@ const VERBS = {
   ratelimit: ['show', 'set', 'rm', 'provider']
 }
 
-// What the argument at a given offset after `<noun> <verb>` names. `model` is
-// an id already in the catalog, so `model add` — which takes a new one — is
-// deliberately absent.
 const ARGUMENT = {
   ask: ['model'],
   transcribe: ['model'],
@@ -79,16 +74,12 @@ export const candidates = async (cword, words) => {
     return offer([...NOUNS, ...Object.keys(ALIASES)])
   }
 
-  // Resolve the alias exactly as the router does, so completion and dispatch
-  // never disagree about what a word means.
   const alias = ALIASES[before[0]]
   const chain = alias ? [alias.noun, ...alias.inject, ...before.slice(1)] : before
   const [noun, verb, ...rest] = chain
 
   if (chain.length === 1 && VERBS[noun]) return offer(VERBS[noun])
 
-  // `model show <id>` keys on two words; `ask <id>` on one. Whichever matched
-  // decides where the argument list starts.
   const paired = ARGUMENT[`${noun} ${verb}`]
   const shape = paired ?? ARGUMENT[noun]
   if (!shape) return []
@@ -109,8 +100,7 @@ complete -o default -F _mo_completion mo
 `
 
 export async function runComplete (args) {
-  // A crash here would break the user's tab key, so an unreadable or corrupt
-  // catalog offers nothing rather than an error.
+  // An unreadable catalog offers nothing rather than breaking the tab key.
   try {
     const cword = Number.parseInt(args[0], 10)
     if (!Number.isFinite(cword)) return

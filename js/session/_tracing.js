@@ -48,9 +48,6 @@ export async function ensureOtelInitialized () {
     sdk.start()
     otelInitialized = true
   } catch (e) {
-    // Leave the flag false so a retry is possible. The current caller
-    // (bin.js::main) runs this once, so "retry" in practice means a
-    // process restart — but the semantics should match the flag name.
     process.stderr.write(
       `${JSON.stringify({ level: 'warn', time: Date.now(), msg: '[mohdel:tracing] OTel SDK init failed', err: { message: e.message } })}\n`
     )

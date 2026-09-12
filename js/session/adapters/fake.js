@@ -62,8 +62,6 @@ export async function * fake (envelope, deps = {}) {
       return
 
     case 'hang':
-      // Wait for abort. If the signal is already aborted, yield
-      // cancelled immediately. Otherwise block until it fires.
       await waitForAbort(signal)
       yield cancelledDone(start, first, envelope, '', 0, 0)
       return

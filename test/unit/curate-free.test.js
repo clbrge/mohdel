@@ -23,8 +23,6 @@ describe('free models in a self-priced list', () => {
     expect(freeModels(list).map(m => m.id)).toEqual(['a:free'])
   })
 
-  // Without prices in the list there is nothing to filter on, and every model
-  // would read as free.
   test('a list without prices yields nothing', () => {
     expect(freeModels([{ id: 'x' }, { id: 'y' }])).toEqual([])
   })
@@ -56,8 +54,6 @@ describe('adding models without prompting', () => {
       outputPrice: 0,
       inputFormat: ['text']
     })
-    // Creator is required, and an upstream list never states it. An id whose
-    // vendor the creator table does not know still has to produce one.
     expect(curated['openrouter/nobody/unknown-model:free'].creator).toBe('nobody')
   })
 })

@@ -14,8 +14,6 @@ const CATALOG_DOC = 'https://github.com/clbrge/mohdel/blob/main/docs/CATALOG.md'
 export const BRIEF_FILE = 'mohdel-brief.md'
 export const BRIEF_HEADING = '# mohdel catalog entry'
 
-// A brief mohdel wrote before is stale, not precious — replace it. Anything
-// else owning the name is the user's, so write alongside rather than over it.
 export const writeBrief = async (provider) => {
   const brief = await buildBrief(provider)
   let name = BRIEF_FILE
@@ -163,9 +161,6 @@ One-shot instead of a session, where the agent supports it:
 
   const assistant = (await getConfig()).assistant || null
 
-  // 150 lines of agent-facing markdown is not what someone at a terminal
-  // wants. Redirected or piped — how the recipe and agents use it — stdout
-  // still carries the brief.
   if (process.stdout.isTTY && !args.includes('--print')) {
     const { preferredAgent, briefPrompt } = await import('../lib/assistants.js')
     const { ok, meta, id: cmd } = await import('./colors.js')

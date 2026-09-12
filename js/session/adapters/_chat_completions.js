@@ -148,8 +148,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
   args.stream = true
   args.stream_options = { include_usage: true }
 
-  // Accumulate via array + join to avoid per-delta V8 cons-string
-  // churn on long streams.
+  // Array + join, not `+=`: per-delta cons-strings are the cost on a long stream.
   const contentParts = []
   const reasoningParts = []
   let first = null
@@ -199,12 +198,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
       }
       if (choice?.delta?.tool_calls) {
         for (const tc of choice.delta.tool_calls) {
-          // Resolve which slot this chunk belongs to:
-          //   1. explicit `tc.index` always wins (normal case);
-          //   2. missing `tc.index` but a `tc.id` we've seen before
-          //      → use the cross-ref we recorded on the opener;
-          //   3. new `tc.id` with no index → allocate next slot;
-          //   4. neither id nor index → can't correlate; drop + warn.
+          // Precedence: explicit `tc.index`, then a known `tc.id`, then a new slot; neither means the chunk cannot be correlated.
           let idx = tc.index
           if (idx == null && tc.id != null && idToIndex[tc.id] != null) {
             idx = idToIndex[tc.id]

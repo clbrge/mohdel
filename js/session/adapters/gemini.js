@@ -101,8 +101,7 @@ export async function * gemini (envelope, deps = {}) {
     request.config = { ...(request.config ?? {}), abortSignal: signal }
   }
 
-  // Accumulate via array + join to avoid per-delta V8 cons-string
-  // churn. Materialized at each exit point.
+  // Array + join, not `+=`: per-delta cons-strings are the cost on a long stream.
   const outputParts = []
   const currentOutput = () => outputParts.join('')
   let inputTokens = 0

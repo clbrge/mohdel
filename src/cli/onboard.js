@@ -30,10 +30,7 @@ async function appendToEnvFile (key, value) {
   let content = ''
   if (existsSync(ENV_PATH)) {
     content = await readFile(ENV_PATH, 'utf8')
-    // Replace existing line if present. The replacement is a function
-    // because `$&`, `` $` ``, `$'` and `$1` are expanded inside a
-    // replacement *string* — a pasted key containing any of them would
-    // be silently rewritten before it hit disk.
+    // Function form: `$&`, `` $` ``, `$'` and `$1` are expanded inside a replacement string, which would rewrite a pasted key.
     const re = new RegExp(`^${escapeRegExp(key)}=.*$`, 'm')
     if (re.test(content)) {
       content = content.replace(re, () => `${key}=${value}`)
@@ -52,8 +49,6 @@ export async function runOnboard () {
   loadDefaultEnv()
   const { configured, unconfigured } = getConfiguredProviders()
 
-  // Already set up: a status line and the step that follows from it, not a
-  // menu. `mo --help` is the menu.
   if (configured.length > 0) {
     const curated = await getCuratedModels()
     const active = catalogEntries(curated).filter(([, s]) => !s.deprecated)
@@ -72,8 +67,6 @@ export async function runOnboard () {
     let handOver = null
     if (active.length === 0) {
       next.push([`mo curate ${first}`, 'add the models this key can reach'])
-      // An interrupted run leaves the brief behind. Telling someone to write
-      // one that is already sitting in front of them is the wrong step.
       const { BRIEF_FILE, BRIEF_HEADING } = await import('./instructions.js')
       const briefPath = resolve(process.cwd(), BRIEF_FILE)
       const briefReady = existsSync(briefPath) &&
@@ -166,13 +159,8 @@ export async function runOnboard () {
   // Reload env so the new key is visible, then fill the catalog.
   loadDefaultEnv()
 
-  // OpenRouter's model list carries prices, so picking by hand is complete
-  // there and needs no agent at all.
   const selfPricing = !!providers[selected]?.pricesFromApi
 
-  // Where the prices are published, the models that cost nothing are the whole
-  // offer for someone with no coding agent. The count belongs on the menu: put
-  // it behind a search over hundreds of ids and nobody finds it.
   let api = null
   let free = []
   if (selfPricing) {
@@ -244,9 +232,6 @@ export async function runOnboard () {
   await writeCatalogBrief(selected)
 }
 
-// The provider API returns model ids, never prices — entries land unpriced and
-// `cost` stays 0 on every result until the numbers are filled in. This is the
-// moment the user is still in the flow.
 async function writeCatalogBrief (selected) {
   const { AGENTS, detectAssistants, preferredAgent, briefPrompt } = await import('../lib/assistants.js')
   const installed = detectAssistants()

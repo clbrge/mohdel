@@ -1,7 +1,7 @@
 import { join, sep } from 'path'
 import { homedir } from 'os'
 import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir, copyFile, stat } from 'fs/promises'
+import { readFile, writeFile, mkdir, copyFile, stat, rename, unlink } from 'fs/promises'
 import envPaths from 'env-paths'
 import { validate, stripComputed } from './schema.js'
 import { silent } from './logger.js'
@@ -79,6 +79,17 @@ const sortObjectKeys = (obj) => {
 const getWeek = (ms) => {
   const d = new Date(ms)
   return `${d.getFullYear()}-W${String(Math.ceil((d.getDate() + new Date(d.getFullYear(), d.getMonth(), 1).getDay()) / 7)).padStart(2, '0')}-${d.getMonth()}`
+}
+
+const writeAtomic = async (filePath, contents) => {
+  const tmp = `${filePath}.${process.pid}.tmp`
+  try {
+    await writeFile(tmp, contents)
+    await rename(tmp, filePath)
+  } catch (err) {
+    await unlink(tmp).catch(() => {})
+    throw err
+  }
 }
 
 const rotateBackup = async (filePath) => {
@@ -214,7 +225,7 @@ const createFileOperation = (filePath, defaultValue = {}, operationType) => {
       }
 
       const sortedData = sortObjectKeys(dataToSave)
-      await writeFile(filePath, JSON.stringify(sortedData, null, 2))
+      await writeAtomic(filePath, JSON.stringify(sortedData, null, 2))
       return true
     } catch (err) {
       moduleLogger.error(`[mohdel:common] failed to save ${operationType}: ${err.message}`)

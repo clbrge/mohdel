@@ -27,6 +27,7 @@ export async function * qwen (envelope, deps = {}) {
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   yield * runChatCompletions(envelope, client, {
+    stream: true,
     provider: 'qwen',
     reasoningField: 'qwen'
   }, {

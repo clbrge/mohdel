@@ -26,6 +26,7 @@ export async function * mistral (envelope, deps = {}) {
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   yield * runChatCompletions(envelope, client, {
+    stream: true,
     provider: 'mistral',
     toolChoiceFlavor: 'mistral'
   }, {

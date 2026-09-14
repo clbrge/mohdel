@@ -25,31 +25,8 @@ import { describe, test, expect, beforeAll } from 'vitest'
 import { adapters } from '../../js/session/adapters/index.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
 import providers from '../../src/lib/providers.js'
+import { SPECS } from './specs.js'
 import { STATUS_COMPLETED, STATUS_INCOMPLETE } from '#core'
-
-/**
- * @typedef {object} LiveSpec
- * @property {string} defaultModel         Bare model ID (no provider prefix).
- * @property {boolean} streams             Whether the adapter emits real SSE deltas.
- * @property {number} [truncateBudget]     outputBudget for the incomplete test. Default 1.
- */
-
-/** @type {Record<string, LiveSpec>} */
-const SPECS = {
-  anthropic: { defaultModel: 'claude-haiku-4-5', streams: true },
-  openai: { defaultModel: 'gpt-5-mini', streams: true, truncateBudget: 16 },
-  gemini: { defaultModel: 'gemini-2.5-flash', streams: true },
-  xai: { defaultModel: 'grok-4-1-fast-non-reasoning', streams: true, truncateBudget: 16 },
-  fireworks: { defaultModel: 'accounts/fireworks/models/kimi-k2p5', streams: true },
-  openrouter: { defaultModel: 'anthropic/claude-haiku-4-5', streams: true },
-  cerebras: { defaultModel: 'gpt-oss-120b', streams: false },
-  deepseek: { defaultModel: 'deepseek-chat', streams: false },
-  groq: { defaultModel: 'llama-3.3-70b-versatile', streams: false },
-  mistral: { defaultModel: 'mistral-small-latest', streams: false },
-  novita: { defaultModel: 'kwaipilot/kat-coder-pro', streams: false },
-  qwen: { defaultModel: 'qwen3.6-flash', streams: false, truncateBudget: 16 },
-  local: { defaultModel: 'llama3.1:8b', streams: true }
-}
 
 async function collect (iter) {
   const out = []

@@ -452,17 +452,17 @@ What each provider supports through mohdel's unified interface:
 | Anthropic | Yes | Yes | Yes | No | Yes (adaptive / budget) | `identifier` → `metadata.user_id` |
 | OpenAI | Yes | Yes | Yes | No | Yes (o-series) | GPT-5 verbosity via `outputStyle` |
 | Gemini | Yes | Yes | Yes | Yes | Yes (`thinkingLevel` / `thinkingBudget`) | Auto-uploads large videos; content-hashed cache |
-| Cerebras | No | Yes | Yes | No | Yes (`reasoning_effort` or zai `disable_reasoning`) | Non-streaming chat completions |
-| Groq | No | Yes | Yes | No | No | Non-streaming; shared chat-completions path |
+| Cerebras | Yes | Yes | Yes | No | Yes (`reasoning_effort` or zai `disable_reasoning`) | Shared chat-completions path |
+| Groq | Yes | Yes | Yes | No | No | Shared chat-completions path |
 | xAI | Yes | Yes | Yes | No | Auto | OpenAI Responses API over `api.x.ai/v1` |
-| DeepSeek | No | Yes | Yes | No | No | DSML tool-call fallback when model emits tags in content |
+| DeepSeek | No | Yes | Yes | No | No | Non-streaming: the DSML tool-call fallback is only parsed off a complete response |
 | Fireworks | Yes | Yes | Yes | No | Yes (`reasoning_effort`) | OpenAI SDK + `baseURL`; model id auto-prefixed |
-| Mistral | No | Yes | Yes | No | No | `tool_choice: "any"` = required |
-| Qwen Cloud | No | Yes | No | No | Yes (`enable_thinking` + `thinking_budget`) | Alibaba DashScope intl; hybrid models think by default — effort `none` sends explicit off |
-| Xiaomi | No | Yes | Yes | No | Auto | MiMo; shared chat-completions path, `reasoning_content` captured |
+| Mistral | Yes | Yes | Yes | No | No | `tool_choice: "any"` = required |
+| Qwen Cloud | Yes | Yes | No | No | Yes (`enable_thinking` + `thinking_budget`) | Alibaba DashScope intl; hybrid models think by default — effort `none` sends explicit off |
+| Xiaomi | Yes | Yes | Yes | No | Auto | MiMo; shared chat-completions path, `reasoning_content` captured |
 | OpenRouter | Yes | Yes | Yes | No | Varies | Meta-provider; `providerOptions.openrouter` for routing prefs |
 | Local | Yes | Yes | Yes | No | No | Any OpenAI-compatible server; endpoint is the catalog entry's `baseURL` |
-| Novita | No | Yes | Yes | No | No | Prices in the model list; text via the shared chat-completions path, separate image adapter |
+| Novita | Yes | Yes | Yes | No | Yes (`reasoning_content`) | Prices in the model list; text via the shared chat-completions path, separate image adapter |
 
 Adapter capability ≠ model capability — whether a given model accepts images, tools, or thinking effort depends on the model spec in `curated.json`. The adapter passes through what the envelope supplies; the provider rejects unsupported combos.
 

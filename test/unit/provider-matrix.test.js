@@ -38,7 +38,7 @@ describe('the README provider matrix', () => {
 })
 
 describe('the live-suite specs', () => {
-  const specs = readFileSync(fileURLToPath(new URL('test/live/adapters.live.test.js', root)), 'utf8')
+  const specs = readFileSync(fileURLToPath(new URL('test/live/specs.js', root)), 'utf8')
   const declared = new Map(
     [...specs.matchAll(/^\s{2}(\w+): \{[^}]*streams: (true|false)/gm)].map(m => [m[1], m[2] === 'true'])
   )
@@ -56,14 +56,10 @@ describe('the live-suite specs', () => {
     expect(wrong).toEqual([])
   })
 
-  // xiaomi has never had a live spec; adding one needs a model id from someone
-  // with a key, and an invented one would fail for the wrong reason.
-  const UNCOVERED = new Set(['xiaomi'])
-
   it('cover every adapter that can be smoke-tested', () => {
     const adapters = readdirSync(adapterDir)
       .filter(f => f.endsWith('.js') && !f.startsWith('_') && !['index.js', 'echo.js', 'fake.js'].includes(f))
       .map(f => f.slice(0, -3))
-    expect(adapters.filter(a => !declared.has(a) && !UNCOVERED.has(a))).toEqual([])
+    expect(adapters.filter(a => !declared.has(a))).toEqual([])
   })
 })

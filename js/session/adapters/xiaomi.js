@@ -26,6 +26,7 @@ export async function * xiaomi (envelope, deps = {}) {
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   yield * runChatCompletions(envelope, client, {
+    stream: true,
     provider: 'xiaomi'
   }, {
     signal: deps.signal,

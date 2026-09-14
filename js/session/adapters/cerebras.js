@@ -17,6 +17,7 @@ import { runChatCompletions } from './_chat_completions.js'
 export async function * cerebras (envelope, deps = {}) {
   const client = deps.client ?? new Cerebras({ apiKey: envelope.auth.key })
   yield * runChatCompletions(envelope, client, {
+    stream: true,
     provider: 'cerebras',
     toolChoiceFlavor: 'cerebras',
     reasoningField: 'cerebras_zai'

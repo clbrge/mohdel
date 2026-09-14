@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.1.0] — Feat: six more providers stream
+
+### Changed
+
+- Cerebras, Groq, Mistral, Novita, Qwen Cloud and Xiaomi stream. Each was
+  checked against the live API first: their SSE honours
+  `stream_options.include_usage`, so token counts still arrive in the final
+  chunk and cost is unaffected. Novita also gets the `streamingDispatcher` the
+  other chat-completions adapters use. DeepSeek stays non-streaming: its DSML
+  tool-call fallback is parsed only off a complete response.
+- `test/live/specs.js` holds the per-provider live-test facts, shared by the
+  live suite and `probes/provider-capability.mjs`. Xiaomi gains a spec, and
+  the stale Fireworks and Novita model ids are corrected.
+
 ## [1.0.3] — Feat: Novita prices itself
 
 ### Added

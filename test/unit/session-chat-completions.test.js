@@ -86,37 +86,42 @@ beforeEach(() => setCatalog({}))
 // ---------- Groq ----------
 
 describe('groq adapter', () => {
-  test('builds non-streaming request and emits delta + done', async () => {
-    const { client, captured } = mockChat(basicResponse())
+  test('builds a streaming request and emits deltas + done', async () => {
+    const { client, captured } = mockChatStream([
+      { choices: [{ delta: { content: 'hello ' } }] },
+      { choices: [{ delta: { content: 'world' }, finish_reason: 'stop' }] },
+      { choices: [], usage: { prompt_tokens: 10, completion_tokens: 2 } }
+    ])
     const events = await collect(groq(envelope('groq', 'llama-3'), { client }))
     expect(captured.args.model).toBe('llama-3')
     expect(captured.args.temperature).toBe(0)
     expect(captured.args.messages).toEqual([{ role: 'user', content: 'hi' }])
-    expect(events.map(e => e.type)).toEqual(['delta', 'done'])
-    expect(events[1].result.output).toBe('hello world')
-    expect(events[1].result.inputTokens).toBe(10)
-    expect(events[1].result.outputTokens).toBe(2)
-    expect(events[1].result.status).toBe('completed')
+    expect(captured.args.stream).toBe(true)
+    expect(captured.args.stream_options).toEqual({ include_usage: true })
+    expect(events.at(-1).type).toBe('done')
+    expect(events.at(-1).result.output).toBe('hello world')
+    expect(events.at(-1).result.inputTokens).toBe(10)
+    expect(events.at(-1).result.outputTokens).toBe(2)
+    expect(events.at(-1).result.status).toBe('completed')
   })
 
   test('finish_reason=length → incomplete + warning', async () => {
-    const { client } = mockChat(basicResponse({ choice: { finish_reason: 'length' } }))
+    const { client } = mockChatStream([
+      { choices: [{ delta: { content: 'hello' } }] },
+      { choices: [{ delta: {}, finish_reason: 'length' }] },
+      { choices: [], usage: { prompt_tokens: 10, completion_tokens: 2 } }
+    ])
     const events = await collect(groq(envelope('groq', 'llama-3'), { client }))
     expect(events.at(-1).result.status).toBe('incomplete')
     expect(events.at(-1).result.warning).toBe('insufficientOutputBudget')
   })
 
   test('tool_calls switch status to tool_use', async () => {
-    const { client } = mockChat({
-      choices: [{
-        message: {
-          content: null,
-          tool_calls: [{ id: 'c1', function: { name: 'do', arguments: '{"a":1}' } }]
-        },
-        finish_reason: 'tool_calls'
-      }],
-      usage: { prompt_tokens: 5, completion_tokens: 3 }
-    })
+    const { client } = mockChatStream([
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'do' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"a":1}' } }] }, finish_reason: 'tool_calls' }] },
+      { choices: [], usage: { prompt_tokens: 5, completion_tokens: 3 } }
+    ])
     const events = await collect(groq(envelope('groq', 'llama-3', {
       tools: [{ name: 'do', parameters: { type: 'object' } }]
     }), { client }))
@@ -648,14 +653,21 @@ describe('xai adapter', () => {
 // ---------- Qwen ----------
 
 describe('qwen adapter', () => {
-  test('builds non-streaming request and emits delta + done', async () => {
-    const { client, captured } = mockChat(basicResponse())
+  test('builds a streaming request and emits deltas + done', async () => {
+    const { client, captured } = mockChatStream([
+      { choices: [{ delta: { content: 'hello ' } }] },
+      { choices: [{ delta: { content: 'world' }, finish_reason: 'stop' }] },
+      { choices: [], usage: { prompt_tokens: 10, completion_tokens: 2 } }
+    ])
     const events = await collect(qwen(envelope('qwen', 'qwen3.6-flash'), { client }))
     expect(captured.args.model).toBe('qwen3.6-flash')
     expect(captured.args.messages).toEqual([{ role: 'user', content: 'hi' }])
-    expect(events.map(e => e.type)).toEqual(['delta', 'done'])
-    expect(events[1].result.output).toBe('hello world')
-    expect(events[1].result.status).toBe('completed')
+    expect(captured.args.stream).toBe(true)
+    expect(captured.args.stream_options).toEqual({ include_usage: true })
+    expect(events.at(-1).type).toBe('done')
+    expect(events.at(-1).result.output).toBe('hello world')
+    expect(events.at(-1).result.status).toBe('completed')
+    expect(events.at(-1).result.inputTokens).toBe(10)
   })
 
   test('outputEffort maps to enable_thinking + thinking_budget', async () => {

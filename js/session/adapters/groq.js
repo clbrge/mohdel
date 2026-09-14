@@ -1,5 +1,5 @@
 /**
- * Groq adapter — OpenAI-compatible chat completions, non-streaming.
+ * Groq adapter — OpenAI-compatible chat completions.
  *
  * @module session/adapters/groq
  */
@@ -19,7 +19,10 @@ export async function * groq (envelope, deps = {}) {
     apiKey: envelope.auth.key,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
-  yield * runChatCompletions(envelope, client, { provider: 'groq' }, {
+  yield * runChatCompletions(envelope, client, {
+    provider: 'groq',
+    stream: true
+  }, {
     signal: deps.signal,
     log: deps.log,
     span: deps.span

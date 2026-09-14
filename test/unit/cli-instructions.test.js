@@ -287,17 +287,34 @@ describe('free tiers in the brief', () => {
   })
 })
 
-describe('the provider whose API publishes prices', () => {
-  test('exactly one provider declares it, and it is openrouter', async () => {
+describe('providers whose API publishes prices', () => {
+  // The shared `openai` catalog client returns ids only, so a provider can
+  // only claim `pricesFromApi` if it has a client of its own that reads them.
+  test('each one has a dedicated catalog client', async () => {
     const { default: providers } = await import('../../src/lib/providers.js')
-    const declared = Object.entries(providers).filter(([, d]) => d.pricesFromApi).map(([n]) => n)
-    expect(declared).toEqual(['openrouter'])
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const dir = path.join(import.meta.dirname, '..', '..', 'src', 'lib', 'catalog')
+    const declared = Object.entries(providers).filter(([, d]) => d.pricesFromApi)
+    expect(declared.length).toBeGreaterThan(0)
+    for (const [name, def] of declared) {
+      const client = def.catalogClient || def.sdk
+      expect(client, name).not.toBe('openai')
+      expect(fs.existsSync(path.join(dir, `${client}.js`)), `${name} -> ${client}.js`).toBe(true)
+    }
   })
 
   test('its brief says the list carries prices rather than sending the agent to a page', async () => {
     const brief = await render(['openrouter'])
-    expect(brief).toContain('is the exception among providers')
+    expect(brief).toContain('publishes prices in its own model list')
     expect(brief).toContain('mo curate openrouter')
+    expect(brief).not.toContain('Provider APIs return model *ids*, not prices.')
+  })
+
+  test('novita gets the same treatment as openrouter', async () => {
+    const brief = await render(['novita'])
+    expect(brief).toContain('publishes prices in its own model list')
+    expect(brief).toContain('mo curate novita')
     expect(brief).not.toContain('Provider APIs return model *ids*, not prices.')
   })
 

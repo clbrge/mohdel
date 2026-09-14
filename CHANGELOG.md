@@ -4,6 +4,34 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.0.3] — Feat: Novita prices itself
+
+### Added
+
+- Novita joins OpenRouter as a provider mohdel prices from its own API.
+  `mo curate novita` reads input, output and cache-read prices, context and
+  output limits, modalities and tool support from `api.novita.ai/openai/v1`,
+  so its entries need no brief and no pricing page.
+- `catalogClient` on a provider record selects a catalog client by name rather
+  than by `sdk`, so a provider on the shared `openai` SDK can read its own
+  richer model list.
+
+### Fixed
+
+- The README Provider Matrix listed Novita as image-generation only, which
+  predates its text adapter.
+
+### Chore
+
+- `@clack/prompts` `^1.8.0` → `^1.8.1`
+- `release-it` `^21.0.2` → `^21.0.3`
+
+### Tests
+
+- `test/unit/catalog-novita.test.js`, `test/unit/provider-matrix.test.js` —
+  the matrix, the live specs and the adapters agree on streaming, and every
+  adapter has a live spec.
+
 ## [1.0.2] — Fix: `mo` was uninstallable since 1.0.0
 
 ### Fixed

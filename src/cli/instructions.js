@@ -302,8 +302,8 @@ the command, do not run it for them.
 ${names.map(referenceList).join('\n')}
 
 ${only && providerDefs[only]?.pricesFromApi
-? `${only} is the exception among providers: its model list carries per-token
-prices, so step 1 gives you the ids *and* the prices, and \`mo curate ${only}\`
+? `${only} publishes prices in its own model list, which most providers do not,
+so step 1 gives you the ids *and* the prices, and \`mo curate ${only}\`
 writes complete entries on its own. Check what it produced rather than
 transcribing anything, and use the pages below only for what the list omits.`
 : `Provider APIs return model *ids*, not prices. Step 1 above gets you the ids;

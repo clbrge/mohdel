@@ -330,7 +330,7 @@ config/curated.example.json for ready-to-copy entries.`)
     if (apiKey && providerConfig.catalog !== false) {
       try {
         const sdkConfig = providerConfig.createConfiguration(apiKey)
-        const { default: API } = await import(`../lib/catalog/${providerConfig.sdk}.js`)
+        const { default: API } = await import(`../lib/catalog/${providerConfig.catalogClient || providerConfig.sdk}.js`)
         const noop = () => {}
         const api = API(sdkConfig, {}, { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop })
         if (api.getModelInfo) {

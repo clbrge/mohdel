@@ -14,11 +14,11 @@ They live on a docs page, so mohdel writes a brief and the coding agent you
 already run reads the page and drafts the entries. `mo` offers this at the end
 of setup. Nothing runs on your key but that agent.
 
-**No coding agent?** OpenRouter is the exception — it publishes per-token
-prices in its own model list, so mohdel can read them. Setup counts the models
-that cost nothing and offers to add all of them in one keystroke; `mo curate
-openrouter` writes complete, priced entries for the paid ones. Free tier, no
-card, and a working catalog without a pricing page or a brief.
+**No coding agent?** OpenRouter and Novita publish per-token prices in their
+own model lists, so mohdel reads them directly. `mo curate openrouter` or `mo
+curate novita` writes complete, priced entries on its own, and setup counts the
+models that cost nothing and offers to add all of them in one keystroke. A
+working catalog without a pricing page or a brief.
 
 Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, OpenRouter, Novita. Node 22+, ES modules.
 
@@ -462,7 +462,7 @@ What each provider supports through mohdel's unified interface:
 | Xiaomi | No | Yes | Yes | No | Auto | MiMo; shared chat-completions path, `reasoning_content` captured |
 | OpenRouter | Yes | Yes | Yes | No | Varies | Meta-provider; `providerOptions.openrouter` for routing prefs |
 | Local | Yes | Yes | Yes | No | No | Any OpenAI-compatible server; endpoint is the catalog entry's `baseURL` |
-| Novita | No | No | No | No | No | Image generation only |
+| Novita | No | Yes | Yes | No | No | Prices in the model list; text via the shared chat-completions path, separate image adapter |
 
 Adapter capability ≠ model capability — whether a given model accepts images, tools, or thinking effort depends on the model spec in `curated.json`. The adapter passes through what the envelope supplies; the provider rejects unsupported combos.
 

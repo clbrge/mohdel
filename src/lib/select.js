@@ -24,7 +24,7 @@ export const providerApi = async (name) => {
   if (!config || config.catalog === false || !config.apiKeyEnv) return null
   const apiKey = getAPIKey(config.apiKeyEnv)
   if (!apiKey) return null
-  const { default: API } = await import(`./catalog/${config.sdk}.js`)
+  const { default: API } = await import(`./catalog/${config.catalogClient || config.sdk}.js`)
   return API({ ...config.createConfiguration(apiKey), baseURL: config.baseURL }, {}, silent)
 }
 

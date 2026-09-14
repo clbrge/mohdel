@@ -104,6 +104,8 @@ const providers = {
     imageHandler: 'novita',
     apiKeyEnv: 'NOVITA_API_SK',
     baseURL: 'https://api.novita.ai/openai',
+    pricesFromApi: true,
+    catalogClient: 'novita',
     createConfiguration: apiKey => ({ apiKey }),
     references: {
       pricing: 'https://novita.ai/pricing',

@@ -4,6 +4,29 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.2.0] — Feat: embeddings
+
+### Added
+
+- `embed()` beside `answer()` and `transcribe()`:
+  `mo.use('openai/text-embedding-3-small').embed(['a', 'b'])` returns
+  `{ vectors, dimensions, inputType, inputTokens, cost, timestamps }`, one
+  vector per input in request order. OpenAI, Gemini, Cohere and `local`;
+  `callEmbedding` from `mohdel/client` for the gate's `POST /v1/embed`.
+- Catalog fields `embeddingPrice`, `dimensions`, `dimensionsSelectable`,
+  `maxBatch`, `maxInputTokens`, `inputTypes` and `defaultInputType`.
+  `inputTypes` maps a symbolic role (`query`, `document`, …) to the
+  provider's vocabulary; an entry declaring none rejects `inputType` rather
+  than dropping it. A batch over `maxBatch` fails before dispatch.
+- Cohere, for embeddings only. It has no chat models.
+
+### Fixed
+
+- A catalog field declared `boolean` always failed validation; `schema.js`
+  had no checker for the type.
+- `cost` rounds to ten decimals rather than six, which reported a short
+  embedding as 0.
+
 ## [1.1.0] — Feat: six more providers stream
 
 ### Changed

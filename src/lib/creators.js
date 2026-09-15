@@ -59,6 +59,18 @@ const creators = {
     logo: 'moonshotai.svg',
     description: 'Moonshot AI ships fluent, Chinese-first assistants and lean models tuned for consumer chat and business workflows.'
   },
+  cohere: {
+    prefixes: ['embed', 'command', 'rerank'],
+    label: 'Cohere',
+    logo: 'cohere.svg',
+    description: 'Cohere builds retrieval-focused models: embeddings and rerankers aimed at enterprise search rather than chat.'
+  },
+  nomic: {
+    prefixes: ['nomic-embed'],
+    label: 'Nomic',
+    logo: 'nomic.svg',
+    description: 'Nomic publishes open-weight embedding models with Matryoshka dimensions, widely self-hosted through Ollama and vLLM.'
+  },
   openai: {
     prefixes: ['gpt', 'whisper', 'dall-e', 'sora', 'text-embedding', 'o1', 'o3', 'o4'],
     label: 'OpenAI',

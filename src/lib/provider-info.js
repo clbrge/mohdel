@@ -86,6 +86,13 @@ const PROVIDER_INFO = {
     hint: 'Create an API key in the MiMo open platform console',
     free: false
   },
+  cohere: {
+    label: 'Cohere',
+    description: 'Embeddings and reranking for retrieval. No chat models through mohdel.',
+    url: 'https://dashboard.cohere.com/api-keys',
+    hint: 'Create an API key in the Cohere dashboard under API Keys',
+    free: true
+  },
   qwen: {
     label: 'Qwen Cloud',
     description: 'Qwen — reasoning, coding, long context. Free quota for new users.',

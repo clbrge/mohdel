@@ -164,3 +164,23 @@ describe('field documentation', () => {
     expect(orphans).toEqual([])
   })
 })
+
+// Every type a field may declare needs a checker in schema.js; a missing one
+// rejects every value, including a correct one, with the useless message
+// "expected boolean, got boolean".
+describe('every declared field type has a checker', () => {
+  test('no field type rejects its own correct value', async () => {
+    const { fieldDefs, validate } = await import('../../src/lib/schema.js')
+    const sample = { string: 'x', number: 1, boolean: true, array: ['text'], object: { a: 'b' } }
+    const base = { model: 'm', creator: 'openai', inputFormat: ['text'] }
+    const broken = []
+    for (const [field, def] of Object.entries(fieldDefs)) {
+      const value = sample[def.type]
+      if (value === undefined) { broken.push(`${field}: no sample for type ${def.type}`); continue }
+      const issues = validate({ ...base, [field]: value }, 'openai/m')
+        .filter(i => i.field === field && i.message.startsWith('expected'))
+      if (issues.length) broken.push(`${field}: ${issues[0].message}`)
+    }
+    expect(broken).toEqual([])
+  })
+})

@@ -7,8 +7,10 @@ const root = new URL('../../', import.meta.url)
 const readme = readFileSync(new URL('README.md', root), 'utf8')
 const adapterDir = fileURLToPath(new URL('js/session/adapters/', root))
 
+// `n/a` is the honest streaming value for a provider with no chat adapter at
+// all, so the column is not a two-state one.
 const rows = new Map(
-  [...readme.matchAll(/^\| ([A-Za-z][\w .]*?) \| (Yes|No) \|/gm)]
+  [...readme.matchAll(/^\| ([A-Za-z][\w .]*?) \| (Yes|No|n\/a) \|/gm)]
     .map(m => [m[1].trim().toLowerCase(), m[2]])
 )
 const label = { 'qwen cloud': 'qwen' }

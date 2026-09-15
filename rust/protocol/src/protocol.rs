@@ -541,6 +541,70 @@ pub enum TranscriptionStatus {
     Completed,
 }
 
+// ---------- EmbedEnvelope / EmbedResult (one-shot, batched) ----------
+//
+// Mirrors `js/core/embedding.js`. One-shot like the image and
+// transcription paths: single request/response over `POST /v1/embed`,
+// plain JSON body, `op: "embed"` driver-stdin tag.
+//
+// Unlike every other path, one call carries N inputs and returns N
+// vectors in request order. The gate does not split a batch: the entry's
+// `maxBatch` is checked session-side and a larger batch is an error,
+// because splitting would change both cost attribution and ordering.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EmbedEnvelope {
+    pub call_id: String,
+    pub auth_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<Auth>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traceparent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baggage: Option<String>,
+
+    // See CallEnvelope — same rules. Full mohdel id.
+    pub model: String,
+    /// Texts to embed. Always an array, even for one.
+    pub input: Vec<String>,
+
+    /// Requested output width. Providers spell this three ways; the
+    /// adapter maps it, and an entry that cannot vary width rejects it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dimensions: Option<u32>,
+    /// Symbolic role of the text (`query`, `document`, ...). The entry's
+    /// `inputTypes` maps it to the provider's own vocabulary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EmbedResult {
+    /// Always "completed" — embeddings are one-shot, no incomplete state.
+    pub status: EmbedStatus,
+    /// One per input, in request order. `f64` because JSON numbers are, and
+    /// the gate relays vectors rather than reinterpreting them: parsing into
+    /// `f32` would rewrite every component on the way through.
+    pub vectors: Vec<Vec<f64>>,
+    /// Width the provider actually returned, not what was asked for.
+    pub dimensions: u32,
+    /// Provider-native role that was sent, or null. The role is baked
+    /// into the vector, so a caller storing these must record it.
+    pub input_type: Option<String>,
+    pub input_tokens: u64,
+    pub cost: f64,
+    /// `first` == `end` (no streaming) — see ImageResult.
+    pub timestamps: Timestamps,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EmbedStatus {
+    Completed,
+}
+
 impl std::fmt::Display for TypedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {

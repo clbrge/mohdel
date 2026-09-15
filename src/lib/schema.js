@@ -58,6 +58,13 @@ const fieldDefs = {
   imageEndpoint: { type: 'string' },
   imageDefaultSize: { type: 'string' },
   transcriptionPrice: { type: 'number' },
+  embeddingPrice: { type: 'number' },
+  dimensions: { type: 'number' },
+  dimensionsSelectable: { type: 'boolean' },
+  maxBatch: { type: 'number' },
+  maxInputTokens: { type: 'number' },
+  inputTypes: { type: 'object' },
+  defaultInputType: { type: 'string' },
   deprecated: { type: 'string' },
   suspended: { type: 'string' },
   rpmLimit: { type: 'number' },
@@ -77,6 +84,7 @@ const COMPUTED_FIELDS = new Set(['upstreamIds'])
 const TYPE_CHECKERS = {
   string: (v) => typeof v === 'string',
   number: (v) => typeof v === 'number',
+  boolean: (v) => typeof v === 'boolean',
   array: (v) => Array.isArray(v),
   object: (v) => typeof v === 'object' && v !== null && !Array.isArray(v)
 }

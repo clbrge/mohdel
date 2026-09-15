@@ -46,8 +46,9 @@ use crate::enforcer::{cooldown_key, Enforcer};
 use crate::hooks::{AuthPolicy, QuotaPolicy, QuotaSpec, RequireInlineAuth, RoutePolicy};
 use crate::metrics;
 use crate::protocol::{
-    AnswerResult, CallEnvelope, DeltaChunk, DeltaKind, Event, ImageEnvelope, ImageResult,
-    Severity, Status, TranscriptionEnvelope, TranscriptionResult, TypedError,
+    AnswerResult, CallEnvelope, DeltaChunk, DeltaKind, EmbedEnvelope, EmbedResult, Event,
+    ImageEnvelope, ImageResult, Severity, Status, TranscriptionEnvelope, TranscriptionResult,
+    TypedError,
 };
 use crate::session_pool::{AcquireError, PooledSession, SessionPool};
 
@@ -245,6 +246,8 @@ async fn handle_data(req: Request<Incoming>, state: Arc<GateState>) -> Response<
         handle_image(req, state).await
     } else if method == Method::POST && path == "/v1/transcription" {
         handle_transcription(req, state).await
+    } else if method == Method::POST && path == "/v1/embed" {
+        handle_embed(req, state).await
     } else {
         not_found_response(&method, &path)
     }
@@ -996,8 +999,72 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
     dispatch_transcription_via_pool(pool, envelope).await
 }
 
+/// HTTP handler for `POST /v1/embed`. See `handle_call` for the
+/// composition use case.
+pub async fn handle_embed(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    let body = match Limited::new(req.into_body(), MAX_CALL_BODY_BYTES).collect().await {
+        Ok(b) => b.to_bytes(),
+        Err(e) => {
+            let too_large = e.downcast_ref::<LengthLimitError>().is_some();
+            return typed_error_response(
+                if too_large { StatusCode::PAYLOAD_TOO_LARGE } else { StatusCode::BAD_REQUEST },
+                Severity::Error,
+                if too_large { "request body exceeds maximum size" } else { "failed to read request body" },
+                &format!("{e}"),
+                if too_large { "PROTOCOL_PAYLOAD_TOO_LARGE" } else { "PROTOCOL_READ_BODY" },
+                false,
+            );
+        }
+    };
+
+    let envelope: EmbedEnvelope = match serde_json::from_slice::<EmbedEnvelope>(&body) {
+        Ok(e) => {
+            if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
+                return typed_error_response(
+                    StatusCode::BAD_REQUEST,
+                    Severity::Error,
+                    "invalid envelope",
+                    &reason,
+                    "PROTOCOL_INVALID_ENVELOPE",
+                    false,
+                );
+            }
+            e
+        }
+        Err(e) => {
+            // See note at the matching `CallEnvelope` parse site
+            // above — do not switch to a value-echoing deserializer
+            // without sanitizing detail here.
+            return typed_error_response(
+                StatusCode::BAD_REQUEST,
+                Severity::Error,
+                "invalid envelope",
+                &format!("{e}"),
+                "PROTOCOL_INVALID_ENVELOPE",
+                false,
+            );
+        }
+    };
+
+    let pool = match &state.pool {
+        Some(p) => p.clone(),
+        None => {
+            return typed_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                Severity::Error,
+                "embed path requires a session pool",
+                "no pool configured",
+                "SESSION_POOL_UNAVAILABLE",
+                false,
+            );
+        }
+    };
+
+    dispatch_embed_via_pool(pool, envelope).await
+}
+
 /// Wire form sent to the session over stdin: the path's envelope plus
-/// an `op` tag ("image" / "transcription") so the driver can dispatch
+/// an `op` tag ("image" / "transcription" / "embed") so the driver can dispatch
 /// to the matching one-shot runner. Internal protocol — not exposed
 /// over HTTP.
 #[derive(Serialize)]
@@ -1023,6 +1090,14 @@ enum TranscriptionSessionLine {
     Error { error: TypedError },
 }
 
+/// Single line returned by the session on the embed path.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum EmbedSessionLine {
+    EmbedDone { result: EmbedResult },
+    Error { error: TypedError },
+}
+
 async fn dispatch_image_via_pool(
     pool: SessionPool,
     envelope: ImageEnvelope,
@@ -1043,6 +1118,18 @@ async fn dispatch_transcription_via_pool(
     match oneshot_exchange::<TranscriptionSessionLine>(&pool, &tagged, "transcription").await {
         Ok(TranscriptionSessionLine::TranscriptionDone { result }) => oneshot_ok_response(&result),
         Ok(TranscriptionSessionLine::Error { error }) => oneshot_error_response(&error),
+        Err(resp) => resp,
+    }
+}
+
+async fn dispatch_embed_via_pool(
+    pool: SessionPool,
+    envelope: EmbedEnvelope,
+) -> Response<Body> {
+    let tagged = OneShotDriverEnvelope { op: "embed", inner: &envelope };
+    match oneshot_exchange::<EmbedSessionLine>(&pool, &tagged, "embed").await {
+        Ok(EmbedSessionLine::EmbedDone { result }) => oneshot_ok_response(&result),
+        Ok(EmbedSessionLine::Error { error }) => oneshot_error_response(&error),
         Err(resp) => resp,
     }
 }

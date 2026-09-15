@@ -16,7 +16,7 @@ import {
 import { createRateLimiter } from '../../js/session/_rate_limiter.js'
 import { createCooldownTracker } from '../../js/session/_cooldown.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
-import { runAnswer, runAnswerImage, runAnswerTranscription } from '../../js/factory/bridge.js'
+import { runAnswer, runAnswerEmbedding, runAnswerImage, runAnswerTranscription } from '../../js/factory/bridge.js'
 import { startSpan, endSpanOk, endSpanError } from './tracing.js'
 import { isValidTag } from './schema.js'
 import { silent } from './logger.js'
@@ -723,6 +723,20 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
             model: modelSpec.model ?? resolvedModelId.split('/').pop(),
             configuration,
             audio,
+            options,
+            spec: modelSpec
+          })
+        }
+      }
+
+      if (prop === 'embed') {
+        return async (input, options = {}) => {
+          const { configuration } = await getRuntime()
+          return runAnswerEmbedding({
+            provider: modelSpec.provider,
+            model: modelSpec.model ?? resolvedModelId.split('/').pop(),
+            configuration,
+            input,
             options,
             spec: modelSpec
           })

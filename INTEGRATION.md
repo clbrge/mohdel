@@ -371,6 +371,7 @@ Call-time `speed` still wins if you pass it. See *Service speeds* below.
 | `model.answer(prompt, options?)` | `Promise<AnswerResult>` | Run inference |
 | `model.image(prompt, options?)` | `Promise<ImageResult>` | Generate image (openai, novita) |
 | `model.transcribe(audio, options?)` | `Promise<TranscriptionResult>` | Speech → text (groq, mistral, openai) |
+| `model.embed(input, options?)` | `Promise<EmbedResult>` | Text → vectors (openai, gemini, cohere, local) |
 | `model.addTag(tag)` | `Promise<string[]>` | Tag management, persisted |
 | `model.removeTag(tag)` | `Promise<string[]>` | (alias: `delTag`) |
 | `model.listTags()` | `string[]` | (alias: `tags`) |
@@ -766,6 +767,81 @@ inline and are bounded by the 16 MiB body cap.
 
 Failures surface as `SESSION_INVALID_IMAGE` / `SESSION_INVALID_VIDEO` /
 `SESSION_INVALID_AUDIO` typed errors rather than provider errors.
+
+## Embeddings
+
+```js
+const embedder = mo.use('cohere/embed-v4.0')
+const result = await embedder.embed(
+  ['first chunk', 'second chunk'],
+  {
+    inputType: 'document',   // optional; see below
+    dimensions: 256          // optional; only where the entry allows it
+  }
+)
+
+result.vectors      // number[][] — one per input, in request order
+result.dimensions   // width the provider actually returned
+result.inputType    // the provider-native role that was sent, or null
+result.inputTokens  // what the provider billed on
+result.cost         // USD — embeddingPrice (per million tokens) × inputTokens
+```
+
+Separate from `.answer()`: nothing is generated, so there is no
+`outputTokens`, no streaming and no `incomplete` status. A single string is
+accepted and normalized to a one-element batch, so the result shape never
+depends on how you asked.
+
+Providers: `openai`, `gemini`, `cohere`, and `local` against any
+OpenAI-compatible server. The other nine have no embeddings endpoint at all,
+including both meta-providers.
+
+### `inputType`: the role is part of the vector
+
+Asymmetric models embed the same string differently depending on whether it is
+a query or a document, by prepending an instruction before encoding. Getting it
+wrong does not error; it quietly retrieves worse.
+
+Mohdel takes a symbolic role — `query`, `document`, `classification`,
+`clustering` — and the catalog entry maps it to the provider's own vocabulary:
+
+```json
+"cohere/embed-v4.0": {
+  "inputTypes": { "query": "search_query", "document": "search_document" },
+  "defaultInputType": "document"
+}
+```
+
+An entry that declares no `inputTypes` rejects the field rather than dropping
+it. Cohere requires the parameter outright, so an entry for it without a
+mapping fails before dispatch.
+
+**The role is a property of the stored vectors, not of the call.** A namespace
+filled with `document` vectors must be queried with `query` vectors from the
+same model, permanently. `result.inputType` returns what was sent so a caller
+storing vectors can record it alongside them.
+
+### Batches are not split
+
+`maxBatch` on the entry is the provider's limit: 2048 on OpenAI, 96 on Cohere,
+1 for Gemini's single-content endpoint. A larger batch fails before dispatch
+with `EMBED_BATCH_TOO_LARGE`. Mohdel does not chunk for you — splitting would
+change both cost attribution and result ordering, and chunking is the caller's
+policy.
+
+Likewise `dimensions` on a model whose entry has no `dimensionsSelectable`
+fails rather than being sent and ignored, which would hand back a different
+width than you asked for.
+
+### Cross-process
+
+```js
+import { callEmbedding } from 'mohdel/client'
+
+const result = await callEmbedding(envelope, { socketPath })
+```
+
+`POST /v1/embed` on the gate, one JSON response, same result shape.
 
 ## Rate limiting
 

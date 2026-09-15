@@ -18,6 +18,7 @@ import { MAX_LINE_BYTES, exceedsLineBytes } from '#core/framing.js'
 import { run } from './run.js'
 import { runImage } from './run_image.js'
 import { runTranscription } from './run_transcription.js'
+import { runEmbedding } from './run_embedding.js'
 import { setCatalog } from './adapters/_catalog.js'
 
 // Bounded memory for pre-dequeue cancels. Hostile/buggy supervisors
@@ -218,6 +219,16 @@ export async function drive (stdin, stdout) {
         const out = await runTranscription(trEnv)
         if (out.ok) {
           await writeLine({ type: 'transcription_done', result: out.result })
+        } else {
+          await writeLine({ type: 'error', error: out.error })
+        }
+      } else if (envelope.op === 'embed') {
+        // Same one-shot contract; shape matches `js/core/embedding.js`
+        // after the tag strip. One line carries all N vectors.
+        const { op: _op, ...embEnv } = envelope
+        const out = await runEmbedding(embEnv)
+        if (out.ok) {
+          await writeLine({ type: 'embed_done', result: out.result })
         } else {
           await writeLine({ type: 'error', error: out.error })
         }

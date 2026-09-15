@@ -148,6 +148,21 @@ export function computeTranscriptionCost (spec, usage) {
 }
 
 /**
+ * Embedding cost. `embeddingPrice` is USD per million input tokens; nothing is
+ * generated, so there is no output side.
+ *
+ * @param {any} spec
+ * @param {{inputTokens?: number}} usage
+ * @returns {number}
+ */
+export function computeEmbeddingCost (spec, usage) {
+  if (!spec || typeof spec.embeddingPrice !== 'number') return 0
+  const tokens = usage.inputTokens
+  if (typeof tokens !== 'number' || tokens <= 0) return 0
+  return round((tokens / 1_000_000) * spec.embeddingPrice)
+}
+
+/**
  * Test convenience: inject pricing-only specs by model id. Wraps
  * `setCatalog` with the `{input, output, thinking?}` shape used in
  * existing tests, translating to spec fields.
@@ -168,6 +183,9 @@ export function setPricing (table) {
 }
 
 /** @param {number} n */
+// 1e-10 USD, not 1e-6. Six decimals reads as plenty until you price a short
+// embedding: 4 tokens at $0.02 per million is 8e-8, which rounds to zero, and
+// a million such calls then sum to zero instead of to their real cost.
 function round (n) {
-  return Math.round(n * 1e6) / 1e6
+  return Math.round(n * 1e10) / 1e10
 }

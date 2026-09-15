@@ -16,4 +16,5 @@
 export { call } from './call.js'
 export { callImage } from './call_image.js'
 export { callTranscription } from './call_transcription.js'
+export { callEmbedding } from './call_embedding.js'
 export { resolveGateBinary } from './gate-binary.js'

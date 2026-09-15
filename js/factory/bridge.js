@@ -23,6 +23,7 @@
 import { run } from '../session/run.js'
 import { runImage } from '../session/run_image.js'
 import { runTranscription } from '../session/run_transcription.js'
+import { runEmbedding } from '../session/run_embedding.js'
 import { markTrustedMedia } from '../session/adapters/_media.js'
 import { MohdelError, validateIds } from '#core'
 import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
@@ -176,6 +177,42 @@ export async function runAnswerTranscription ({ provider, model, configuration, 
   if (options.prompt) envelope.prompt = options.prompt
 
   const out = await runTranscription(markTrustedMedia(envelope), spec ? { spec } : {})
+  if (!out.ok) throw MohdelError.fromJSON(out.error, { provider, model })
+  return out.result
+}
+
+/**
+ * Run an `embed()` call through the /session runtime.
+ *
+ * @param {object} args
+ * @param {string} args.provider
+ * @param {string} args.model
+ * @param {any} args.configuration
+ * @param {string | string[]} args.input   One text or a batch; normalized to an
+ *                                         array so the result shape never
+ *                                         depends on how the caller asked.
+ * @param {any} [args.options]             `inputType` / `dimensions` map onto
+ *                                         the envelope; `callId` / `authId` are
+ *                                         transport metadata.
+ * @param {any} [args.spec]
+ * @returns {Promise<any>}
+ */
+export async function runAnswerEmbedding ({ provider, model, configuration, input, options = {}, spec }) {
+  const callId = options.callId || newCallId()
+  const authId = options.authId || 'local'
+  assertValidIds(callId, authId, `${provider}/${model}`)
+
+  const envelope = {
+    callId,
+    authId,
+    auth: configToAuth(configuration),
+    model: `${provider}/${model}`,
+    input: Array.isArray(input) ? input : [input]
+  }
+  if (options.inputType) envelope.inputType = options.inputType
+  if (options.dimensions !== undefined) envelope.dimensions = options.dimensions
+
+  const out = await runEmbedding(envelope, spec ? { spec } : {})
   if (!out.ok) throw MohdelError.fromJSON(out.error, { provider, model })
   return out.result
 }

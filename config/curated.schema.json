@@ -517,6 +517,39 @@
           "minimum": 0,
           "description": "USD per audio minute (transcription-type entries). Token-billed transcription models (OpenAI gpt-4o-*-transcribe) use inputPrice/outputPrice instead."
         },
+        "embeddingPrice": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1,000,000 input tokens for an embedding model. Without it, cost is 0 on every embed call."
+        },
+        "dimensions": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Native width of the vectors this model returns."
+        },
+        "dimensionsSelectable": {
+          "type": "boolean",
+          "description": "Whether the model accepts a requested output width. Providers spell the parameter differently (dimensions, output_dimension, outputDimensionality) and support it on some models only; when false, passing `dimensions` fails before dispatch instead of being ignored."
+        },
+        "maxBatch": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Inputs accepted in one embed call. 2048 on OpenAI, 96 on Cohere, 10 on Qwen Cloud, 1 for Gemini's single-content endpoint. A larger batch fails before dispatch; mohdel does not split one, because splitting changes cost attribution and result ordering."
+        },
+        "maxInputTokens": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Token ceiling for a single input, not for the request."
+        },
+        "inputTypes": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Maps mohdel's symbolic roles (query, document, classification, clustering) to the provider's own vocabulary, e.g. {\"query\": \"RETRIEVAL_QUERY\"} for Gemini or {\"query\": \"search_query\"} for Cohere. An entry without it rejects `inputType` rather than dropping it: the role is baked into the vector, so a silent drop produces quietly worse retrieval."
+        },
+        "defaultInputType": {
+          "type": "string",
+          "description": "Symbolic role sent when the caller names none. Required for providers that make the parameter mandatory (Cohere v3+)."
+        },
         "rpmLimit": {
           "type": "integer",
           "minimum": 1,

@@ -86,6 +86,18 @@ const providers = {
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
   },
+  cohere: {
+    sdk: 'cohere',
+    api: 'embeddings',
+    apiKeyEnv: 'COHERE_API_SK',
+    baseURL: 'https://api.cohere.com/v2',
+    createConfiguration: apiKey => ({ apiKey }),
+    references: {
+      pricing: 'https://cohere.com/pricing',
+      models: 'https://docs.cohere.com/docs/models',
+      rateLimits: 'https://docs.cohere.com/docs/rate-limits'
+    }
+  },
   mistral: {
     sdk: 'openai',
     api: 'chatCompletions',

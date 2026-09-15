@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, globSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import providers from '../../src/lib/providers.js'
 
@@ -7,7 +7,11 @@ const read = name => readFileSync(fileURLToPath(new URL(`../../${name}`, import.
 const pkg = JSON.parse(read('package.json'))
 const readme = read('README.md')
 
-const remote = Object.keys(providers).filter(name => name !== 'local')
+const chatAdapters = new Set(
+  globSync('js/session/adapters/*.js', { cwd: fileURLToPath(new URL('../../', import.meta.url)) })
+    .map(f => f.split('/').pop().slice(0, -3))
+)
+const remote = Object.keys(providers).filter(name => name !== 'local' && chatAdapters.has(name))
 
 describe('provider count claimed to the public', () => {
   it('matches the catalogue in the npm description', () => {

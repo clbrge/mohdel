@@ -1,0 +1,69 @@
+{
+  "envelope-minimal": {
+    "callId": "e1",
+    "authId": "a1",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/text-embedding-3-small",
+    "input": [
+      "a single chunk"
+    ]
+  },
+  "envelope-full": {
+    "callId": "e2",
+    "authId": "a2",
+    "auth": {
+      "key": "sk-test"
+    },
+    "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01",
+    "baggage": "user=a2",
+    "model": "cohere/embed-v4.0",
+    "input": [
+      "first chunk",
+      "second chunk"
+    ],
+    "dimensions": 512,
+    "inputType": "document"
+  },
+  "result-minimal": {
+    "status": "completed",
+    "vectors": [
+      [
+        0.1,
+        0.2
+      ]
+    ],
+    "dimensions": 2,
+    "inputType": null,
+    "inputTokens": 7,
+    "cost": 0.0,
+    "timestamps": {
+      "start": "1000",
+      "first": "1200",
+      "end": "1200"
+    }
+  },
+  "result-batched-priced": {
+    "status": "completed",
+    "vectors": [
+      [
+        0.1,
+        0.2
+      ],
+      [
+        0.3,
+        0.4
+      ]
+    ],
+    "dimensions": 2,
+    "inputType": "search_document",
+    "inputTokens": 1000000,
+    "cost": 0.12,
+    "timestamps": {
+      "start": "2000",
+      "first": "2400",
+      "end": "2400"
+    }
+  }
+}

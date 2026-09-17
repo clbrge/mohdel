@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.3.2] — Fix: priced models shown as free
+
+### Fixed
+
+- `mo model list` read only `inputPrice`/`outputPrice`, so every model billed on
+  another dimension — embeddings, image generation, transcription — printed as
+  `free`. Each now shows its own price, with the unit where it is not per-token.
+
 ## [1.3.1] — Feat: the brief covers rate limits
 
 ### Added

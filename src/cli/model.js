@@ -759,9 +759,23 @@ function resolvePrice (p) {
   return 0
 }
 
+// Per-1M-token pricing is the pair; the other kinds bill on one dimension of
+// their own, and reading only the pair prints a priced model as free.
+const SINGLE_DIMENSION_PRICES = [
+  ['embeddingPrice', ''],
+  ['imagePrice', '/image'],
+  ['transcriptionPrice', '/min']
+]
+
 function formatPrice (info) {
   const inp = resolvePrice(info.inputPrice)
   const out = resolvePrice(info.outputPrice)
-  if (!inp && !out) return meta('free')
-  return price(`$${inp}`) + meta('/') + price(`$${out}`)
+  if (inp || out) return price(`$${inp}`) + meta('/') + price(`$${out}`)
+
+  for (const [field, unit] of SINGLE_DIMENSION_PRICES) {
+    const p = resolvePrice(info[field])
+    if (p) return price(`$${p}`) + meta(unit)
+  }
+
+  return meta('free')
 }

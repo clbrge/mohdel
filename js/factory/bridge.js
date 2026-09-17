@@ -187,6 +187,8 @@ export async function runAnswerTranscription ({ provider, model, configuration, 
  * @param {object} args
  * @param {string} args.provider
  * @param {string} args.model
+ * @param {string} [args.modelKey]         Mohdel catalog key, for the rate-limit
+ *                                         bucket when the entry is model-scoped.
  * @param {any} args.configuration
  * @param {string | string[]} args.input   One text or a batch; normalized to an
  *                                         array so the result shape never
@@ -195,9 +197,10 @@ export async function runAnswerTranscription ({ provider, model, configuration, 
  *                                         the envelope; `callId` / `authId` are
  *                                         transport metadata.
  * @param {any} [args.spec]
+ * @param {BridgeDeps} [deps]
  * @returns {Promise<any>}
  */
-export async function runAnswerEmbedding ({ provider, model, configuration, input, options = {}, spec }) {
+export async function runAnswerEmbedding ({ provider, model, modelKey, configuration, input, options = {}, spec }, deps = {}) {
   const callId = options.callId || newCallId()
   const authId = options.authId || 'local'
   assertValidIds(callId, authId, `${provider}/${model}`)
@@ -212,7 +215,11 @@ export async function runAnswerEmbedding ({ provider, model, configuration, inpu
   if (options.inputType) envelope.inputType = options.inputType
   if (options.dimensions !== undefined) envelope.dimensions = options.dimensions
 
-  const out = await runEmbedding(envelope, spec ? { spec } : {})
+  const out = await runEmbedding(envelope, {
+    ...deps,
+    ...(modelKey ? { modelKey } : {}),
+    ...(spec ? { spec } : {})
+  })
   if (!out.ok) throw MohdelError.fromJSON(out.error, { provider, model })
   return out.result
 }

@@ -38,6 +38,7 @@ const ARGUMENT = {
   'tag rm': ['model', 'tag'],
   'ratelimit show': ['model'],
   'ratelimit set': ['model'],
+  'ratelimit provider set': ['provider'],
   'ratelimit rm': ['model']
 }
 

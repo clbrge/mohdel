@@ -553,12 +553,17 @@
         "rpmLimit": {
           "type": "integer",
           "minimum": 1,
-          "description": "Requests per minute. Overrides provider default."
+          "description": "Requests per minute this key may send. Overrides the provider-level default."
         },
         "tpmLimit": {
           "type": "integer",
           "minimum": 1,
-          "description": "Tokens per minute. Overrides provider default."
+          "description": "Tokens per minute this key may spend. Overrides the provider-level default."
+        },
+        "inpmLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Inputs per minute this key may send to an embedding endpoint, for a provider that meters the endpoint in inputs rather than requests or tokens (Cohere publishes '2,000 inputs / min'). Counted exactly before dispatch from the batch size; a batch larger than the whole allowance is sent rather than delayed, since waiting cannot make it fit."
         },
         "rateLimitScope": {
           "type": "string",
@@ -566,7 +571,7 @@
             "model",
             "provider"
           ],
-          "description": "'model' = private budget. 'provider' = shared with provider-level pool."
+          "description": "Whose budget this key's calls draw on: 'model' = a private bucket for this entry, 'provider' = the pool shared with every other model of the provider."
         },
         "deprecated": {
           "type": "string",

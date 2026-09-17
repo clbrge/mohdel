@@ -9,7 +9,7 @@ pub mod cooldown;
 pub mod rate_limiter;
 
 pub use cooldown::{CooldownInfo, CooldownTracker};
-pub use rate_limiter::RateLimiter;
+pub use rate_limiter::{Limits, RateLimiter};
 
 #[derive(Debug, Default)]
 pub struct Enforcer {

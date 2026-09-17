@@ -53,6 +53,10 @@ async fn wait_for(path: &Path) {
 }
 
 async fn post(path: &Path, body: Bytes) -> Response<Incoming> {
+    post_to(path, "/v1/call", body).await
+}
+
+async fn post_to(path: &Path, uri: &str, body: Bytes) -> Response<Incoming> {
     let stream = UnixStream::connect(path).await.expect("connect");
     let io = TokioIo::new(stream);
     let (mut sender, conn) = http1::handshake(io).await.expect("handshake");
@@ -61,12 +65,33 @@ async fn post(path: &Path, body: Bytes) -> Response<Incoming> {
     });
     let req = Request::builder()
         .method("POST")
-        .uri("/v1/call")
+        .uri(uri)
         .header("host", "unix")
         .header("content-type", "application/json")
         .body(Full::new(body))
         .expect("request build");
     sender.send_request(req).await.expect("send")
+}
+
+fn embed_bytes(auth_id: &str, inputs: usize) -> Bytes {
+    let v = json!({
+        "callId": "c1",
+        "authId": auth_id,
+        "auth": { "key": "sk" },
+        "model": "cohere/embed-v4.0",
+        "input": vec!["x"; inputs],
+    });
+    Bytes::from(serde_json::to_vec(&v).unwrap())
+}
+
+/// One-shot routes answer with a single JSON body rather than an event
+/// stream, so the status carries as much as the payload.
+async fn oneshot_error(res: Response<Incoming>) -> (StatusCode, String) {
+    let status = res.status();
+    let body = res.into_body().collect().await.expect("body").to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&body).expect("json body");
+    let kind = v.get("type").and_then(|k| k.as_str()).unwrap_or_default().to_string();
+    (status, kind)
 }
 
 fn envelope_bytes(auth_id: &str, provider: &str, model: &str) -> Bytes {
@@ -151,6 +176,7 @@ fn permissive_quota() -> QuotaSpec {
     QuotaSpec {
         rpm: None,
         tpm: None,
+        inpm: None,
         cooldown_threshold: 3,
         cooldown_duration_ms: 60_000,
     }
@@ -227,6 +253,7 @@ async fn rpm_exhaustion_yields_quota_exceeded() {
         quota: Arc::new(FixedQuota(QuotaSpec {
             rpm: Some(1),
             tpm: None,
+            inpm: None,
             cooldown_threshold: 99,
             cooldown_duration_ms: 60_000,
         })),
@@ -268,6 +295,7 @@ async fn rpm_isolation_between_users() {
         quota: Arc::new(FixedQuota(QuotaSpec {
             rpm: Some(1),
             tpm: None,
+            inpm: None,
             cooldown_threshold: 99,
             cooldown_duration_ms: 60_000,
         })),
@@ -418,5 +446,157 @@ async fn route_rewrite_reaches_downstream_envelope() {
         Event::Done { .. } => {}
         other => panic!("rewrite path should reach done, got {other:?}"),
     }
+    server.abort();
+}
+
+
+/// `/v1/embed` dispatched straight to the pool once, with no quota and
+/// no cooldown: a caller out of allowance on `/v1/call` could keep
+/// embedding. The guard runs before the pool check, so a gate with no
+/// pool still shows which of the two refused the call.
+#[tokio::test]
+async fn embed_route_enforces_quota() {
+    let path = temp_sock("embed-quota");
+    let _g = SocketGuard(path.clone());
+
+    let state = GateState {
+        pool: None,
+        route: Arc::new(PermissiveRoute),
+        quota: Arc::new(FixedQuota(QuotaSpec {
+            rpm: Some(1),
+            tpm: None,
+            inpm: None,
+            cooldown_threshold: 99,
+            cooldown_duration_ms: 60_000,
+        })),
+        auth: Arc::new(RequireInlineAuth),
+        enforcer: Arc::new(Enforcer::new()),
+    };
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = serve_data_with_state(&serve_path, state).await;
+    });
+    wait_for(&path).await;
+
+    let (status, kind) = oneshot_error(post_to(&path, "/v1/embed", embed_bytes("u1", 1)).await).await;
+    assert_eq!(kind, "SESSION_POOL_UNAVAILABLE", "first call passes the guard");
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+
+    let (status, kind) = oneshot_error(post_to(&path, "/v1/embed", embed_bytes("u1", 1)).await).await;
+    assert_eq!(kind, "QUOTA_EXCEEDED");
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+
+    server.abort();
+}
+
+/// Inputs per minute: the batch is admitted only when the whole of it
+/// fits, which is what an endpoint metered in inputs rather than
+/// requests needs.
+#[tokio::test]
+async fn embed_inpm_admits_only_a_batch_that_fits() {
+    let path = temp_sock("embed-inpm");
+    let _g = SocketGuard(path.clone());
+
+    let state = GateState {
+        pool: None,
+        route: Arc::new(PermissiveRoute),
+        quota: Arc::new(FixedQuota(QuotaSpec {
+            rpm: None,
+            tpm: None,
+            inpm: Some(100),
+            cooldown_threshold: 99,
+            cooldown_duration_ms: 60_000,
+        })),
+        auth: Arc::new(RequireInlineAuth),
+        enforcer: Arc::new(Enforcer::new()),
+    };
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = serve_data_with_state(&serve_path, state).await;
+    });
+    wait_for(&path).await;
+
+    let (_, kind) = oneshot_error(post_to(&path, "/v1/embed", embed_bytes("u1", 96)).await).await;
+    assert_eq!(kind, "SESSION_POOL_UNAVAILABLE", "96 of 100 fits");
+
+    let (status, kind) = oneshot_error(post_to(&path, "/v1/embed", embed_bytes("u1", 96)).await).await;
+    assert_eq!(kind, "QUOTA_EXCEEDED", "another 96 does not");
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+
+    let (_, kind) = oneshot_error(post_to(&path, "/v1/embed", embed_bytes("u2", 96)).await).await;
+    assert_eq!(kind, "SESSION_POOL_UNAVAILABLE", "another caller has its own bucket");
+
+    server.abort();
+}
+
+/// A batch larger than the entire allowance cannot be made to fit by
+/// waiting, so it is sent rather than refused.
+#[tokio::test]
+async fn embed_oversized_batch_is_sent_not_refused() {
+    let path = temp_sock("embed-oversized");
+    let _g = SocketGuard(path.clone());
+
+    let state = GateState {
+        pool: None,
+        route: Arc::new(PermissiveRoute),
+        quota: Arc::new(FixedQuota(QuotaSpec {
+            rpm: None,
+            tpm: None,
+            inpm: Some(50),
+            cooldown_threshold: 99,
+            cooldown_duration_ms: 60_000,
+        })),
+        auth: Arc::new(RequireInlineAuth),
+        enforcer: Arc::new(Enforcer::new()),
+    };
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = serve_data_with_state(&serve_path, state).await;
+    });
+    wait_for(&path).await;
+
+    let (_, kind) = oneshot_error(post_to(&path, "/v1/embed", embed_bytes("u1", 96)).await).await;
+    assert_eq!(kind, "SESSION_POOL_UNAVAILABLE");
+
+    server.abort();
+}
+
+/// The other one-shot routes share the same guard.
+#[tokio::test]
+async fn image_route_enforces_quota() {
+    let path = temp_sock("image-quota");
+    let _g = SocketGuard(path.clone());
+
+    let state = GateState {
+        pool: None,
+        route: Arc::new(PermissiveRoute),
+        quota: Arc::new(FixedQuota(QuotaSpec {
+            rpm: Some(0),
+            tpm: None,
+            inpm: None,
+            cooldown_threshold: 99,
+            cooldown_duration_ms: 60_000,
+        })),
+        auth: Arc::new(RequireInlineAuth),
+        enforcer: Arc::new(Enforcer::new()),
+    };
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = serve_data_with_state(&serve_path, state).await;
+    });
+    wait_for(&path).await;
+
+    let image = json!({
+        "callId": "c1",
+        "authId": "u1",
+        "auth": { "key": "sk" },
+        "model": "openai/gpt-image-1",
+        "prompt": "a cat"
+    });
+    let body = Bytes::from(serde_json::to_vec(&image).unwrap());
+    let (status, kind) = oneshot_error(post_to(&path, "/v1/image", body).await).await;
+    assert_eq!(kind, "QUOTA_EXCEEDED", "rpm 0 is a killswitch on every route");
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+
     server.abort();
 }

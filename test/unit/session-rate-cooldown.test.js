@@ -332,6 +332,26 @@ describe('session/run — rate-limit enforcement', () => {
     // Mixed: one denies, the other unset → denied
     expect(rl.check('k', { rpmLimit: 0, tpmLimit: 1000 })).toBeGreaterThan(0)
   })
+
+  test('limiter buckets reset on the minute boundary', () => {
+    const rl = createRateLimiter()
+    rl.recordRequest('k')
+    rl.recordTokens('k', 50000)
+    rl.recordInputs('k', 96)
+    expect(rl.check('k', { rpmLimit: 1 })).toBeGreaterThan(0)
+    expect(rl.check('k', { tpmLimit: 50000 })).toBeGreaterThan(0)
+    expect(rl.check('k', { inpmLimit: 100 }, { inputs: 10 })).toBeGreaterThan(0)
+
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(Date.now() + 61000)
+      expect(rl.check('k', { rpmLimit: 1 })).toBe(0)
+      expect(rl.check('k', { tpmLimit: 50000 })).toBe(0)
+      expect(rl.check('k', { inpmLimit: 100 }, { inputs: 10 })).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('createCooldownTracker — window freeze (regression)', () => {

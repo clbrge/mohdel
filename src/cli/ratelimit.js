@@ -4,24 +4,111 @@ import { parseJsonFlag, jsonOutputOne } from './json-output.js'
 // CLI logger: silent for noisy levels, console.error for errors and fatals.
 const cliLogger = { ...silent, error: console.error, fatal: console.error }
 
+const LIMIT_NAMES = ['rpm', 'tpm', 'inpm']
+
+/**
+ * `0` is a killswitch, not "unset", so read nullability rather than truth.
+ *
+ * @param {{rpmLimit?: number, tpmLimit?: number, inpmLimit?: number} | null | undefined} entry
+ * @returns {string[]}
+ */
+function limitParts (entry) {
+  if (!entry) return []
+  return LIMIT_NAMES
+    .filter(name => entry[`${name}Limit`] != null)
+    .map(name => `${name}=${entry[`${name}Limit`]}`)
+}
+
+/**
+ * @param {string[]} cleared  Limits named on the command line; empty means all.
+ * @param {string[]} parts    What is left afterwards.
+ */
+function clearedLine (cleared, parts) {
+  if (cleared.length === 0) return 'limits cleared'
+  return `${cleared.join(', ')} cleared; ${parts.length ? `${parts.join(' ')} remain` : 'no limits remain'}`
+}
+
+/** @param {string[]} names */
+function parseLimitNames (names) {
+  for (const name of names) {
+    if (!LIMIT_NAMES.includes(name)) {
+      console.error(`Unknown limit '${name}'. Known: ${LIMIT_NAMES.join(', ')}`)
+      process.exit(1)
+    }
+  }
+  return names
+}
+
+/** @param {string} raw */
+function toCount (raw) {
+  const n = parseInt(raw, 10)
+  if (!Number.isInteger(n) || n < 0 || String(n) !== String(raw).trim()) {
+    console.error(`'${raw}' is not a whole number`)
+    process.exit(1)
+  }
+  return n
+}
+
+/**
+ * Two forms. Named pairs — `rpm 60 inpm 2000` — reach every limit, including
+ * one on its own. The positional `<rpm> [tpm]` covers the common pair; a
+ * leading digit picks that form, since no limit is named one.
+ *
+ * @param {string[]} args
+ * @param {string} usage
+ * @returns {{rpm?: number, tpm?: number, inpm?: number}}
+ */
+function parseLimits (args, usage) {
+  if (args.length === 0) { console.error(usage); process.exit(1) }
+
+  if (/^\d/.test(args[0])) {
+    const [rpm, tpm] = args
+    return tpm ? { rpm: toCount(rpm), tpm: toCount(tpm) } : { rpm: toCount(rpm) }
+  }
+
+  /** @type {Record<string, number>} */
+  const limits = {}
+  for (let i = 0; i < args.length; i += 2) {
+    const name = args[i]
+    if (!LIMIT_NAMES.includes(name)) {
+      console.error(`Unknown limit '${name}'. Known: ${LIMIT_NAMES.join(', ')}`)
+      process.exit(1)
+    }
+    if (args[i + 1] == null) { console.error(`'${name}' needs a value`); process.exit(1) }
+    limits[name] = toCount(args[i + 1])
+  }
+  return limits
+}
+
 export async function runRateLimit (args) {
   const jsonFlag = parseJsonFlag(args)
-  const [action, arg1, arg2, arg3] = args
+  const [action, arg1] = args
 
   if (!action || action === '-h' || action === '--help') {
     console.log(`mohdel ratelimit — manage rate limits
 
 Usage:
   ratelimit show <model|provider> [--json]       Show effective limits
-  ratelimit set <model> [rpm] [tpm]              Set model-level limits
-  ratelimit rm <model>                           Remove model-level limits
-  ratelimit provider set <provider> [rpm] [tpm]  Set provider-level limits
-  ratelimit provider rm <provider>               Remove provider-level limits
+  ratelimit set <model> <limit> <value> …        Set limits by name
+  ratelimit set <model> <rpm> [tpm]              Shortcut for the two common ones
+  ratelimit rm <model> [limit …]                 Remove limits, or all of them
+  ratelimit provider set <provider> <limit> <value> …
+  ratelimit provider set <provider> <rpm> [tpm]
+  ratelimit provider rm <provider> [limit …]     Remove limits, or all of them
+
+Limits:
+  rpm     requests per minute
+  tpm     tokens per minute
+  inpm    inputs per minute — what an embedding endpoint is metered in when
+          the provider counts inputs rather than requests or tokens
 
 Examples:
   ratelimit show anthropic                   Provider limits
   ratelimit show gemini/gemini-flash-latest  Model limits, then provider
+  ratelimit set cohere/embed-v4.0 inpm 2000
+  ratelimit set gemini/gemini-flash-latest rpm 15 tpm 1000000
   ratelimit set gemini/gemini-flash-latest 15 1000000
+  ratelimit rm cohere/embed-v4.0 inpm
   ratelimit provider set anthropic 60 100000
 
 Aliases:
@@ -49,35 +136,24 @@ Configuration:
     if (providerAction === 'show') {
       if (!providerName) { console.error('Usage: ratelimit provider show <provider>'); process.exit(1) }
       const entry = mo.getProviderRateLimit(providerName)
-      if (!entry) {
-        console.log(`${providerName}: no limits set`)
-      } else {
-        const parts = []
-        if (entry.rpmLimit) parts.push(`rpm=${entry.rpmLimit}`)
-        if (entry.tpmLimit) parts.push(`tpm=${entry.tpmLimit}`)
-        console.log(`${providerName}: ${parts.join(' ')}`)
-      }
+      const parts = limitParts(entry)
+      console.log(parts.length ? `${providerName}: ${parts.join(' ')}` : `${providerName}: no limits set`)
       return
     }
 
     if (providerAction === 'set') {
       if (!providerName) { console.error('Usage: ratelimit provider set <provider> [rpm] [tpm]'); process.exit(1) }
-      const [rpmStr, tpmStr] = providerArgs
-      const rpm = rpmStr ? parseInt(rpmStr, 10) : undefined
-      const tpm = tpmStr ? parseInt(tpmStr, 10) : undefined
-      if (rpm == null && tpm == null) { console.error('Provide at least rpm or tpm'); process.exit(1) }
-      const result = await mo.setProviderRateLimit(providerName, { rpm, tpm })
-      const parts = []
-      if (result.rpmLimit) parts.push(`rpm=${result.rpmLimit}`)
-      if (result.tpmLimit) parts.push(`tpm=${result.tpmLimit}`)
-      console.log(`${providerName}: ${parts.join(' ')}`)
+      const limits = parseLimits(providerArgs, 'Usage: ratelimit provider set <provider> <limit> <value> … | <rpm> [tpm]')
+      const result = await mo.setProviderRateLimit(providerName, limits)
+      console.log(`${providerName}: ${limitParts(result).join(' ')}`)
       return
     }
 
     if (providerAction === 'rm' || providerAction === 'remove') {
-      if (!providerName) { console.error('Usage: ratelimit provider rm <provider>'); process.exit(1) }
-      await mo.clearProviderRateLimit(providerName)
-      console.log(`${providerName}: limits cleared`)
+      if (!providerName) { console.error('Usage: ratelimit provider rm <provider> [limit …]'); process.exit(1) }
+      const names = parseLimitNames(providerArgs)
+      const remaining = await mo.clearProviderRateLimit(providerName, names)
+      console.log(`${providerName}: ${clearedLine(names, limitParts(remaining))}`)
       return
     }
 
@@ -98,27 +174,24 @@ Configuration:
       const providerEntry = mo.getProviderRateLimit(info.provider) || {}
       const rpmLimit = info.rpmLimit ?? providerEntry.rpmLimit
       const tpmLimit = info.tpmLimit ?? providerEntry.tpmLimit
+      const inpmLimit = info.inpmLimit ?? providerEntry.inpmLimit
       const scope = info.rateLimitScope || 'provider'
-      const source = (info.rpmLimit || info.tpmLimit) ? 'model' : 'provider'
+      const source = limitParts(info).length ? 'model' : 'provider'
       if (jsonFlag.json) {
-        jsonOutputOne({ id: arg1, rpmLimit: rpmLimit || null, tpmLimit: tpmLimit || null, scope, source })
+        jsonOutputOne({ id: arg1, rpmLimit: rpmLimit || null, tpmLimit: tpmLimit || null, inpmLimit: inpmLimit || null, scope, source })
         return
       }
-      if (!rpmLimit && !tpmLimit) {
+      const parts = limitParts({ rpmLimit, tpmLimit, inpmLimit })
+      if (parts.length === 0) {
         console.log(`${arg1}: no limits`)
       } else {
-        const parts = []
-        if (rpmLimit) parts.push(`rpm=${rpmLimit}`)
-        if (tpmLimit) parts.push(`tpm=${tpmLimit}`)
-        parts.push(`scope=${scope}`)
-        parts.push(`(${source})`)
-        console.log(`${arg1}: ${parts.join(' ')}`)
+        console.log(`${arg1}: ${[...parts, `scope=${scope}`, `(${source})`].join(' ')}`)
       }
     } else {
       // Treat as provider name
       const entry = mo.getProviderRateLimit(arg1)
       if (jsonFlag.json) {
-        jsonOutputOne({ provider: arg1, rpmLimit: entry?.rpmLimit || null, tpmLimit: entry?.tpmLimit || null })
+        jsonOutputOne({ provider: arg1, rpmLimit: entry?.rpmLimit || null, tpmLimit: entry?.tpmLimit || null, inpmLimit: entry?.inpmLimit || null })
         return
       }
       if (!entry) {
@@ -127,6 +200,7 @@ Configuration:
         const parts = []
         if (entry.rpmLimit) parts.push(`rpm=${entry.rpmLimit}`)
         if (entry.tpmLimit) parts.push(`tpm=${entry.tpmLimit}`)
+        if (entry.inpmLimit) parts.push(`inpm=${entry.inpmLimit}`)
         console.log(`${arg1}: ${parts.join(' ')}`)
       }
     }
@@ -134,24 +208,21 @@ Configuration:
   }
 
   if (action === 'set') {
-    if (!arg1) { console.error('Usage: ratelimit set <model> [rpm] [tpm]'); process.exit(1) }
-    const rpm = arg2 ? parseInt(arg2, 10) : undefined
-    const tpm = arg3 ? parseInt(arg3, 10) : undefined
-    if (rpm == null && tpm == null) { console.error('Provide at least rpm or tpm'); process.exit(1) }
+    const usage = 'Usage: ratelimit set <model> <limit> <value> … | <rpm> [tpm]'
+    if (!arg1) { console.error(usage); process.exit(1) }
+    const limits = parseLimits(args.slice(2), usage)
     const model = useModel(arg1)
-    const result = await model.setRateLimit({ rpm, tpm })
-    const parts = []
-    if (result.rpmLimit) parts.push(`rpm=${result.rpmLimit}`)
-    if (result.tpmLimit) parts.push(`tpm=${result.tpmLimit}`)
-    console.log(`${arg1}: ${parts.join(' ')} scope=model`)
+    const result = await model.setRateLimit(limits)
+    console.log(`${arg1}: ${limitParts(result).join(' ')} scope=model`)
     return
   }
 
   if (action === 'rm' || action === 'remove') {
-    if (!arg1) { console.error('Usage: ratelimit rm <model>'); process.exit(1) }
+    if (!arg1) { console.error('Usage: ratelimit rm <model> [limit …]'); process.exit(1) }
+    const names = parseLimitNames(args.slice(2))
     const model = useModel(arg1)
-    await model.clearRateLimit()
-    console.log(`${arg1}: model limits cleared`)
+    const remaining = await model.clearRateLimit(names)
+    console.log(`${arg1}: ${clearedLine(names, limitParts(remaining))}`)
     return
   }
 

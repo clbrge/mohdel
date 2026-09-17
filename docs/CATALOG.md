@@ -339,12 +339,29 @@ narrower than the number the provider publishes.
 
 ## Rate-limit fields
 
-`rpmLimit` (requests/minute) and `tpmLimit` (tokens/minute) override the provider-level defaults in `providers.json`. `rateLimitScope` controls how the budget is shared:
+`rpmLimit` (requests/minute), `tpmLimit` (tokens/minute) and `inpmLimit`
+(inputs/minute) override the provider-level defaults in `providers.json`.
+`rateLimitScope` controls how the budget is shared:
 
 - `"provider"` — this model's traffic counts against the shared provider-level pool.
 - `"model"` — this model has its own private budget.
 
-Use `mo rl show <model-or-provider>` to inspect, `mo rl set <model> <rpm> <tpm>` to write.
+Use `mo rl show <model-or-provider>` to inspect and
+`mo rl set <model> <limit> <value> …` to write — `mo rl set cohere/embed-v4.0
+inpm 2000`, or several at once as `rpm 15 tpm 1000000`. The older
+`mo rl set <model> <rpm> [tpm]` positional form still works as a shortcut for
+those two. `mo rl rm <model> [limit …]` drops the limits you name, or all of
+them when you name none.
+
+`inpmLimit` is for embedding endpoints a provider meters in inputs rather than
+requests or tokens — Cohere publishes Embed as "2,000 inputs / min", which no
+number of requests per minute expresses, since one request carries up to
+`maxBatch` inputs. It is the one dimension checked exactly before dispatch: a
+batch is admitted only if the whole of it fits in the current minute. Requests
+and tokens gate on what the bucket already holds, because the size of the call
+ahead is not known until it returns. A batch larger than the entire allowance is
+sent rather than delayed — waiting cannot make it fit, and mohdel does not split
+a batch.
 
 ## Service speeds
 

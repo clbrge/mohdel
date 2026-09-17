@@ -87,6 +87,7 @@ impl QuotaPolicy for UnboundedQuota {
         Ok(QuotaSpec {
             rpm: None,
             tpm: None,
+            inpm: None,
             cooldown_threshold: 99,
             cooldown_duration_ms: 60_000,
         })

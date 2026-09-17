@@ -80,9 +80,9 @@ Commands:
   tag rm <model> <tag>                    Remove a tag
 
   ratelimit show <model|provider>         Show effective limits                   (mo rl show)
-  ratelimit set <model> [rpm] [tpm]       Set model-level limits
+  ratelimit set <model> <limit> <value>   Set limits: rpm, tpm, inpm
   ratelimit rm <model>                    Remove model-level limits
-  ratelimit provider set <p> [rpm] [tpm]  Set provider-level limits
+  ratelimit provider set <p> <limit> <v>  Set provider-level limits
   ratelimit provider rm <p>               Remove provider-level limits
 
   ask <provider/model> [prompt]           One-shot inference (pipeable)

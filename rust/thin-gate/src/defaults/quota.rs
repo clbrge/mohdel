@@ -25,6 +25,7 @@ impl QuotaPolicy for FileQuotaPolicy {
         Ok(QuotaSpec {
             rpm: Some(60),
             tpm: Some(100_000),
+            inpm: None,
             cooldown_threshold: 3,
             cooldown_duration_ms: 60_000,
         })

@@ -293,6 +293,55 @@ All under `~/.config/mohdel/` (XDG via `env-paths`):
 Cache under `~/.cache/mohdel/` (benchmark rankings, file uploads).
 
 
+## Behaviour parity: library and gate
+
+The same call runs two ways: in-process (`src/lib/index.js` → `js/session/*`)
+and behind the gate (`rust/thin-gate` fronting pooled `js/session`
+subprocesses). A behaviour that exists on one path and not the other is a bug
+in whichever direction it points, and it is the kind that ships quietly — the
+tests on the path you touched all pass.
+
+Before calling a change done, walk the four seams:
+
+1. **Enforcement.** `js/session/_rate_limiter.js` and `_cooldown.js` against
+   `rust/thin-gate/src/enforcer/*` and `hooks/quota.rs`. Same dimensions, same
+   zero semantics (`0` is a killswitch, not "unset"), same outcome for an
+   overrun. The two read different sources on purpose — the session reads the
+   catalog and `providers.json` for what the *vendor* allows, the gate asks
+   `QuotaPolicy` for what a given `auth_id` allows — but a dimension that
+   exists in one and not the other is drift, not design.
+2. **Routes.** Every handler in `server.rs` — `/v1/call`, `/v1/embed`,
+   `/v1/image`, `/v1/transcription` — runs the same pre-dispatch sequence:
+   auth, quota policy, cooldown, rate check, `record_request`. A route that
+   dispatches without it is an unguarded door into the pool, whatever the
+   session does afterwards.
+3. **Wire.** See *Adding a wire-protocol field* below; a field that only one
+   side understands is the same class of bug.
+4. **Docs.** `INTEGRATION.md` describes what a caller observes. Where the paths
+   genuinely differ, say so there, next to the behaviour, not in a changelog
+   entry nobody re-reads.
+
+A change that lands on one path only is finished when the other path is either
+changed too, or named in the commit with the reason it does not apply.
+
+### The one sanctioned asymmetry
+
+An overrun waits in-process and is refused at the gate: the library sleeps to
+the next minute bucket and proceeds, the gate answers `QUOTA_EXCEEDED` with a
+retry-after and dispatches nothing.
+
+That is the same policy — wait for the next bucket — expressed in the only form
+each side can afford. In-process the caller is the thing being throttled, so
+the wait costs it its own latency. At the gate the caller is one tenant among
+many behind a socket, so a wait held there spends the gate's connections on one
+tenant's overrun; refusing hands the wait back to the caller, where it is free.
+
+That is the test for any asymmetry proposed later: it qualifies when the two
+sides have *different owners of the cost*, and the policy is the same on both.
+It does not qualify because one side was easier to change, or because the tests
+on the other side were already passing. A dimension or a route present on one
+side only is never this; it is drift.
+
 ## Adding a wire-protocol field
 
 `AnswerResult`, `CallEnvelope`, `Event`, and the other types in

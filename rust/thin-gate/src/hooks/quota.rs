@@ -7,7 +7,9 @@ pub trait QuotaPolicy: Send + Sync {
 }
 
 /// Per-user quota spec:
-///   - `rpm` / `tpm` — minute-bucket rate limits (requests and tokens).
+///   - `rpm` / `tpm` / `inpm` — minute-bucket rate limits (requests,
+///     tokens, and embedding inputs for the endpoints a provider
+///     meters in inputs rather than requests or tokens).
 ///     `None` means no limit configured for this dimension (the
 ///     common case when a deployment opts out of that bucket).
 ///     `Some(0)` explicitly means **deny all** requests — useful for
@@ -18,6 +20,7 @@ pub trait QuotaPolicy: Send + Sync {
 pub struct QuotaSpec {
     pub rpm: Option<u32>,
     pub tpm: Option<u64>,
+    pub inpm: Option<u32>,
     pub cooldown_threshold: u32,
     pub cooldown_duration_ms: u64,
 }

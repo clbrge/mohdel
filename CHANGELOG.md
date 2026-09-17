@@ -4,6 +4,40 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.3.0] — Feat: embeddings respect rate limits / Feat: every gate route is enforced
+
+### Fixed
+
+- `mo rl show` reported a limit of `0` — the documented killswitch — as no limit
+  at all, and attributed it to the provider rather than the entry that set it.
+
+### Added
+
+- `embed()` honours rate limits. `run_embedding.js` consults the same limiter
+  the chat path uses, keyed on the provider or — with
+  `rateLimitScope: "model"` — the catalog key.
+- Catalog field `inpmLimit`: inputs per minute, for an embedding endpoint a
+  provider meters in inputs rather than requests or tokens. Checked before
+  dispatch against the batch size; a batch larger than the whole allowance is
+  sent rather than delayed.
+- Gate: `QuotaSpec.inpm` and an inputs counter in the enforcer, matching the
+  session's `inpmLimit` — a batch is admitted only when the whole of it fits in
+  the minute, and one larger than the allowance is sent rather than delayed.
+- Gate: `/v1/embed`, `/v1/image` and `/v1/transcription` run the quota,
+  cooldown and rate-limit sequence that `/v1/call` already ran. They dispatched
+  to the pool unguarded, so a caller out of allowance on `/v1/call` could keep
+  working through them. Route and auth policy stay `/v1/call` only; both hooks
+  are typed on `CallEnvelope`.
+- Gate: one-shot routes answer `QUOTA_EXCEEDED` with 429 and `PROVIDER_COOLDOWN`
+  with 503 instead of 502.
+- `mo rl rm <model> [limit …]` and `mo rl provider rm <provider> [limit …]`
+  drop named limits; with none named they clear all, as before. `rateLimitScope`
+  goes with the last limit off the entry.
+- `mo rl set` and `mo rl provider set` take limits by name —
+  `mo rl set cohere/embed-v4.0 inpm 2000`, `… rpm 15 tpm 1000000` — which
+  reaches every limit, including one on its own. The positional
+  `<rpm> [tpm]` form stays as a shortcut.
+
 ## [1.2.0] — Feat: embeddings
 
 ### Added

@@ -26,6 +26,8 @@ export const version = createRequire(import.meta.url)('../../package.json').vers
 
 const noop = () => {}
 
+const LIMIT_FIELDS = ['rpmLimit', 'tpmLimit', 'inpmLimit']
+
 // Verbosity tiers — controls which mohdel internal log lines fire.
 //
 //   0  Anomaly-only. Failures, throttling, deprecation, server lifecycle.
@@ -413,30 +415,31 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
         return (providerName) => {
           const entry = providersConfig[providerName]
           if (!entry) return null
-          const { rpmLimit, tpmLimit } = entry
-          return (rpmLimit || tpmLimit) ? { rpmLimit, tpmLimit } : null
+          const { rpmLimit, tpmLimit, inpmLimit } = entry
+          return (rpmLimit || tpmLimit || inpmLimit) ? { rpmLimit, tpmLimit, inpmLimit } : null
         }
       }
 
       if (prop === 'setProviderRateLimit') {
-        return async (providerName, { rpm, tpm } = {}) => {
+        return async (providerName, { rpm, tpm, inpm } = {}) => {
           const entry = providersConfig[providerName] || (providersConfig[providerName] = {})
           if (rpm != null) entry.rpmLimit = rpm
           if (tpm != null) entry.tpmLimit = tpm
+          if (inpm != null) entry.inpmLimit = inpm
           await saveProvidersConfig(providersConfig)
           return entry
         }
       }
 
       if (prop === 'clearProviderRateLimit') {
-        return async (providerName) => {
+        return async (providerName, names = []) => {
           const entry = providersConfig[providerName]
-          if (entry) {
-            delete entry.rpmLimit
-            delete entry.tpmLimit
-            if (Object.keys(entry).length === 0) delete providersConfig[providerName]
-            await saveProvidersConfig(providersConfig)
-          }
+          if (!entry) return null
+          const fields = names.length ? names.map(n => `${n}Limit`) : LIMIT_FIELDS
+          for (const field of fields) delete entry[field]
+          if (Object.keys(entry).length === 0) delete providersConfig[providerName]
+          await saveProvidersConfig(providersConfig)
+          return providersConfig[providerName] || null
         }
       }
 
@@ -735,36 +738,38 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
           return runAnswerEmbedding({
             provider: modelSpec.provider,
             model: modelSpec.model ?? resolvedModelId.split('/').pop(),
+            modelKey: resolvedModelId,
             configuration,
             input,
             options,
             spec: modelSpec
-          })
+          }, { limiter: rateLimiter, resolveProviderLimits })
         }
       }
 
       if (prop === 'setRateLimit') {
-        return async ({ rpm, tpm } = {}) => {
+        return async ({ rpm, tpm, inpm } = {}) => {
           const curatedCache = getCuratedCacheSnapshot()
           const model = curatedCache[resolvedModelId] || (curatedCache[resolvedModelId] = { ...modelSpec })
           if (rpm != null) model.rpmLimit = rpm
           if (tpm != null) model.tpmLimit = tpm
+          if (inpm != null) model.inpmLimit = inpm
           model.rateLimitScope = 'model'
           await persistCuratedCache()
-          return { rpmLimit: model.rpmLimit, tpmLimit: model.tpmLimit }
+          return { rpmLimit: model.rpmLimit, tpmLimit: model.tpmLimit, inpmLimit: model.inpmLimit }
         }
       }
 
       if (prop === 'clearRateLimit') {
-        return async () => {
+        return async (names = []) => {
           const curatedCache = getCuratedCacheSnapshot()
           const model = curatedCache[resolvedModelId]
-          if (model) {
-            delete model.rpmLimit
-            delete model.tpmLimit
-            delete model.rateLimitScope
-            await persistCuratedCache()
-          }
+          if (!model) return {}
+          const fields = names.length ? names.map(n => `${n}Limit`) : LIMIT_FIELDS
+          for (const field of fields) delete model[field]
+          if (!LIMIT_FIELDS.some(field => model[field] != null)) delete model.rateLimitScope
+          await persistCuratedCache()
+          return { rpmLimit: model.rpmLimit, tpmLimit: model.tpmLimit, inpmLimit: model.inpmLimit }
         }
       }
 

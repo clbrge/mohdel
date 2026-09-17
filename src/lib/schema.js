@@ -69,6 +69,7 @@ const fieldDefs = {
   suspended: { type: 'string' },
   rpmLimit: { type: 'number' },
   tpmLimit: { type: 'number' },
+  inpmLimit: { type: 'number' },
   rateLimitScope: { type: 'string', validate: (v) => ['model', 'provider'].includes(v) ? null : 'must be "model" or "provider"' },
   outputCapStrategy: { type: 'string', validate: (v) => ['error', 'accept'].includes(v) ? null : "must be 'error' or 'accept'" },
   supportsTools: { type: 'boolean' },

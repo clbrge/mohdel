@@ -25,7 +25,7 @@ Mohdel splits into three planes so those three pressures get real answers:
 
 - **Fault isolation** — adapter crashes kill one session subprocess; the thin-gate pool respawns, the caller sees a single `SESSION_DIED` terminal error and continues. Demonstrated by `bench/isolation.js`.
 - **Cross-language callers** — the gate speaks HTTP over a unix socket; any client that can POST and read NDJSON works.
-- **Shared state** — the enforcer (rpm, tpm, cooldown) lives in the gate, so every caller process sees the same quota view.
+- **Shared state** — the enforcer (rpm, tpm, inpm, cooldown) lives in the gate, so every caller process sees the same quota view.
 
 Performance is *not* the justification for the split. The `bench/bench.js` throughput measurement shows the gate adds ~3ms p50 per call over direct in-process `run()` — negligible for real LLM workloads (100–1000ms per call). The gate is the recommended integration for anything production-shaped; the in-process factory exists for CLI, scripts, tests, and single-process services where the subprocess overhead is unjustified, not as a general-purpose production alternative.
 
@@ -42,9 +42,9 @@ Binds two unix sockets: a data plane (`POST /v1/call`) and an admin plane (`GET 
 Per-call pipeline (`src/server.rs::handle_call`):
 1. Parse and strict-validate the envelope (`serde(deny_unknown_fields)` enforces the frozen shape).
 2. `RoutePolicy::resolve(envelope)` — rewrites `(provider, model)` or rejects with `ROUTE_REJECTED`.
-3. `QuotaPolicy::policy_for(authId)` — yields per-user `QuotaSpec {rpm, tpm, cooldown_threshold, cooldown_duration_ms}`.
+3. `QuotaPolicy::policy_for(authId)` — yields per-user `QuotaSpec {rpm, tpm, inpm, cooldown_threshold, cooldown_duration_ms}`.
 4. Enforcer cooldown check — fast-fail with `PROVIDER_COOLDOWN` if the user+provider bucket is cooling.
-5. Enforcer rate-limit check — fast-fail with `QUOTA_EXCEEDED` when rpm/tpm is exhausted, else `record_request`.
+5. Enforcer rate-limit check — fast-fail with `QUOTA_EXCEEDED` when rpm/tpm is exhausted or an embed batch does not fit inside `inpm`, else `record_request`. Steps 3–5 run on every data-plane route (`/v1/call`, `/v1/embed`, `/v1/image`, `/v1/transcription`); route and auth policy are `/v1/call` only, since both hooks are typed on `CallEnvelope`.
 6. Acquire an idle session from the pool (blocks if none available).
 7. Write the envelope line to session stdin.
 8. Stream session stdout back as NDJSON. Intercept terminal events: on `done`, reset cooldown + record tokens; on `error`, `record_failure` (immediate for `AUTH_INVALID`).
@@ -103,7 +103,7 @@ If you're embedding the crate or depending on internals, track `main`. If you're
 Thin-gate is a multiplexer with four extension points:
 
 - **`RoutePolicy`** — `resolve(envelope) -> (provider, model_id, session_pool?)`. Default (`FileRoutePolicy`) passes through unchanged. Custom deployments rewrite aliases, enforce model allowlists, or route to provider-specific pools.
-- **`QuotaPolicy`** — `policy_for(auth_id) -> QuotaSpec { rpm, tpm, cooldown_threshold, cooldown_duration_ms }`. Default (`FileQuotaPolicy`) returns generous static values. Wrappers plug in per-user / per-plan quotas from their own storage.
+- **`QuotaPolicy`** — `policy_for(auth_id) -> QuotaSpec { rpm, tpm, inpm, cooldown_threshold, cooldown_duration_ms }`. Default (`FileQuotaPolicy`) returns generous static values. Wrappers plug in per-user / per-plan quotas from their own storage.
 - **`ConfigSource`** — `load() -> PlatformConfig` + optional `watch()` stream. Default (`TomlConfigSource`) reads `~/.config/mohdel/thin-gate.toml` (or `MOHDEL_THIN_GATE_CONFIG`). PlatformConfig carries socket paths, session spec (command + args + pool size), provider registry, and default timeouts.
 - **`CachePolicy`** — optional content cache. No-op default; here for future prompt/response caching.
 

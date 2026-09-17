@@ -42,7 +42,7 @@ use tokio::net::UnixListener;
 use zeroize::Zeroize;
 
 use crate::defaults::{FileQuotaPolicy, FileRoutePolicy};
-use crate::enforcer::{cooldown_key, Enforcer};
+use crate::enforcer::{cooldown_key, Enforcer, Limits};
 use crate::hooks::{AuthPolicy, QuotaPolicy, QuotaSpec, RequireInlineAuth, RoutePolicy};
 use crate::metrics;
 use crate::protocol::{
@@ -401,59 +401,105 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
         }
     }
 
-    // QuotaPolicy: per-user spec for rpm/tpm/cooldown thresholds.
-    let spec = match state.quota.policy_for(&envelope.auth_id).await {
-        Ok(s) => s,
-        Err(e) => {
-            metrics::policy_error("QUOTA_POLICY_ERROR");
-            return stream_error(
-                "quota policy error",
-                Severity::Error,
-                "QUOTA_POLICY_ERROR",
-                false,
-                Some(e.to_string()),
-            );
-        }
+    let spec = match enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await {
+        Ok(spec) => spec,
+        Err(denied) => return denied.into_stream(),
     };
-
-    // Enforcer: cooldown check first (cheap fast-fail), then rpm/tpm.
-    let provider = crate::protocol::provider_of(&envelope.model);
-    let cd_key = cooldown_key(&envelope.auth_id, provider);
-    if let Some(info) = state.enforcer.cooldown.cooling_down(&cd_key) {
-        metrics::cooldown_rejected(provider);
-        return stream_error(
-            "provider in cooldown",
-            Severity::Warn,
-            "PROVIDER_COOLDOWN",
-            true,
-            Some(format!(
-                "{} is in cooldown for {}s after {} consecutive failures ({})",
-                provider, info.seconds_left, info.fail_count, info.reason
-            )),
-        );
-    }
-
-    let delay_ms = state
-        .enforcer
-        .rate
-        .check(&envelope.auth_id, spec.rpm, spec.tpm);
-    if delay_ms > 0 {
-        metrics::quota_rejected();
-        return stream_error(
-            "rate limit exceeded",
-            Severity::Warn,
-            "QUOTA_EXCEEDED",
-            true,
-            Some(format!("retry after {delay_ms}ms")),
-        );
-    }
-
-    state.enforcer.rate.record_request(&envelope.auth_id);
 
     match &state.pool {
         Some(pool) => dispatch_via_pool(pool.clone(), &envelope, spec, state.enforcer.clone()).await,
         None => synthetic_response(&envelope, spec, state.enforcer.clone()),
     }
+}
+
+/// A refusal from the pre-dispatch policy sequence, in a shape either
+/// route family can render: `/v1/answer` streams it as an NDJSON error
+/// event, the one-shot routes return it as a single JSON body.
+struct Denied {
+    message: &'static str,
+    severity: Severity,
+    kind: &'static str,
+    retryable: bool,
+    detail: Option<String>,
+}
+
+impl Denied {
+    fn into_stream(self) -> Response<Body> {
+        stream_error(self.message, self.severity, self.kind, self.retryable, self.detail)
+    }
+
+    fn into_oneshot(self) -> Response<Body> {
+        oneshot_error_response(&TypedError {
+            message: self.message.to_string(),
+            detail: self.detail,
+            severity: self.severity,
+            retryable: self.retryable,
+            kind: Some(self.kind.to_string()),
+        })
+    }
+}
+
+/// Quota policy, then cooldown, then the rate buckets — the sequence
+/// every route runs before anything reaches the pool. `pending_inputs`
+/// is the embed batch size, 0 on routes that carry no inputs.
+///
+/// Auth and route policy are deliberately not here: both hooks are
+/// typed on `CallEnvelope`, so extending them to the one-shot routes is
+/// a hook-API change with its own decision, not a lift.
+async fn enforce_policy(
+    state: &GateState,
+    auth_id: &str,
+    model: &str,
+    pending_inputs: u32,
+) -> Result<QuotaSpec, Denied> {
+    let spec = match state.quota.policy_for(auth_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            metrics::policy_error("QUOTA_POLICY_ERROR");
+            return Err(Denied {
+                message: "quota policy error",
+                severity: Severity::Error,
+                kind: "QUOTA_POLICY_ERROR",
+                retryable: false,
+                detail: Some(e.to_string()),
+            });
+        }
+    };
+
+    let provider = crate::protocol::provider_of(model);
+    let cd_key = cooldown_key(auth_id, provider);
+    if let Some(info) = state.enforcer.cooldown.cooling_down(&cd_key) {
+        metrics::cooldown_rejected(provider);
+        return Err(Denied {
+            message: "provider in cooldown",
+            severity: Severity::Warn,
+            kind: "PROVIDER_COOLDOWN",
+            retryable: true,
+            detail: Some(format!(
+                "{} is in cooldown for {}s after {} consecutive failures ({})",
+                provider, info.seconds_left, info.fail_count, info.reason
+            )),
+        });
+    }
+
+    let limits = Limits { rpm: spec.rpm, tpm: spec.tpm, inpm: spec.inpm };
+    let delay_ms = state.enforcer.rate.check(auth_id, limits, pending_inputs);
+    if delay_ms > 0 {
+        metrics::quota_rejected();
+        return Err(Denied {
+            message: "rate limit exceeded",
+            severity: Severity::Warn,
+            kind: "QUOTA_EXCEEDED",
+            retryable: true,
+            detail: Some(format!("retry after {delay_ms}ms")),
+        });
+    }
+
+    state.enforcer.rate.record_request(auth_id);
+    if spec.inpm.is_some() {
+        state.enforcer.rate.record_inputs(auth_id, pending_inputs);
+    }
+    Ok(spec)
 }
 
 // ---------- Pool dispatch ----------
@@ -918,6 +964,12 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
         }
     };
 
+    if let Err(denied) =
+        enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await
+    {
+        return denied.into_oneshot();
+    }
+
     let pool = match &state.pool {
         Some(p) => p.clone(),
         None => {
@@ -982,6 +1034,12 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
         }
     };
 
+    if let Err(denied) =
+        enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await
+    {
+        return denied.into_oneshot();
+    }
+
     let pool = match &state.pool {
         Some(p) => p.clone(),
         None => {
@@ -1045,6 +1103,12 @@ pub async fn handle_embed(req: Request<Incoming>, state: Arc<GateState>) -> Resp
             );
         }
     };
+
+    if let Err(denied) =
+        enforce_policy(&state, &envelope.auth_id, &envelope.model, u32::try_from(envelope.input.len()).unwrap_or(u32::MAX)).await
+    {
+        return denied.into_oneshot();
+    }
 
     let pool = match &state.pool {
         Some(p) => p.clone(),
@@ -1269,6 +1333,9 @@ fn oneshot_error_response(error: &TypedError) -> Response<Body> {
     let status = match error.kind.as_deref() {
         Some("AUTH_INVALID") => StatusCode::UNAUTHORIZED,
         Some("SESSION_UNKNOWN_PROVIDER") => StatusCode::BAD_REQUEST,
+        Some("QUOTA_EXCEEDED") => StatusCode::TOO_MANY_REQUESTS,
+        Some("PROVIDER_COOLDOWN") => StatusCode::SERVICE_UNAVAILABLE,
+        Some("QUOTA_POLICY_ERROR") => StatusCode::INTERNAL_SERVER_ERROR,
         _ => StatusCode::BAD_GATEWAY,
     };
     let body_bytes = serde_json::to_vec(error).unwrap_or_else(|_| b"{}".to_vec());

@@ -1,7 +1,9 @@
 /**
  * Minute-bucket rate limiter (per-key: provider or provider/model).
  *
- * Tracks RPM and TPM. Returns ms to wait if over limit — throttles
+ * Tracks RPM, TPM and INPM — inputs per minute, the unit an embedding
+ * endpoint is metered in when the provider counts inputs rather than
+ * requests or tokens. Returns ms to wait if over limit — throttles
  * rather than rejecting, so the caller can absorb small bursts
  * without a 429 round-trip.
  *
@@ -14,7 +16,7 @@
  */
 
 export function createRateLimiter () {
-  /** @type {Map<string, {count: number, tokens: number, minute: number}>} */
+  /** @type {Map<string, {count: number, tokens: number, inputs: number, minute: number}>} */
   const buckets = new Map()
 
   const currentMinute = () => Math.floor(Date.now() / 60000)
@@ -24,7 +26,7 @@ export function createRateLimiter () {
     const minute = currentMinute()
     const b = buckets.get(key)
     if (b && b.minute === minute) return b
-    const fresh = { count: 0, tokens: 0, minute }
+    const fresh = { count: 0, tokens: 0, inputs: 0, minute }
     buckets.set(key, fresh)
     return fresh
   }
@@ -42,15 +44,30 @@ export function createRateLimiter () {
    *     returned regardless of the current bucket.
    *   - positive number → throttle at that value.
    *
+   * `rpmLimit` and `tpmLimit` gate on what the bucket already holds:
+   * the size of the call ahead is not known until it returns.
+   * `inpmLimit` gates on what the call is about to add, which
+   * `pending.inputs` carries — a batch size is exact before dispatch,
+   * so the call is admitted only if the whole batch fits.
+   *
    * @param {string} key
-   * @param {{rpmLimit?: number, tpmLimit?: number}} limits
+   * @param {{rpmLimit?: number, tpmLimit?: number, inpmLimit?: number}} limits
+   * @param {{inputs?: number}} [pending]
    * @returns {number}
    */
-  const check = (key, { rpmLimit, tpmLimit } = {}) => {
-    if (rpmLimit == null && tpmLimit == null) return 0
+  const check = (key, { rpmLimit, tpmLimit, inpmLimit } = {}, pending = {}) => {
+    if (rpmLimit == null && tpmLimit == null && inpmLimit == null) return 0
     const b = getBucket(key)
     if (rpmLimit != null && b.count >= rpmLimit) return msUntilNextMinute(b.minute)
     if (tpmLimit != null && b.tokens >= tpmLimit) return msUntilNextMinute(b.minute)
+    if (inpmLimit != null) {
+      const adding = pending.inputs ?? 0
+      if (inpmLimit === 0) return msUntilNextMinute(b.minute)
+      // A batch larger than the whole allowance never fits, so waiting out the
+      // minute buys nothing: send it and take the provider's answer. Splitting
+      // it is the caller's call, not mohdel's.
+      if (adding <= inpmLimit && b.inputs + adding > inpmLimit) return msUntilNextMinute(b.minute)
+    }
     return 0
   }
 
@@ -67,7 +84,15 @@ export function createRateLimiter () {
     getBucket(key).tokens += tokens
   }
 
-  return { check, recordRequest, recordTokens }
+  /**
+   * @param {string} key
+   * @param {number} inputs
+   */
+  const recordInputs = (key, inputs) => {
+    getBucket(key).inputs += inputs
+  }
+
+  return { check, recordRequest, recordTokens, recordInputs }
 }
 
 // Single session-local instance.
@@ -75,3 +100,4 @@ const defaultLimiter = createRateLimiter()
 export const check = defaultLimiter.check
 export const recordRequest = defaultLimiter.recordRequest
 export const recordTokens = defaultLimiter.recordTokens
+export const recordInputs = defaultLimiter.recordInputs

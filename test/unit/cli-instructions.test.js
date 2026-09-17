@@ -95,6 +95,29 @@ describe('model instructions', () => {
     expect(brief).toContain('mo model apply mohdel-candidate.json')
   })
 
+  test('a limits request ends in something the user can apply, not findings', async () => {
+    const brief = await render(['cohere'])
+    expect(brief).toContain('Anything that would change the catalog ends in something they can apply')
+    expect(brief).toContain('mo rl provider set <provider>')
+    expect(brief).toContain('mo rl show <model>')
+  })
+
+  test('the brief says a limit describes the key, and how to establish which one', async () => {
+    const brief = await render(['cohere'])
+    expect(brief).toContain('Some numbers describe the key, not the model')
+    expect(brief).toContain('## Account-dependent numbers')
+    expect(brief).toContain('Ask the user which one their key is on')
+    for (const unit of ['requests per', 'tokens per minute', 'inputs per minute']) {
+      expect(brief).toContain(unit)
+    }
+  })
+
+  test('the key-not-the-model rule takes slot 7, leaving 8 for local conventions', async () => {
+    const brief = await render(['cohere'])
+    expect(brief).toMatch(/^7\. \*\*Some numbers describe the key/m)
+    expect(brief).not.toMatch(/^7\. \*\*This installation has its own fields and tags/m)
+  })
+
   test('an existing entry for the provider is shown for shape', async () => {
     const brief = await render(['anthropic'])
     expect(brief).toContain('An existing anthropic entry, for shape')

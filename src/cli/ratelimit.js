@@ -92,6 +92,9 @@ Usage:
   ratelimit set <model> <limit> <value> …        Set limits by name
   ratelimit set <model> <rpm> [tpm]              Shortcut for the two common ones
   ratelimit rm <model> [limit …]                 Remove limits, or all of them
+
+A <model> may carry a speed lane — openai/gpt-x@fast — to reach the quota that
+lane sells separately. A lane outranks the entry, and carries rpm and tpm only.
   ratelimit provider set <provider> <limit> <value> …
   ratelimit provider set <provider> <rpm> [tpm]
   ratelimit provider rm <provider> [limit …]     Remove limits, or all of them
@@ -107,6 +110,7 @@ Examples:
   ratelimit show gemini/gemini-flash-latest  Model limits, then provider
   ratelimit set cohere/embed-v4.0 inpm 2000
   ratelimit set gemini/gemini-flash-latest rpm 15 tpm 1000000
+  ratelimit set openai/gpt-x@fast rpm 200
   ratelimit set gemini/gemini-flash-latest 15 1000000
   ratelimit rm cohere/embed-v4.0 inpm
   ratelimit provider set anthropic 60 100000
@@ -172,11 +176,14 @@ Configuration:
     if (model) {
       const info = model.info()
       const providerEntry = mo.getProviderRateLimit(info.provider) || {}
-      const rpmLimit = info.rpmLimit ?? providerEntry.rpmLimit
-      const tpmLimit = info.tpmLimit ?? providerEntry.tpmLimit
+      const lane = info.speed ? info.speeds?.[info.speed] ?? {} : {}
+      const rpmLimit = lane.rpmLimit ?? info.rpmLimit ?? providerEntry.rpmLimit
+      const tpmLimit = lane.tpmLimit ?? info.tpmLimit ?? providerEntry.tpmLimit
       const inpmLimit = info.inpmLimit ?? providerEntry.inpmLimit
-      const scope = info.rateLimitScope || 'provider'
-      const source = limitParts(info).length ? 'model' : 'provider'
+      // A lane only gets its own bucket when it declares a limit; otherwise its
+      // traffic counts against the entry's, which is what `scope` then describes.
+      const scope = limitParts(lane).length ? `lane:${info.speed}` : (info.rateLimitScope || 'provider')
+      const source = limitParts(lane).length ? 'lane' : (limitParts(info).length ? 'model' : 'provider')
       if (jsonFlag.json) {
         jsonOutputOne({ id: arg1, rpmLimit: rpmLimit || null, tpmLimit: tpmLimit || null, inpmLimit: inpmLimit || null, scope, source })
         return
@@ -212,8 +219,15 @@ Configuration:
     if (!arg1) { console.error(usage); process.exit(1) }
     const limits = parseLimits(args.slice(2), usage)
     const model = useModel(arg1)
-    const result = await model.setRateLimit(limits)
-    console.log(`${arg1}: ${limitParts(result).join(' ')} scope=model`)
+    const lane = arg1.split('@')[1]
+    let result
+    try {
+      result = await model.setRateLimit(limits)
+    } catch (err) {
+      console.error(err.message)
+      process.exit(1)
+    }
+    console.log(`${arg1}: ${limitParts(result).join(' ')} scope=${lane ? `lane:${lane}` : 'model'}`)
     return
   }
 

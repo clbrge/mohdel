@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.3.1] — Feat: the brief covers rate limits
+
+### Added
+
+- `mo rl set` / `rm` / `show` take a `<model>@<lane>` target, so the quota a
+  service speed lane sells separately no longer has to be hand-edited into
+  `curated.json`. A lane outranks the entry and carries rpm and tpm only; `inpm`
+  on a lane is refused.
+- `mo model instructions` covers rate limits: a hard rule that some published
+  numbers describe the key rather than the model, and a section that walks an
+  agent from the provider's limits page to the right level for each number —
+  entry, provider pool, per-endpoint, or speed lane. It also states that a
+  request which would change the catalog ends in a candidate plus
+  `mo model apply` or an exact `mo` command, never findings alone.
+
 ## [1.3.0] — Feat: embeddings respect rate limits / Feat: every gate route is enforced
 
 ### Fixed

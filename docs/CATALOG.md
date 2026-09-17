@@ -351,7 +351,9 @@ Use `mo rl show <model-or-provider>` to inspect and
 inpm 2000`, or several at once as `rpm 15 tpm 1000000`. The older
 `mo rl set <model> <rpm> [tpm]` positional form still works as a shortcut for
 those two. `mo rl rm <model> [limit …]` drops the limits you name, or all of
-them when you name none.
+them when you name none. A `<model>@<lane>` target reaches the quota a service
+speed lane sells separately — `mo rl set openai/gpt-x@fast rpm 200` — which
+outranks the entry. Lanes carry `rpmLimit` and `tpmLimit` only.
 
 `inpmLimit` is for embedding endpoints a provider meters in inputs rather than
 requests or tokens — Cohere publishes Embed as "2,000 inputs / min", which no

@@ -751,6 +751,22 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
         return async ({ rpm, tpm, inpm } = {}) => {
           const curatedCache = getCuratedCacheSnapshot()
           const model = curatedCache[resolvedModelId] || (curatedCache[resolvedModelId] = { ...modelSpec })
+
+          if (aliasSpeed) {
+            if (inpm != null) {
+              throw new Error(
+                'inpm is not a speed-lane limit — lanes carry rpmLimit and tpmLimit only. ' +
+                `Set it on the entry instead: mo rl set ${resolvedModelId} inpm <n>`
+              )
+            }
+            const lane = { ...model.speeds[aliasSpeed] }
+            if (rpm != null) lane.rpmLimit = rpm
+            if (tpm != null) lane.tpmLimit = tpm
+            model.speeds = { ...model.speeds, [aliasSpeed]: lane }
+            await persistCuratedCache()
+            return { rpmLimit: lane.rpmLimit, tpmLimit: lane.tpmLimit }
+          }
+
           if (rpm != null) model.rpmLimit = rpm
           if (tpm != null) model.tpmLimit = tpm
           if (inpm != null) model.inpmLimit = inpm
@@ -766,6 +782,15 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
           const model = curatedCache[resolvedModelId]
           if (!model) return {}
           const fields = names.length ? names.map(n => `${n}Limit`) : LIMIT_FIELDS
+
+          if (aliasSpeed) {
+            const lane = { ...model.speeds[aliasSpeed] }
+            for (const field of fields) delete lane[field]
+            model.speeds = { ...model.speeds, [aliasSpeed]: lane }
+            await persistCuratedCache()
+            return { rpmLimit: lane.rpmLimit, tpmLimit: lane.tpmLimit }
+          }
+
           for (const field of fields) delete model[field]
           if (!LIMIT_FIELDS.some(field => model[field] != null)) delete model.rateLimitScope
           await persistCuratedCache()
@@ -816,7 +841,8 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
       if (prop === 'info') {
         return () => { // Sync
           const catalog = getCuratedCacheSnapshot()
-          return catalog?.[resolvedModelId] ? { ...catalog[resolvedModelId] } : { ...modelSpec }
+          const entry = catalog?.[resolvedModelId] ? { ...catalog[resolvedModelId] } : { ...modelSpec }
+          return aliasSpeed ? { ...entry, speed: aliasSpeed } : entry
         }
       }
 

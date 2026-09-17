@@ -222,8 +222,16 @@ a silent billing error, not a crash. Accuracy matters more than completeness.
    field removed. Editing an existing model? Read its current entry out of the
    catalog file first and change only what you mean to. Step 2 below prints
    every removal, so check the diff before handing it over.
+7. **Some numbers describe the key, not the model.** Providers sort accounts
+   into standings — trial and production, numbered tiers, committed use — under
+   whatever name they give them, and publish a row per standing. Rate limits are
+   the obvious case; a price can be one too, and so can access to a model at
+   all. Two accounts can read the same published page and correctly write
+   different numbers, so for these a URL alone never settles a value. Establish
+   which standing this key has before writing one, and record it. If you cannot
+   establish it, leave the field out and say which one and why.
 ${local
-? `7. **This installation has its own fields and tags** — see *Local conventions*
+? `8. **This installation has its own fields and tags** — see *Local conventions*
    below, and do not treat the field table as the whole story. A field marked
    *measured* has no page to read it off: run the command named for it. Never
    apply a tag whose required fields you cannot supply — leave the tag off and
@@ -297,6 +305,12 @@ from the docs page. Steps 1 and 3 only read, so run them as often as you need.
 Step 4 writes to the user's catalog and shows them the diff first — hand them
 the command, do not run it for them.
 
+Anything that would change the catalog ends in something they can apply: a
+candidate file and its \`mo model apply\`, or the exact \`mo\` command for the
+change. A summary of what you found is not an outcome — if the ask was to
+change something, the reply that contains no applyable artifact has not
+answered it.
+
 ## Where to read the numbers
 
 ${names.map(referenceList).join('\n')}
@@ -319,6 +333,58 @@ exists when the provider has one, especially if that is why they chose it:
 someone who picked a provider *because* it was free should not be shown a
 table of dollar figures with no explanation. The rates apply once the free
 quota is gone.
+
+## Account-dependent numbers
+
+Some published numbers describe the key rather than the model (hard rule 7).
+Rate limits are the case you will meet most often, so the steps below are
+written for them; a price taken from a row that varies by account standing
+takes the same route. Start by reading the catalog — the models in it are the
+only ones you need to look up, and an earlier pass may already have settled the
+standing.
+
+1. **Establish the standing, once per provider.** Open the provider's limits
+   page and see how it divides accounts — most publish a column or a table per
+   account standing. Ask the user which one their key is on, using the words
+   that page uses for them; ask rather than picking the likely one and inviting
+   a correction. If a provider's limits do not vary by standing, there is
+   nothing to establish.
+2. **Read the row for that standing**, per model. Providers usually publish
+   limits per model, and a model on the page that this catalog does not carry
+   is not your problem.
+3. **Check the unit before you write.** mohdel counts three things: requests per
+   minute, tokens per minute, and inputs per minute for an embedding endpoint
+   metered in inputs. A limit published in any other unit — images, concurrent
+   jobs, a daily or monthly cap — does not convert, because the conversion
+   depends on how the caller batches and that is not yours to assume. Leave the
+   fields out for that model and tell the user the endpoint, the number and the
+   unit as published, so they can decide what to do.
+4. **Put each number at the level it is published at.** A limit that differs per
+   model goes in that model's entry, as \`rpmLimit\` / \`tpmLimit\` / \`inpmLimit\`
+   with \`rateLimitScope: "model"\`. The provider level is for one quota the whole
+   key shares across everything the provider sells — hand the user
+   \`mo rl provider set <provider> …\`, and set \`rateLimitScope: "provider"\` on the
+   entries drawing on it. A limit published **per endpoint** is neither: it binds
+   the models that call that endpoint and no others, so it goes on each of their
+   entries. At provider level it would claim the whole key is capped there,
+   which is false as soon as the provider sells anything else. A quota a speed
+   lane sells separately goes on that lane inside \`speeds\`, where it outranks
+   both.
+5. **Say which row you read, in your summary.** \`source\` and \`sourcedAt\` pin the
+   page and the date but not the row, and mohdel has no field for the standing —
+   so the record is what you tell the user. Name the standing and which models
+   took numbers from it. Do not improvise a home for it in the entry; if they
+   want it kept there, that is theirs to decide.
+6. **Report what you left out.** An unset limit is one that gets discovered as a
+   429 in production. Say which models you skipped and why — no standing given,
+   unit that does not convert, nothing published.
+
+Limits reach the catalog the same way prices do, through a candidate and
+\`mo model apply\`. The exception is a provider-level quota, which is not a
+catalog fact at all: \`mo rl provider set\` writes it to
+\`~/.config/mohdel/providers.json\`, and like every writing command it is one you
+hand over rather than run. \`mo rl show <model>\` prints what the runtime will
+use once applied, and reads nothing but config.
 
 ## Entry kinds
 

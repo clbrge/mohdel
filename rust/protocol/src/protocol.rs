@@ -256,6 +256,11 @@ pub enum MessagePart {
     Reasoning {
         text: String,
     },
+    #[serde(rename_all = "camelCase")]
+    Image {
+        file_uri: String,
+        mime_type: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

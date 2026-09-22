@@ -27,7 +27,7 @@ import {
 import { cancelledDone } from './_cancelled.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
-import { loadImages } from './_images.js'
+import { hasImagePart, loadImageParts, loadImages } from './_images.js'
 import { isTrustedMedia } from './_media.js'
 import { costFor } from './_pricing.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
@@ -92,21 +92,23 @@ export async function * anthropic (envelope, deps = {}) {
   const start = String(process.hrtime.bigint())
   let first = null
 
-  const { system, conversation, conversationCacheTtl } = splitPrompt(envelope.prompt)
-
-  // Attach images to the last user message before building the request.
-  if (envelope.images?.length) {
-    try {
-      const loaded = await loadImages(envelope.images, { trusted: isTrustedMedia(envelope) })
-      const blocks = loaded.map(toAnthropicImageBlock).filter(Boolean)
-      if (blocks.length) injectImageBlocks(conversation, blocks)
-    } catch (e) {
-      log?.warn({ err: e }, '[mohdel:anthropic] image load failed')
-      const typed = /** @type {any} */(e).typed
-      yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'anthropic' }) }
-      return
+  let imageParts
+  let imageBlocks = []
+  try {
+    const trusted = isTrustedMedia(envelope)
+    imageParts = await loadImageParts(envelope.prompt, { trusted })
+    if (envelope.images?.length) {
+      imageBlocks = (await loadImages(envelope.images, { trusted })).map(toAnthropicImageBlock)
     }
+  } catch (e) {
+    log?.warn({ err: e }, '[mohdel:anthropic] image load failed')
+    const typed = /** @type {any} */(e).typed
+    yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'anthropic' }) }
+    return
   }
+
+  const { system, conversation, conversationCacheTtl } = splitPrompt(envelope.prompt, imageParts)
+  if (imageBlocks.length) injectImageBlocks(conversation, imageBlocks)
 
   const request = buildRequest(envelope, conversation, system, conversationCacheTtl)
 
@@ -435,7 +437,7 @@ function placeConversationBreakpoints (messages, ttl) {
 }
 
 /** @param {string | import('#core/envelope.js').Message[]} prompt */
-function splitPrompt (prompt) {
+function splitPrompt (prompt, imageParts) {
   if (typeof prompt === 'string') {
     return { system: '', conversation: [{ role: 'user', content: prompt }], conversationCacheTtl: null }
   }
@@ -488,7 +490,7 @@ function splitPrompt (prompt) {
         content: [{
           type: 'tool_result',
           tool_use_id: m.toolCallId ?? '',
-          content: flattenText(m.content)
+          content: hasImagePart(m.content) ? toAnthropicContent(m.content, imageParts) : flattenText(m.content)
         }]
       })
     } else if (m.role === 'assistant' && m.toolCalls?.length) {
@@ -509,7 +511,7 @@ function splitPrompt (prompt) {
     } else {
       conversation.push({
         role: m.role,
-        content: toAnthropicContent(m.content)
+        content: toAnthropicContent(m.content, imageParts)
       })
     }
   }
@@ -529,11 +531,15 @@ function flattenText (content) {
   return content.filter(p => p.type === 'text' && p.text).map(p => p.text).join('\n')
 }
 
-/** @param {string | import('#core/envelope.js').MessagePart[]} content */
-function toAnthropicContent (content) {
+/**
+ * @param {string | import('#core/envelope.js').MessagePart[]} content
+ * @param {Map<object, import('./_images.js').LoadedImage>} imageParts
+ */
+function toAnthropicContent (content, imageParts) {
   if (typeof content === 'string') return content
   return content.filter(p => p.type !== 'reasoning').map(p => {
     if (p.type === 'text') return { type: 'text', text: p.text ?? '' }
+    if (p.type === 'image') return toAnthropicImageBlock(imageParts.get(p))
     throw new Error(`unsupported content part type: ${p.type}`)
   })
 }

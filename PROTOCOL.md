@@ -118,6 +118,7 @@ interface ToolCall { id: string; name: string; arguments: object }
 type MessagePart =
   | { type: 'text',      text: string }
   | { type: 'reasoning', text: string }
+  | { type: 'image',     fileUri: string; mimeType: string }  // role 'user' or 'tool'
 
 interface MediaRef { fileUri: string; mimeType: string }
 interface ToolSpec { name: string; description?: string; parameters: object }

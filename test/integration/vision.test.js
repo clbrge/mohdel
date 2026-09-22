@@ -25,6 +25,16 @@ const testImage = {
   size: readFileSync(imagePath).length
 }
 
+const LIST_CHARACTERS = 'List the three characters shown in the image, in order from left to right. Reply with ONLY the three characters separated by spaces, nothing else.'
+
+const VIEW_IMAGE = {
+  name: 'view_image',
+  description: 'Returns the image the user is asking about.',
+  parameters: { type: 'object', properties: {} }
+}
+
+const NO_REQUIRED_TOOL_CHOICE = new Set(['deepseek'])
+
 describe('vision integration', async () => {
   const m = await mohdel()
   const curated = getCuratedCacheSnapshot()
@@ -82,6 +92,59 @@ describe('vision integration', async () => {
         expect(lower).toMatch(/red/)
         expect(lower).toMatch(/blue/)
       }, 30_000)
+
+      test('reads an image part in a user message', async () => {
+        const llm = m.use(modelId)
+        const result = await llm.answer({
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Here is an image.' },
+              { type: 'image', fileUri: `file://${imagePath}`, mimeType: 'image/png' },
+              { type: 'text', text: LIST_CHARACTERS }
+            ]
+          }]
+        })
+
+        expect(result.status).toBe('completed')
+        expectCharacters(result.output)
+      }, 30_000)
+
+      test.skipIf(NO_REQUIRED_TOOL_CHOICE.has(modelId.split('/')[0]))('reads an image returned by a tool', async () => {
+        const llm = m.use(modelId)
+        const ask = { role: 'user', content: `Call view_image, then answer. ${LIST_CHARACTERS}` }
+        const step1 = await llm.answer({ messages: [ask] }, { tools: [VIEW_IMAGE], toolChoice: 'required' })
+        expect(step1.status).toBe('tool_use')
+
+        const assistantContent = step1.reasoning
+          ? [{ type: 'reasoning', text: step1.reasoning }, { type: 'text', text: step1.output || '' }]
+          : (step1.output || '')
+        const step2 = await llm.answer({
+          messages: [
+            ask,
+            { role: 'assistant', content: assistantContent, toolCalls: step1.toolCalls },
+            {
+              role: 'tool_result',
+              toolCallId: step1.toolCalls[0].id,
+              toolName: 'view_image',
+              content: [
+                { type: 'text', text: 'The image:' },
+                { type: 'image', fileUri: `file://${imagePath}`, mimeType: 'image/png' }
+              ]
+            }
+          ]
+        }, { tools: [VIEW_IMAGE] })
+
+        expect(step2.status).toBe('completed')
+        expectCharacters(step2.output)
+      }, 60_000)
     })
   }
 })
+
+function expectCharacters (output) {
+  expect(output).toBeTruthy()
+  expect(output).toMatch(/A/)
+  expect(output).toMatch(/\+/)
+  expect(output).toMatch(/#/)
+}

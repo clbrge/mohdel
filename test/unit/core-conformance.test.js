@@ -22,7 +22,7 @@ const AUTH_ALLOWED = new Set(['key'])
 const MEDIA_ALLOWED = new Set(['fileUri', 'mimeType'])
 const TOOL_SPEC_ALLOWED = new Set(['name', 'description', 'parameters'])
 const MESSAGE_ALLOWED = new Set(['role', 'content', 'toolCallId', 'toolName', 'toolCalls'])
-const MESSAGE_PART_ALLOWED = new Set(['type', 'text', 'cache'])
+const MESSAGE_PART_ALLOWED = new Set(['type', 'text', 'cache', 'fileUri', 'mimeType'])
 
 const EVENT_ALLOWED = new Set(['type', 'delta', 'result', 'error', 'sinceMs'])
 const DELTA_CHUNK_ALLOWED = new Set(['type', 'delta'])

@@ -19,6 +19,8 @@
 import { getSpec } from './_catalog.js'
 import { capOutput } from './_output_cap.js'
 import { classifyProviderError } from './_errors.js'
+import { hasImagePart, loadImage, loadImageParts } from './_images.js'
+import { isTrustedMedia, mediaError, mediaScheme } from './_media.js'
 import { costFor } from './_pricing.js'
 import { cancelledDone } from './_cancelled.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
@@ -75,6 +77,9 @@ const DSML_PARAM_RE = /<\uFF5CDSML\uFF5Cparameter\s+name="([^"]+)"(?:\s+string="
  * @property {(envelope: any, args: any) => void} [mutateArgs]
  *   Last-mile hook to splice provider-specific fields into the
  *   request (e.g. OpenRouter routing prefs).
+ * @property {boolean} [inlineImagesOnly]
+ *   The provider takes images as data URIs only; an `https://` image
+ *   is refused before dispatch.
  */
 
 /**
@@ -88,7 +93,17 @@ export async function * runChatCompletions (envelope, client, config, deps = {})
   const spec = getSpec(catalogKey(envelope.model)) || {}
   const start = String(process.hrtime.bigint())
 
-  const args = buildRequest(envelope, spec, config)
+  let images
+  try {
+    images = await loadChatImages(envelope, config)
+  } catch (e) {
+    deps.log?.warn({ err: e }, `[mohdel:${config.provider}] image load failed`)
+    const typed = /** @type {any} */(e).typed
+    yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: config.provider }) }
+    return
+  }
+
+  const args = buildRequest(envelope, spec, config, images)
   if (config.mutateArgs) config.mutateArgs(envelope, args)
 
   if (config.stream) {
@@ -324,17 +339,64 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
 }
 
 /**
+ * @typedef {object} ChatImages
+ * @property {Map<object, any>} parts  `image` part → rendered `image_url` part
+ * @property {any[]} envelope          Rendered envelope `images` refs
+ */
+
+/**
+ * @param {import('#core/envelope.js').CallEnvelope} envelope
+ * @param {ChatCompletionsConfig} config
+ * @returns {Promise<ChatImages>}
+ */
+async function loadChatImages (envelope, config) {
+  const trusted = isTrustedMedia(envelope)
+  const parts = new Map()
+  for (const [part, loaded] of await loadImageParts(envelope.prompt, { trusted })) {
+    parts.set(part, toChatImagePart(part, loaded, config))
+  }
+  const rendered = []
+  for (const ref of envelope.images ?? []) {
+    rendered.push(toChatImagePart(ref, await loadImage(ref, { trusted }), config))
+  }
+  return { parts, envelope: rendered }
+}
+
+/**
+ * A `data:` URI goes out exactly as the caller sent it.
+ *
+ * @param {{fileUri: string}} ref
+ * @param {import('./_images.js').LoadedImage} loaded
+ * @param {ChatCompletionsConfig} config
+ */
+function toChatImagePart (ref, loaded, config) {
+  if (loaded.url && config.inlineImagesOnly) {
+    throw mediaError(
+      `${config.provider} does not accept image URLs`,
+      'SESSION_INVALID_IMAGE',
+      'send the image as a data: URI or a file:// path'
+    )
+  }
+  const url = mediaScheme(ref.fileUri) === 'file'
+    ? `data:${loaded.mimeType};base64,${loaded.base64}`
+    : ref.fileUri
+  return { type: 'image_url', image_url: { url, detail: 'high' } }
+}
+
+/**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
  * @param {any} spec
  * @param {ChatCompletionsConfig} config
+ * @param {ChatImages} images
  */
-function buildRequest (envelope, spec, config) {
+function buildRequest (envelope, spec, config, images) {
   /** @type {Record<string, any>} */
   const args = {
     model: spec?.model ?? bareOf(envelope.model),
     temperature: 0,
     messages: toChatMessages(envelope.prompt, {
-      reasoningPad: typeof spec?.reasoningContentPlaceholder === 'string' ? spec.reasoningContentPlaceholder : null
+      reasoningPad: typeof spec?.reasoningContentPlaceholder === 'string' ? spec.reasoningContentPlaceholder : null,
+      imageParts: images.parts
     })
   }
 
@@ -342,8 +404,8 @@ function buildRequest (envelope, spec, config) {
     args.max_tokens = envelope.outputBudget
   }
 
-  if (envelope.images?.length) {
-    injectImages(args, envelope.images)
+  if (images.envelope.length) {
+    injectImages(args, images.envelope)
   }
 
   if (envelope.tools?.length) {
@@ -393,8 +455,11 @@ function buildRequest (envelope, spec, config) {
 }
 
 /**
+ * A `tool` message carries text only, so a tool result's images go
+ * into one user message after the run of tool results.
+ *
  * @param {string | import('#core/envelope.js').Message[]} prompt
- * @param {{ reasoningPad?: string | null }} [opts]
+ * @param {{ reasoningPad?: string | null, imageParts: Map<object, any> }} opts
  *   `reasoningPad`: when a string (including `''`), assistant messages without
  *   extractable reasoning get `reasoning_content: <pad>` so providers that
  *   require the field on every assistant turn (e.g. deepseek-v4-pro) accept
@@ -406,42 +471,74 @@ function buildRequest (envelope, spec, config) {
  *   own adapters and have their own roundtrip rules.
  * @returns {Array<any>}
  */
-function toChatMessages (prompt, opts = {}) {
+function toChatMessages (prompt, opts) {
   const pad = typeof opts.reasoningPad === 'string' ? opts.reasoningPad : null
   if (typeof prompt === 'string') return [{ role: 'user', content: prompt }]
-  return prompt.map(m => {
+  const out = []
+  let hoisted = []
+  for (const m of prompt) {
     if (m.role === 'tool') {
-      return {
-        role: 'tool',
-        tool_call_id: m.toolCallId,
-        content: flattenText(m.content)
+      if (Array.isArray(m.content)) {
+        hoisted.push(...m.content.filter(p => p.type === 'image').map(p => opts.imageParts.get(p)))
       }
+    } else if (hoisted.length) {
+      out.push({ role: 'user', content: hoisted })
+      hoisted = []
     }
-    const reasoning = m.role === 'assistant' ? extractReasoning(m.content) : null
-    const reasoningField = reasoning ?? (pad !== null && m.role === 'assistant' ? pad : null)
-    if (m.role === 'assistant' && m.toolCalls?.length) {
-      // Chat Completions assistant turn: optional `content` + the
-      // `tool_calls` array. `arguments` must be a JSON string on
-      // the wire.
-      const msg = {
-        role: 'assistant',
-        content: flattenText(m.content) || '',
-        tool_calls: m.toolCalls.map(tc => ({
-          id: tc.id,
-          type: 'function',
-          function: {
-            name: tc.name,
-            arguments: stringifyToolArgs(tc.arguments)
-          }
-        }))
-      }
-      if (reasoningField !== null) msg.reasoning_content = reasoningField
-      return msg
+    out.push(toChatMessage(m, pad, opts.imageParts))
+  }
+  if (hoisted.length) out.push({ role: 'user', content: hoisted })
+  return out
+}
+
+/**
+ * @param {import('#core/envelope.js').Message} m
+ * @param {string | null} pad
+ * @param {Map<object, any>} imageParts
+ */
+function toChatMessage (m, pad, imageParts) {
+  if (m.role === 'tool') {
+    return {
+      role: 'tool',
+      tool_call_id: m.toolCallId,
+      content: flattenText(m.content)
     }
-    const msg = { role: m.role, content: flattenText(m.content) }
+  }
+  const reasoning = m.role === 'assistant' ? extractReasoning(m.content) : null
+  const reasoningField = reasoning ?? (pad !== null && m.role === 'assistant' ? pad : null)
+  if (m.role === 'assistant' && m.toolCalls?.length) {
+    // Chat Completions assistant turn: optional `content` + the
+    // `tool_calls` array. `arguments` must be a JSON string on
+    // the wire.
+    const msg = {
+      role: 'assistant',
+      content: flattenText(m.content) || '',
+      tool_calls: m.toolCalls.map(tc => ({
+        id: tc.id,
+        type: 'function',
+        function: {
+          name: tc.name,
+          arguments: stringifyToolArgs(tc.arguments)
+        }
+      }))
+    }
     if (reasoningField !== null) msg.reasoning_content = reasoningField
     return msg
-  })
+  }
+  const content = hasImagePart(m.content) ? toChatContent(m.content, imageParts) : flattenText(m.content)
+  const msg = { role: m.role, content }
+  if (reasoningField !== null) msg.reasoning_content = reasoningField
+  return msg
+}
+
+/**
+ * @param {import('#core/envelope.js').MessagePart[]} content
+ * @param {Map<object, any>} imageParts
+ */
+function toChatContent (content, imageParts) {
+  return content
+    .filter(p => p.type === 'image' || (p.type === 'text' && p.text))
+    .map(p => p.type === 'image' ? imageParts.get(p) : { type: 'text', text: p.text })
 }
 
 /** @param {unknown} args */
@@ -466,17 +563,9 @@ function extractReasoning (content) {
 
 /**
  * @param {any} args
- * @param {import('#core/envelope.js').MediaRef[]} images
+ * @param {any[]} blocks  Rendered `image_url` parts
  */
-function injectImages (args, images) {
-  const blocks = images
-    .filter(i => i?.fileUri && i?.mimeType)
-    .map(i => ({
-      type: 'image_url',
-      image_url: { url: i.fileUri, detail: 'high' }
-    }))
-  if (!blocks.length) return
-
+function injectImages (args, blocks) {
   // Append to the last user message; fallback to creating one.
   for (let i = args.messages.length - 1; i >= 0; i--) {
     const m = args.messages[i]

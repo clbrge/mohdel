@@ -37,11 +37,41 @@ const IMAGE_ERROR = 'SESSION_INVALID_IMAGE'
 export async function loadImages (images, opts = {}) {
   if (!images || !Array.isArray(images)) return []
   const out = []
-  for (const img of images) {
-    if (!img?.fileUri || !img?.mimeType) continue
-    out.push(await loadImage(img, opts))
+  for (const img of images) out.push(await loadImage(img, opts))
+  return out
+}
+
+/**
+ * Loads every `image` part in a message prompt, keyed by the part
+ * object so a message builder can render each one where it sits.
+ *
+ * @param {string | import('#core/envelope.js').Message[]} prompt
+ * @param {{trusted?: boolean}} [opts]
+ * @returns {Promise<Map<object, LoadedImage>>}
+ */
+export async function loadImageParts (prompt, opts = {}) {
+  const out = new Map()
+  if (typeof prompt === 'string') return out
+  for (const m of prompt) {
+    if (!Array.isArray(m.content)) continue
+    for (const p of m.content) {
+      if (p.type !== 'image') continue
+      if (m.role !== 'user' && m.role !== 'tool') {
+        throw mediaError(
+          `image parts are not accepted on ${m.role} messages`,
+          IMAGE_ERROR,
+          'put images on user or tool messages'
+        )
+      }
+      out.set(p, await loadImage(p, opts))
+    }
   }
   return out
+}
+
+/** @param {string | import('#core/envelope.js').MessagePart[]} content */
+export function hasImagePart (content) {
+  return Array.isArray(content) && content.some(p => p.type === 'image')
 }
 
 /**
@@ -51,6 +81,9 @@ export async function loadImages (images, opts = {}) {
  */
 export async function loadImage (image, opts = {}) {
   const { fileUri, mimeType } = image
+  if (!fileUri || !mimeType) {
+    throw mediaError('image is missing fileUri or mimeType', IMAGE_ERROR)
+  }
   switch (mediaScheme(fileUri)) {
     case 'file': {
       const { bytes } = await readLocalMedia(fileUri, { type: IMAGE_ERROR, trusted: opts.trusted })

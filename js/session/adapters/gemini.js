@@ -28,7 +28,7 @@ import {
 import { cancelledDone } from './_cancelled.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
-import { loadImages } from './_images.js'
+import { loadImageParts, loadImages } from './_images.js'
 import { isTrustedMedia } from './_media.js'
 import { loadVideos } from './_videos.js'
 import { costFor } from './_pricing.js'
@@ -51,20 +51,23 @@ export async function * gemini (envelope, deps = {}) {
   const start = String(process.hrtime.bigint())
   let first = null
 
-  const { systemInstruction, contents } = buildContents(envelope.prompt)
-
-  if (envelope.images?.length) {
-    try {
-      const loaded = await loadImages(envelope.images, { trusted: isTrustedMedia(envelope) })
-      const parts = loaded.map(toGeminiImagePart).filter(Boolean)
-      if (parts.length) injectParts(contents, parts)
-    } catch (e) {
-      log?.warn({ err: e }, '[mohdel:gemini] image load failed')
-      const typed = /** @type {any} */(e).typed
-      yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'gemini' }) }
-      return
+  let imageParts
+  let imageInputs = []
+  try {
+    const trusted = isTrustedMedia(envelope)
+    imageParts = await loadImageParts(envelope.prompt, { trusted })
+    if (envelope.images?.length) {
+      imageInputs = (await loadImages(envelope.images, { trusted })).map(toGeminiImagePart)
     }
+  } catch (e) {
+    log?.warn({ err: e }, '[mohdel:gemini] image load failed')
+    const typed = /** @type {any} */(e).typed
+    yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'gemini' }) }
+    return
   }
+
+  const { systemInstruction, contents } = buildContents(envelope.prompt, imageParts)
+  if (imageInputs.length) injectParts(contents, imageInputs)
 
   if (envelope.videos?.length) {
     try {
@@ -278,7 +281,15 @@ function buildRequest (envelope, contents, systemInstruction) {
 }
 
 /** @param {string | import('#core/envelope.js').Message[]} prompt */
-function buildContents (prompt) {
+/**
+ * A tool result's images go into one user content after the run of
+ * tool results: only Gemini 3 accepts media inside a
+ * `functionResponse`.
+ *
+ * @param {string | import('#core/envelope.js').Message[]} prompt
+ * @param {Map<object, import('./_images.js').LoadedImage>} imageParts
+ */
+function buildContents (prompt, imageParts) {
   if (typeof prompt === 'string') {
     return {
       systemInstruction: '',
@@ -289,10 +300,20 @@ function buildContents (prompt) {
   const systemParts = []
   /** @type {Array<{role: string, parts: any[]}>} */
   const contents = []
+  /** @type {Array<any>} */
+  let hoisted = []
+  const flushHoisted = () => {
+    if (hoisted.length) contents.push({ role: 'user', parts: hoisted })
+    hoisted = []
+  }
   for (const m of prompt) {
+    if (m.role !== 'tool') flushHoisted()
     if (m.role === 'system') {
       systemParts.push(flattenText(m.content))
     } else if (m.role === 'tool') {
+      if (Array.isArray(m.content)) {
+        hoisted.push(...m.content.filter(p => p.type === 'image').map(p => toGeminiImagePart(imageParts.get(p))))
+      }
       contents.push({
         role: 'user',
         parts: [{
@@ -322,10 +343,11 @@ function buildContents (prompt) {
     } else {
       contents.push({
         role: mapRole(m.role),
-        parts: toGeminiParts(m.content)
+        parts: toGeminiParts(m.content, imageParts)
       })
     }
   }
+  flushHoisted()
   return {
     systemInstruction: systemParts.filter(Boolean).join('\n\n'),
     contents
@@ -355,11 +377,15 @@ function flattenText (content) {
   return content.filter(p => p.type === 'text' && p.text).map(p => p.text).join('\n')
 }
 
-/** @param {string | import('#core/envelope.js').MessagePart[]} content */
-function toGeminiParts (content) {
+/**
+ * @param {string | import('#core/envelope.js').MessagePart[]} content
+ * @param {Map<object, import('./_images.js').LoadedImage>} imageParts
+ */
+function toGeminiParts (content, imageParts) {
   if (typeof content === 'string') return [{ text: content }]
   return content.filter(p => p.type !== 'reasoning').map(p => {
     if (p.type === 'text') return { text: p.text ?? '' }
+    if (p.type === 'image') return toGeminiImagePart(imageParts.get(p))
     throw new Error(`unsupported content part type: ${p.type}`)
   })
 }

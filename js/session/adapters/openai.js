@@ -28,7 +28,7 @@ import {
 import { cancelledDone } from './_cancelled.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
-import { loadImages } from './_images.js'
+import { hasImagePart, loadImageParts, loadImages } from './_images.js'
 import { isTrustedMedia } from './_media.js'
 import { costFor } from './_pricing.js'
 import { catalogKey, providerOf, bareOf } from '#core/model-id.js'
@@ -54,20 +54,25 @@ export async function * openai (envelope, deps = {}) {
   const start = String(process.hrtime.bigint())
   let first = null
 
-  const { instructions, input } = splitPrompt(envelope.prompt)
-
-  if (envelope.images?.length) {
-    try {
-      const loaded = await loadImages(envelope.images, { trusted: isTrustedMedia(envelope) })
-      const parts = loaded.map(toOpenAIImagePart).filter(Boolean)
-      if (parts.length) injectImageParts(input, parts)
-    } catch (e) {
-      log?.warn({ err: e }, '[mohdel:openai] image load failed')
-      const typed = /** @type {any} */(e).typed
-      yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'openai' }) }
-      return
+  let imageParts
+  let imageInputs = []
+  try {
+    const trusted = isTrustedMedia(envelope)
+    imageParts = await loadImageParts(envelope.prompt, { trusted })
+    if (envelope.images?.length) {
+      imageInputs = (await loadImages(envelope.images, { trusted })).map(toOpenAIImagePart)
     }
+  } catch (e) {
+    log?.warn({ err: e }, '[mohdel:openai] image load failed')
+    const typed = /** @type {any} */(e).typed
+    yield { type: 'error', error: typed || classifyProviderError(e, envelope.auth?.key, { provider: 'openai' }) }
+    return
   }
+
+  const { instructions, input } = splitPrompt(envelope.prompt, imageParts, {
+    toolResultImages: providerOf(envelope.model) === 'openai'
+  })
+  if (imageInputs.length) injectImageParts(input, imageInputs)
 
   const request = buildRequest(envelope, input, instructions)
 
@@ -358,8 +363,16 @@ function buildRequest (envelope, input, instructions) {
   return request
 }
 
-/** @param {string | import('#core/envelope.js').Message[]} prompt */
-function splitPrompt (prompt) {
+/**
+ * `toolResultImages`: whether a `function_call_output` may carry
+ * images. Where it may not, a tool result's images go into one user
+ * message after the run of tool results.
+ *
+ * @param {string | import('#core/envelope.js').Message[]} prompt
+ * @param {Map<object, import('./_images.js').LoadedImage>} imageParts
+ * @param {{toolResultImages: boolean}} opts
+ */
+function splitPrompt (prompt, imageParts, opts) {
   if (typeof prompt === 'string') {
     return { instructions: '', input: [{ role: 'user', content: prompt }] }
   }
@@ -367,14 +380,30 @@ function splitPrompt (prompt) {
   const systemParts = []
   /** @type {Array<any>} */
   const input = []
+  /** @type {Array<any>} */
+  let hoisted = []
+  const flushHoisted = () => {
+    if (hoisted.length) input.push({ role: 'user', content: hoisted })
+    hoisted = []
+  }
   for (const m of prompt) {
+    if (m.role !== 'tool') flushHoisted()
     if (m.role === 'system') {
       systemParts.push(flattenText(m.content))
     } else if (m.role === 'tool') {
+      let output = flattenText(m.content)
+      if (hasImagePart(m.content)) {
+        const content = toInputContent('user', m.content, imageParts)
+        if (opts.toolResultImages) {
+          output = content
+        } else {
+          hoisted.push(...content.filter(p => p.type === 'input_image'))
+        }
+      }
       input.push({
         type: 'function_call_output',
         call_id: m.toolCallId ?? '',
-        output: flattenText(m.content)
+        output
       })
     } else if (m.role === 'assistant' && m.toolCalls?.length) {
       // Responses API wants a message item (if any text) followed
@@ -398,10 +427,11 @@ function splitPrompt (prompt) {
     } else {
       input.push({
         role: m.role,
-        content: toInputContent(m.role, m.content)
+        content: toInputContent(m.role, m.content, imageParts)
       })
     }
   }
+  flushHoisted()
   return { instructions: systemParts.filter(Boolean).join('\n\n'), input }
 }
 
@@ -430,12 +460,14 @@ function stringifyToolArgs (args) {
 /**
  * @param {string} role
  * @param {string | import('#core/envelope.js').MessagePart[]} content
+ * @param {Map<object, import('./_images.js').LoadedImage>} imageParts
  */
-function toInputContent (role, content) {
+function toInputContent (role, content, imageParts) {
   if (typeof content === 'string') return content
   const partType = role === 'assistant' ? 'output_text' : 'input_text'
   return content.filter(p => p.type !== 'reasoning').map(p => {
     if (p.type === 'text') return { type: partType, text: p.text ?? '' }
+    if (p.type === 'image') return toOpenAIImagePart(imageParts.get(p))
     throw new Error(`unsupported content part type: ${p.type}`)
   })
 }

@@ -6,7 +6,26 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- `image` message parts: `{ type: 'image', fileUri, mimeType }` on `user` and
+  `tool` messages, rendered where they are written, so an image replays with
+  the transcript. Inside a tool result on Anthropic and OpenAI; in a user
+  message after the tool results elsewhere.
+
+### Changed
+
+- An `images` entry missing `fileUri` or `mimeType` fails the call with
+  `SESSION_INVALID_IMAGE` instead of being skipped.
+- Cerebras refuses `https://` images with `SESSION_INVALID_IMAGE` before
+  dispatch.
+
 ### Fixed
+
+- `file://` images on the chat-completions adapters (Cerebras, DeepSeek,
+  Fireworks, Groq, local, Mistral, Novita, OpenRouter, Qwen, Xiaomi) were sent
+  to the provider as the literal URI. They are now read under the local-media
+  rules and sent as data URIs.
 
 - A `reasoning` part in a message without tool calls no longer fails the call on
   Anthropic, OpenAI, xAI and Gemini. Those adapters leave it out.

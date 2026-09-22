@@ -184,7 +184,7 @@ const prompt = [
 
 Message shape:
 - `role`: `'system'` | `'user'` | `'assistant'` | `'tool'`
-- `content`: `string` or `Array<{ type: 'text' | 'reasoning', text: string }>`
+- `content`: `string` or an array of parts: `{ type: 'text' | 'reasoning', text }` or `{ type: 'image', fileUri, mimeType }` — see [Vision](#vision)
 - A `reasoning` part carries a model's prior reasoning text. Chat-completions adapters send it back as `reasoning_content` on assistant turns; Anthropic, OpenAI, xAI and Gemini leave it out, since they accept prior reasoning only in their own signed form.
 - `toolCallId`: present on `tool` role — identifies which assistant tool call this responds to
 - `name`: optional tool name on `tool` role
@@ -557,7 +557,43 @@ URI schemes:
 A scheme is required. Bare filesystem paths are rejected — see
 [Local media](#local-media) for how `file://` reads are bounded.
 
-Supported by: Anthropic, OpenAI, Gemini, xAI, Cerebras, OpenRouter (model-dependent).
+Every adapter sends images; whether the model reads them depends on the
+model. Cerebras accepts inline images only, so an `https://` image is
+refused with `SESSION_INVALID_IMAGE` before the call is sent.
+
+### Images in messages
+
+`images` attaches to one call. A caller that replays a conversation
+loses them on the next turn. An `image` part lives in the message
+instead, so it replays with the transcript and keeps its position
+between the text parts around it:
+
+```js
+const prompt = [
+  { role: 'user', content: [
+    { type: 'text', text: 'Here is page 7.' },
+    { type: 'image', fileUri: 'file:///srv/media/page-7.jpg', mimeType: 'image/jpeg' },
+    { type: 'text', text: 'What is the total?' }
+  ]}
+]
+```
+
+Parts take the same URI schemes as `images` and follow the same
+[local media](#local-media) rules. An image part is accepted on `user`
+and `tool` messages; on `system` or `assistant` messages the call fails
+with `SESSION_INVALID_IMAGE`. A part missing `fileUri` or `mimeType`
+fails the same way, as does an `images` entry.
+
+An image part in a `tool` message stays inside the tool result on
+Anthropic and OpenAI. On every other provider, the images of a run of
+consecutive tool results are sent in one user message after the last
+of them, because those providers take text only in a tool result or do
+not document images there. The caller's messages are never changed:
+the same transcript replays unchanged after a switch of model.
+
+A prompt-cache marker goes on a text part. An image part carries none,
+but where the adapter places conversation breakpoints (Anthropic) one
+may land on an image block.
 
 ## Videos (Gemini)
 
@@ -728,9 +764,9 @@ fine for short clips, not for long recordings.
 
 ## Local media
 
-`images[]`, `videos[]` and transcription `audio` all accept a `fileUri`,
-and a `file://` one is read by the **session process**, with that
-process's filesystem privileges. In-process (factory, `mo`) the caller
+`images[]`, `image` message parts, `videos[]` and transcription `audio`
+all accept a `fileUri`, and a `file://` one is read by the **session
+process**, with that process's filesystem privileges. In-process (factory, `mo`) the caller
 is you, so this is just reading your own disk. Behind a gate, the
 `fileUri` came off the data socket — treat it as untrusted input.
 

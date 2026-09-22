@@ -91,13 +91,13 @@ describe('_images loadImage', () => {
     })).rejects.toThrow(/unsupported image URI scheme/)
   })
 
-  test('loadImages skips entries missing fileUri or mimeType', async () => {
-    const out = await loadImages([
+  test('loadImages refuses an entry missing fileUri or mimeType', async () => {
+    await expect(loadImages([
       { fileUri: 'data:image/png;base64,abc', mimeType: 'image/png' },
-      { fileUri: 'data:image/png;base64,xyz' }, // missing mimeType
-      { mimeType: 'image/png' } // missing fileUri
-    ])
-    expect(out).toHaveLength(1)
+      { fileUri: 'data:image/png;base64,xyz' }
+    ])).rejects.toMatchObject({ typed: { type: 'SESSION_INVALID_IMAGE' } })
+    await expect(loadImages([{ mimeType: 'image/png' }]))
+      .rejects.toMatchObject({ typed: { type: 'SESSION_INVALID_IMAGE' } })
   })
 })
 

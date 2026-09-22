@@ -119,8 +119,14 @@
 
 /**
  * @typedef {object} MessagePart
- * @property {('text'|'reasoning')} type
- * @property {string} text
+ * @property {('text'|'reasoning'|'image')} type
+ * @property {string} [text]
+ *   Required on `text` and `reasoning` parts.
+ * @property {string} [fileUri]
+ *   Required on `image` parts. Same schemes and local-read rules as
+ *   an envelope `images` ref. Accepted on `user` and `tool` messages.
+ * @property {string} [mimeType]
+ *   Required on `image` parts.
  * @property {('5m'|'1h')} [cache]
  *   Prompt-cache marker. On system parts: a breakpoint at this block.
  *   On non-system parts: opts the whole conversation into prefix

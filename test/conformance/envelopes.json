@@ -342,5 +342,66 @@
         "content": "Hello."
       }
     ]
+  },
+  "image-parts-in-user-and-tool-messages": {
+    "callId": "c9",
+    "authId": "a9",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "anthropic/claude-sonnet-4-5",
+    "prompt": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Here is page 7."
+          },
+          {
+            "type": "image",
+            "fileUri": "file:///srv/media/page-7.jpg",
+            "mimeType": "image/jpeg"
+          },
+          {
+            "type": "text",
+            "text": "And page 8."
+          },
+          {
+            "type": "image",
+            "fileUri": "data:image/png;base64,iVBORw0KGgo=",
+            "mimeType": "image/png"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "toolCalls": [
+          {
+            "id": "call_1",
+            "name": "view_page",
+            "arguments": {
+              "page": 9
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "toolCallId": "call_1",
+        "content": [
+          {
+            "type": "text",
+            "text": "page 9"
+          },
+          {
+            "type": "image",
+            "fileUri": "https://example.com/page-9.jpg",
+            "mimeType": "image/jpeg"
+          }
+        ]
+      }
+    ]
   }
 }

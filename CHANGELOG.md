@@ -4,19 +4,25 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [1.4.0] — Feat: images in messages
 
 ### Added
 
 - `image` message parts: `{ type: 'image', fileUri, mimeType }` on `user` and
-  `tool` messages, rendered where they are written, so an image replays with
-  the transcript. Inside a tool result on Anthropic and OpenAI; in a user
-  message after the tool results elsewhere.
+  `tool` messages, in-process and through the gate. An image part is rendered
+  where it is written, between the text parts around it, and replays with the
+  transcript. In a tool result it stays inside the result on Anthropic and
+  OpenAI; elsewhere the images of a run of tool results go in one user message
+  after it. Parts follow the same URI schemes and local-media rules as `images`.
+- `npm run test:vision:catalog` sends a small image to every image-capable
+  catalog model and prints a pass/fail table.
 
 ### Changed
 
-- An `images` entry missing `fileUri` or `mimeType` fails the call with
-  `SESSION_INVALID_IMAGE` instead of being skipped.
+- An `images` entry or `image` part missing `fileUri` or `mimeType` fails the
+  call with `SESSION_INVALID_IMAGE` instead of being skipped.
+- An `image` part on a `system` or `assistant` message fails the call with
+  `SESSION_INVALID_IMAGE`.
 - Cerebras refuses `https://` images with `SESSION_INVALID_IMAGE` before
   dispatch.
 
@@ -26,7 +32,6 @@ All notable changes to this project are documented here. Format follows
   Fireworks, Groq, local, Mistral, Novita, OpenRouter, Qwen, Xiaomi) were sent
   to the provider as the literal URI. They are now read under the local-media
   rules and sent as data URIs.
-
 - A `reasoning` part in a message without tool calls no longer fails the call on
   Anthropic, OpenAI, xAI and Gemini. Those adapters leave it out.
 

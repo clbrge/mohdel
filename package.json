@@ -109,6 +109,7 @@
     "test:provider": "vitest run test/integration/provider.test.js",
     "test:multiturn": "vitest run test/integration/multiturn.test.js",
     "test:vision": "vitest run test/integration/vision.test.js",
+    "test:vision:catalog": "vitest run test/integration/vision-catalog.test.js",
     "test:live": "vitest run test/live"
   },
   "release-it": {

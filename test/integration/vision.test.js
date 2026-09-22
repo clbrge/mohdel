@@ -33,8 +33,6 @@ const VIEW_IMAGE = {
   parameters: { type: 'object', properties: {} }
 }
 
-const NO_REQUIRED_TOOL_CHOICE = new Set(['deepseek'])
-
 describe('vision integration', async () => {
   const m = await mohdel()
   const curated = getCuratedCacheSnapshot()
@@ -110,10 +108,10 @@ describe('vision integration', async () => {
         expectCharacters(result.output)
       }, 30_000)
 
-      test.skipIf(NO_REQUIRED_TOOL_CHOICE.has(modelId.split('/')[0]))('reads an image returned by a tool', async () => {
+      test.skipIf(curated[modelId].supportsTools === false)('reads an image returned by a tool', async () => {
         const llm = m.use(modelId)
         const ask = { role: 'user', content: `Call view_image, then answer. ${LIST_CHARACTERS}` }
-        const step1 = await llm.answer({ messages: [ask] }, { tools: [VIEW_IMAGE], toolChoice: 'required' })
+        const step1 = await llm.answer({ messages: [ask] }, { tools: [VIEW_IMAGE] })
         expect(step1.status).toBe('tool_use')
 
         const assistantContent = step1.reasoning

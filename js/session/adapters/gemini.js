@@ -358,7 +358,7 @@ function flattenText (content) {
 /** @param {string | import('#core/envelope.js').MessagePart[]} content */
 function toGeminiParts (content) {
   if (typeof content === 'string') return [{ text: content }]
-  return content.map(p => {
+  return content.filter(p => p.type !== 'reasoning').map(p => {
     if (p.type === 'text') return { text: p.text ?? '' }
     throw new Error(`unsupported content part type: ${p.type}`)
   })

@@ -434,7 +434,7 @@ function stringifyToolArgs (args) {
 function toInputContent (role, content) {
   if (typeof content === 'string') return content
   const partType = role === 'assistant' ? 'output_text' : 'input_text'
-  return content.map(p => {
+  return content.filter(p => p.type !== 'reasoning').map(p => {
     if (p.type === 'text') return { type: partType, text: p.text ?? '' }
     throw new Error(`unsupported content part type: ${p.type}`)
   })

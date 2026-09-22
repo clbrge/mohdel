@@ -185,6 +185,7 @@ const prompt = [
 Message shape:
 - `role`: `'system'` | `'user'` | `'assistant'` | `'tool'`
 - `content`: `string` or `Array<{ type: 'text' | 'reasoning', text: string }>`
+- A `reasoning` part carries a model's prior reasoning text. Chat-completions adapters send it back as `reasoning_content` on assistant turns; Anthropic, OpenAI, xAI and Gemini leave it out, since they accept prior reasoning only in their own signed form.
 - `toolCallId`: present on `tool` role — identifies which assistant tool call this responds to
 - `name`: optional tool name on `tool` role
 - `toolCalls`: present on `assistant` role when the model invoked tools in that turn

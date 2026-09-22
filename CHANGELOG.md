@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- A `reasoning` part in a message without tool calls no longer fails the call on
+  Anthropic, OpenAI, xAI and Gemini. Those adapters leave it out.
+
 ## [1.3.2] — Fix: priced models shown as free
 
 ### Fixed

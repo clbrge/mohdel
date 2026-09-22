@@ -532,7 +532,7 @@ function flattenText (content) {
 /** @param {string | import('#core/envelope.js').MessagePart[]} content */
 function toAnthropicContent (content) {
   if (typeof content === 'string') return content
-  return content.map(p => {
+  return content.filter(p => p.type !== 'reasoning').map(p => {
     if (p.type === 'text') return { type: 'text', text: p.text ?? '' }
     throw new Error(`unsupported content part type: ${p.type}`)
   })

@@ -44,9 +44,11 @@ function cancelledDone (start, first, output) {
  * @param {string} options.socketPath
  * @param {AbortSignal} [options.signal]
  * @param {string} [options.path]  HTTP path; defaults to '/v1/call'
+ * @param {Record<string, string>} [options.headers]  sent with the request, for a router in front of the gate;
+ *   `content-type`, `content-length`, `transfer-encoding`, `connection` and `host` are the transport's
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
-export async function * call (envelope, { socketPath, signal, path = '/v1/call' }) {
+export async function * call (envelope, { socketPath, signal, path = '/v1/call', headers }) {
   const start = String(process.hrtime.bigint())
   if (signal?.aborted) {
     yield cancelledDone(start, null, '')
@@ -60,7 +62,8 @@ export async function * call (envelope, { socketPath, signal, path = '/v1/call' 
       path,
       method: 'POST',
       body: envelope,
-      signal
+      signal,
+      headers
     })
   } catch (e) {
     if (signal?.aborted) {

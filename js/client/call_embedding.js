@@ -19,15 +19,18 @@ import { MohdelError } from '#core'
  * @param {string} options.socketPath
  * @param {AbortSignal} [options.signal]
  * @param {string} [options.path]  HTTP path; defaults to '/v1/embed'
+ * @param {Record<string, string>} [options.headers]  sent with the request, for a router in front of the gate;
+ *   `content-type`, `content-length`, `transfer-encoding`, `connection` and `host` are the transport's
  * @returns {Promise<import('#core/embedding.js').EmbedResult>}
  */
-export async function callEmbedding (envelope, { socketPath, signal, path = '/v1/embed' }) {
+export async function callEmbedding (envelope, { socketPath, signal, path = '/v1/embed', headers }) {
   const res = await requestUnix({
     socketPath,
     path,
     method: 'POST',
     body: envelope,
-    signal
+    signal,
+    headers
   })
 
   const body = await readAll(res)

@@ -5,6 +5,7 @@ import path from 'node:path'
 import os from 'node:os'
 
 import { call } from '../../js/client/call.js'
+import { callEmbedding } from '../../js/client/call_embedding.js'
 
 // ---------- Test harness ----------
 //
@@ -73,6 +74,36 @@ describe('client/call — happy path', () => {
     const events = await collect(call(envelope(), { socketPath: sockPath }))
     expect(events.map(e => e.type)).toEqual(['delta', 'done'])
     expect(events.at(-1).result.status).toBe('completed')
+  })
+})
+
+// ---------- Caller headers ----------
+
+describe('client — caller headers', () => {
+  test('call sends them with the request', async () => {
+    let seen = null
+    handler = (req, res) => {
+      seen = req.headers['x-router-key']
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.end(JSON.stringify({
+        type: 'done',
+        result: { status: 'completed', output: 'ok', inputTokens: 0, outputTokens: 0, thinkingTokens: 0, cost: 0, timestamps: { start: '0', first: '0', end: '0' } }
+      }) + '\n')
+    }
+    await collect(call(envelope(), { socketPath: sockPath, headers: { 'x-router-key': 'k1' } }))
+    expect(seen).toBe('k1')
+  })
+
+  test('callEmbedding sends them with the request', async () => {
+    let seen = null
+    handler = (req, res) => {
+      seen = req.headers['x-router-key']
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ vectors: [[0.1]], dimensions: 1, inputType: null, inputTokens: 1, cost: 0 }))
+    }
+    await callEmbedding({ callId: 'e1', authId: 'a1', auth: { key: 'k' }, model: 'echo/e', input: ['x'] },
+      { socketPath: sockPath, headers: { 'x-router-key': 'k2' } })
+    expect(seen).toBe('k2')
   })
 })
 

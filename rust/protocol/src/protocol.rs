@@ -245,7 +245,7 @@ pub enum MessageContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum MessagePart {
     Text {
         text: String,

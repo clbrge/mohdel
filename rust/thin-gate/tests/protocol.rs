@@ -1,8 +1,8 @@
 //! Unit tests on serde formatting for the 3-event protocol.
 
 use mohdel_thin_gate::protocol::{
-    validate_ids, AnswerResult, DeltaChunk, DeltaKind, Event, Severity, Status, Timestamps,
-    TypedError, MAX_ID_BYTES, MAX_MODEL_BYTES, MAX_PROVIDER_BYTES,
+    validate_ids, AnswerResult, CallEnvelope, DeltaChunk, DeltaKind, Event, MessagePart, Severity,
+    Status, Timestamps, TypedError, MAX_ID_BYTES, MAX_MODEL_BYTES, MAX_PROVIDER_BYTES,
 };
 use serde_json::json;
 
@@ -177,4 +177,36 @@ fn validate_ids_reason_is_bounded() {
     let long_model = format!("openai/{}", "x".repeat(1_000_000));
     let reason = validate_ids("c", "u", &long_model).unwrap_err();
     assert!(reason.len() < 200, "reason was {} bytes", reason.len());
+}
+
+#[test]
+fn message_part_cache_is_accepted_on_text_only() {
+    let text: MessagePart =
+        serde_json::from_value(json!({ "type": "text", "text": "t", "cache": "5m" })).unwrap();
+    assert!(matches!(text, MessagePart::Text { cache: Some(c), .. } if c == "5m"));
+
+    for part in [
+        json!({ "type": "image", "fileUri": "file:///tmp/a.png", "mimeType": "image/png", "cache": "5m" }),
+        json!({ "type": "reasoning", "text": "r", "cache": "1h" }),
+        json!({ "type": "text", "text": "t", "extra": 1 }),
+    ] {
+        assert!(
+            serde_json::from_value::<MessagePart>(part.clone()).is_err(),
+            "accepted {part}"
+        );
+    }
+}
+
+#[test]
+fn envelope_with_cache_on_an_image_part_is_rejected() {
+    let envelope = json!({
+        "callId": "c1",
+        "authId": "a1",
+        "model": "anthropic/m",
+        "prompt": [{
+            "role": "user",
+            "content": [{ "type": "image", "fileUri": "file:///tmp/a.png", "mimeType": "image/png", "cache": "5m" }]
+        }]
+    });
+    assert!(serde_json::from_value::<CallEnvelope>(envelope).is_err());
 }

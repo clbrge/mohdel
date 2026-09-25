@@ -42,6 +42,30 @@ describe('session/run', () => {
   // text adapter. Re-add a concrete test here the next time a text-less
   // image provider is registered.
 
+  test.each([
+    ['an image part', { type: 'image', fileUri: 'file:///tmp/a.png', mimeType: 'image/png', cache: '5m' }],
+    ['a reasoning part', { type: 'reasoning', text: 'r', cache: '1h' }],
+    ['a text part with an unknown TTL', { type: 'text', text: 't', cache: '10m' }],
+    ['a text part with a non-string marker', { type: 'text', text: 't', cache: true }]
+  ])('a cache marker on %s is refused before dispatch', async (_label, part) => {
+    let dispatched = false
+    const adapter = async function * () { dispatched = true }
+    const prompt = [{ role: 'user', content: [{ type: 'text', text: 'hi' }, part] }]
+    const events = await collect(run(envelope({ prompt }), { resolveAdapter: () => adapter }))
+    expect(events).toHaveLength(1)
+    expect(events[0].error.type).toBe('SESSION_INVALID_PROMPT')
+    expect(dispatched).toBe(false)
+  })
+
+  test('cache markers on text parts pass, and a null marker is no marker', async () => {
+    const prompt = [
+      { role: 'system', content: [{ type: 'text', text: 's', cache: '1h' }] },
+      { role: 'user', content: [{ type: 'text', text: 'hi', cache: '5m' }, { type: 'reasoning', text: 'r', cache: null }] }
+    ]
+    const events = await collect(run(envelope({ prompt })))
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+  })
+
   test('adapter that throws produces an error event (not aborted)', async () => {
     const throwing = async function * () {
       throw new Error('provider exploded')

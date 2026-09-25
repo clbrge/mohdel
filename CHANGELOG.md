@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.5.1] — Fix: cache markers dropped without an error
+
+### Fixed
+
+- A `cache` marker on an `image` or `reasoning` part was dropped by the gate and
+  honoured in-process. It is now refused on both paths: in-process with
+  `SESSION_INVALID_PROMPT`, at the gate with `400 PROTOCOL_INVALID_ENVELOPE`.
+  Any other unknown field on a message part is also refused at the gate.
+- A `cache` marker on a `text` part with a value other than `'5m'` or `'1h'` was
+  ignored. The call now fails with `SESSION_INVALID_PROMPT`.
+
+### Docs
+
+- PROTOCOL.md §3.1: `ToolCall.thoughtSignature` and the `cache` marker on `text`
+  parts, which the wire already carried.
+
 ## [1.5.0] — Feat: Rust client embeddings and coalescing / Feat: catalog entries from the session pool / Fix: buffered text relabelled as tool arguments / Chore: bump dependencies
 
 ### Added

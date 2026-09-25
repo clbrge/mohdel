@@ -113,10 +113,21 @@ interface Message {
   toolCalls?:   ToolCall[] // set on role='assistant' when the model invoked tools
 }
 
-interface ToolCall { id: string; name: string; arguments: object }
+interface ToolCall {
+  id:                string
+  name:              string
+  arguments:         object
+  thoughtSignature?: string   // provider-opaque, carried back on the replay of this call —
+                              // Gemini loses its thinking state across tool rounds without it
+}
 
 type MessagePart =
-  | { type: 'text',      text: string }
+  | { type: 'text',      text: string; cache?: '5m' | '1h' }
+                              // cache: on a system part, a breakpoint at this block; on any
+                              // other part, opts the conversation into prefix caching and the
+                              // adapter places the breakpoints. Ignored where caching is automatic.
+                              // On another part type, or with another value, the call is refused:
+                              // SESSION_INVALID_PROMPT; at the gate, 400 PROTOCOL_INVALID_ENVELOPE.
   | { type: 'reasoning', text: string }
   | { type: 'image',     fileUri: string; mimeType: string }  // role 'user' or 'tool'
 

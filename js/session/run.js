@@ -85,6 +85,9 @@ export async function * run (envelope, {
   if (norm.error) { yield norm.error; return }
   envelope = norm.envelope
 
+  const cacheErr = cacheMarkerError(envelope.prompt)
+  if (cacheErr) { yield cacheErr; return }
+
   const provider = providerOf(envelope.model)
   const span = openSpan(envelope)
   const log = scopedLogger(logger, envelope, span)
@@ -355,6 +358,37 @@ export function normalizeModelId (envelope, resolveSpec) {
 
   next.outputEffort = effort
   return { envelope: next, key: base, spec: baseSpec }
+}
+
+/**
+ * A `cache` marker is honoured on `text` parts only, with a TTL the
+ * adapters know. The adapters would ignore any other marker, so it is
+ * refused rather than dropped.
+ *
+ * @param {import('#core/envelope.js').CallEnvelope['prompt']} prompt
+ * @returns {import('#core/events.js').ErrorEvent | undefined}
+ */
+function cacheMarkerError (prompt) {
+  if (!Array.isArray(prompt)) return undefined
+  for (const m of prompt) {
+    if (!Array.isArray(m?.content)) continue
+    for (const p of m.content) {
+      if (p?.cache == null) continue
+      if (p.type !== 'text') {
+        return errorEvent(
+          `\`cache\` is accepted on text parts only, not on a ${p.type} part (${m.role} message)`,
+          'SESSION_INVALID_PROMPT'
+        )
+      }
+      if (p.cache !== '5m' && p.cache !== '1h') {
+        return errorEvent(
+          `\`cache\` on a text part must be '5m' or '1h' (got ${JSON.stringify(p.cache)})`,
+          'SESSION_INVALID_PROMPT'
+        )
+      }
+    }
+  }
+  return undefined
 }
 
 /**

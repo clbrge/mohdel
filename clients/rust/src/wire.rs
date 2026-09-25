@@ -8,6 +8,7 @@ pub const MAX_LINE_BYTES: usize = 16 * 1024 * 1024;
 pub const CALL_PATH: &str = "/v1/call";
 pub const IMAGE_PATH: &str = "/v1/image";
 pub const TRANSCRIPTION_PATH: &str = "/v1/transcription";
+pub const EMBED_PATH: &str = "/v1/embed";
 pub const HEALTH_PATH: &str = "/v1/health";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

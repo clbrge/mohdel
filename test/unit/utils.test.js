@@ -89,6 +89,19 @@ describe('createRealtimeDeltaBuffer', () => {
     expect(chunks[0]).toEqual({ type: 'message', delta: 'helloworld!' })
   })
 
+  test('a change of kind flushes what the previous kind buffered', () => {
+    const chunks = []
+    const buf = createRealtimeDeltaBuffer(c => chunks.push(c), { maxChars: 1000 })
+    buf.push('message', 'Let me check. ')
+    buf.push('function_call', '{"city":')
+    buf.push('function_call', '"Paris"}')
+    buf.flush()
+    expect(chunks).toEqual([
+      { type: 'message', delta: 'Let me check. ' },
+      { type: 'function_call', delta: '{"city":"Paris"}' }
+    ])
+  })
+
   test('flush() sends remaining buffer', () => {
     const chunks = []
     const buf = createRealtimeDeltaBuffer(c => chunks.push(c), { maxChars: 1000 })
@@ -132,9 +145,12 @@ describe('createRealtimeDeltaBuffer', () => {
     const chunks = []
     const buf = createRealtimeDeltaBuffer(c => chunks.push(c), { maxChars: 5 })
     buf.push('message', 'ab')
-    buf.push('function_call', 'cde') // 5 chars, triggers flush
-    expect(chunks).toHaveLength(1)
-    expect(chunks[0].type).toBe('function_call')
+    buf.push('function_call', 'cde')
+    buf.push(undefined, 'fg')
+    expect(chunks).toEqual([
+      { type: 'message', delta: 'ab' },
+      { type: 'function_call', delta: 'cdefg' }
+    ])
   })
 
   test('accumulates across multiple pushes before threshold', () => {

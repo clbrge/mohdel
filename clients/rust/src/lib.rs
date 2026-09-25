@@ -27,6 +27,7 @@
 //! Dropping the stream before the terminal event closes the connection,
 //! which is how a caller cancels an in-flight call.
 
+pub mod coalesce;
 pub mod wire;
 
 use std::path::{Path, PathBuf};
@@ -40,9 +41,10 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
 pub use mohdel_protocol as protocol;
+pub use coalesce::{coalesce, BufferOpts};
 use mohdel_protocol::{
-    AnswerResult, CallEnvelope, Event, ImageEnvelope, ImageResult, Severity,
-    TranscriptionEnvelope, TranscriptionResult, TypedError,
+    AnswerResult, CallEnvelope, EmbedEnvelope, EmbedResult, Event, ImageEnvelope, ImageResult,
+    Severity, TranscriptionEnvelope, TranscriptionResult, TypedError,
 };
 
 use wire::{Body, Framer, Head, WireError};
@@ -190,6 +192,14 @@ impl Client {
             "thin-gate returned a malformed TranscriptionResult",
         )
         .await
+    }
+
+    pub async fn embed(&self, envelope: &EmbedEnvelope) -> Result<EmbedResult, TypedError> {
+        let body = serde_json::to_vec(envelope).map_err(|e| {
+            typed("PROTOCOL_INVALID_ENVELOPE", "envelope does not serialize", Some(e.to_string()), false)
+        })?;
+        self.fetch_json(&self.socket, "POST", wire::EMBED_PATH, Some(&body), "thin-gate returned a malformed EmbedResult")
+            .await
     }
 
     pub async fn health(&self) -> Result<Health, TypedError> {

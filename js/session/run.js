@@ -61,7 +61,7 @@ import { STATUS_INCOMPLETE, WARNING_CANCELLED } from '#core/status.js'
 // name is checked against the known list before it reaches the import path —
 // it comes off the envelope, and a computed specifier must never take an
 // arbitrary string.
-const loadAdapter = async (provider) => {
+export const loadAdapter = async (provider) => {
   if (!ADAPTER_NAMES.includes(provider)) throw new Error(`unknown provider: ${provider}`)
   const module = await import(`./adapters/${provider}.js`)
   return module[provider]
@@ -312,7 +312,7 @@ export async function * run (envelope, {
  *   error?: import('#core/events.js').ErrorEvent
  * }}
  */
-function normalizeModelId (envelope, resolveSpec) {
+export function normalizeModelId (envelope, resolveSpec) {
   // A bare id that itself contains `:` or `@` is a catalog key in its
   // own right; resolving the whole string first stops it being split
   // into a base plus a suffix that was never meant as one.
@@ -374,7 +374,7 @@ function normalizeModelId (envelope, resolveSpec) {
  * @param {any} adapter
  * @returns {import('#core/events.js').ErrorEvent | undefined}
  */
-function speedError (key, speed, spec, provider, adapter) {
+export function speedError (key, speed, spec, provider, adapter) {
   if (!hasSpeed(spec, speed)) {
     const available = speedNames(spec)
     const detail = available.length

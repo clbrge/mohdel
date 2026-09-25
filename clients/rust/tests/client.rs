@@ -2,7 +2,7 @@ mod common;
 
 use futures::StreamExt;
 use mohdel_client::Client;
-use mohdel_protocol::{Event, ImageEnvelope, MediaRef, Status, TranscriptionEnvelope};
+use mohdel_protocol::{EmbedEnvelope, Event, ImageEnvelope, MediaRef, Status, TranscriptionEnvelope};
 
 #[tokio::test]
 async fn call_streams_events_and_sends_the_envelope() {
@@ -150,6 +150,54 @@ async fn transcription_returns_the_result() {
     let result = client.transcription(&envelope).await.unwrap();
     assert_eq!(result.text, "Bonjour tout le monde.");
     assert_eq!(result.duration_seconds, Some(12.5));
+}
+
+#[tokio::test]
+async fn embed_sends_the_envelope_and_returns_the_result() {
+    let body = r#"{"status":"completed","vectors":[[0.25,-0.5],[1.0,0.125]],"dimensions":2,"inputType":"search_query","inputTokens":7,"cost":0.00000014,"timestamps":{"start":"1","first":"3","end":"3"}}"#;
+    let (client, transport) = common::client(common::json_response(body), 64);
+    let envelope = EmbedEnvelope {
+        call_id: "e-1".into(),
+        auth_id: "u-1".into(),
+        auth: None,
+        traceparent: None,
+        baggage: None,
+        model: "cohere/embed-v4.0".into(),
+        input: vec!["one".into(), "two".into()],
+        dimensions: Some(256),
+        input_type: Some("query".into()),
+    };
+    let result = client.embed(&envelope).await.unwrap();
+    assert_eq!(result.vectors, vec![vec![0.25, -0.5], vec![1.0, 0.125]]);
+    assert_eq!(result.dimensions, 2);
+    assert_eq!(result.input_type.as_deref(), Some("search_query"));
+
+    let text = String::from_utf8(transport.requests.lock().unwrap()[0].1.clone()).unwrap();
+    assert!(text.starts_with("POST /v1/embed HTTP/1.1\r\n"));
+    let sent: serde_json::Value = serde_json::from_str(text.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    assert_eq!(sent["input"], serde_json::json!(["one", "two"]));
+    assert_eq!(sent["dimensions"], 256);
+    assert_eq!(sent["inputType"], "query");
+}
+
+#[tokio::test]
+async fn embed_rejection_is_the_gate_typed_error() {
+    let body = r#"{"message":"unknown provider 'nope'","severity":"error","retryable":false,"type":"SESSION_UNKNOWN_PROVIDER"}"#;
+    let bytes = format!("HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}", body.len()).into_bytes();
+    let (client, _) = common::client(bytes, 64);
+    let envelope = EmbedEnvelope {
+        call_id: "e-2".into(),
+        auth_id: "u-1".into(),
+        auth: None,
+        traceparent: None,
+        baggage: None,
+        model: "nope/embed".into(),
+        input: vec!["x".into()],
+        dimensions: None,
+        input_type: None,
+    };
+    let error = client.embed(&envelope).await.unwrap_err();
+    assert_eq!(error.kind.as_deref(), Some("SESSION_UNKNOWN_PROVIDER"));
 }
 
 #[tokio::test]

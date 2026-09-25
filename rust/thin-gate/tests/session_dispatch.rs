@@ -431,5 +431,25 @@ async fn pool_dispatches_transcription() {
     server.abort();
 }
 
+#[tokio::test]
+async fn pool_answers_info_from_the_session_catalog() {
+    let pool = SessionPool::new(node_session_cfg(), 1).await.expect("pool");
+
+    let entry = pool.info("echo/m").await.expect("info");
+    assert_eq!(entry, Some(json!({})));
+
+    let unknown = pool.info("echo/other").await.expect("info");
+    assert_eq!(unknown, None);
+
+    let error = pool
+        .info("echo/m:high")
+        .await
+        .expect_err("effort on an entry without levels");
+    assert_eq!(error.kind.as_deref(), Some("SESSION_INVALID_OUTPUT_EFFORT"));
+
+    // A pool of one answering again proves each exchange released its session.
+    assert_eq!(pool.info("echo/m").await.expect("info"), Some(json!({})));
+}
+
 #[allow(dead_code)]
 fn _typed_error_unused(_e: TypedError) {}

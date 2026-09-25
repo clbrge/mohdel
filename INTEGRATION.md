@@ -537,9 +537,17 @@ const response = await model.answer(prompt, {
 // `response` still resolves to the full AnswerResult after streaming completes.
 ```
 
-The buffer flushes when it reaches 250 chars or 10 seconds elapse; override with `bufferOpts: { maxChars, maxMs }`. Handler receives `{type, delta}` objects.
+The buffer flushes when it reaches 250 chars or 10 seconds elapse, and when the delta kind changes; override with `bufferOpts: { maxChars, maxMs }`. Handler receives `{type, delta}` objects.
 
-All adapters emit delta events. The factory bridge pipes them into the handler in buffered form; the client path hands them through raw.
+All adapters emit delta events. The factory bridge pipes them into the handler in buffered form; the client path hands them through raw unless wrapped in `coalesce`, which applies the same rules to the event stream:
+
+```js
+import { call, coalesce } from 'mohdel/client'
+
+for await (const ev of coalesce(call(envelope, { socketPath }), { maxChars: 50, maxMs: 500 })) {
+  if (ev.type === 'delta') process.stdout.write(ev.delta.delta)
+}
+```
 
 ## Vision
 

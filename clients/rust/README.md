@@ -2,8 +2,8 @@
 
 Talks to a running [mohdel](../../README.md) thin-gate over its unix socket:
 chat completions with streaming, tool calls and vision, image generation,
-speech to text, per-call USD cost. Async (tokio). The wire types are the
-gate's own, from the `mohdel-protocol` crate.
+speech to text, embeddings, per-call USD cost. Async (tokio). The wire types
+are the gate's own, from the `mohdel-protocol` crate.
 
 ## Install
 
@@ -50,11 +50,20 @@ let result = client.collect(&envelope).await?;
 
 client.image(&image_envelope).await?;          // ImageResult
 client.transcription(&audio_envelope).await?;  // TranscriptionResult
+client.embed(&embed_envelope).await?;          // EmbedResult, one vector per input
 client.health().await?;                        // Health { status, version, uptime_ms }
 ```
 
 Dropping the stream before the terminal event closes the connection, which
 is how a caller cancels an in-flight call.
+
+`coalesce` merges a stream's deltas with the JS facade's `bufferOpts` rules:
+
+```rust
+use mohdel_client::{coalesce, BufferOpts};
+
+let events = coalesce(client.call(&envelope).await?, BufferOpts { max_chars: 50, max_ms: 500 });
+```
 
 Errors are the gate's `TypedError` (`kind` is the tag callers branch on;
 it implements `std::error::Error`). Client-side tags: `NET_ERROR` (socket;

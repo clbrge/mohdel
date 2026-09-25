@@ -4,6 +4,36 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [1.5.0] — Feat: Rust client embeddings and coalescing / Feat: catalog entries from the session pool / Fix: buffered text relabelled as tool arguments / Chore: bump dependencies
+
+### Added
+
+- Rust client: `Client::embed()` for `POST /v1/embed`, returning `EmbedResult`.
+- Rust client: `coalesce(events, BufferOpts)` merges the deltas of a `call()`
+  stream with the facade's `bufferOpts` rules and defaults (`max_chars` 250,
+  `max_ms` 10 000).
+- JS client: `coalesce(events, { maxChars, maxMs })`, the same adapter for
+  `call()`.
+- `SessionPool::info(model)` returns the catalog entry a call with `model` would
+  run on, from the catalog the sessions hold: `None` for an unknown model, the
+  call's own error for an effort or speed lane the entry cannot take, `speed`
+  set when a lane is named. It is answered by the session through a new
+  one-shot `info` op; there is no HTTP route.
+- PROTOCOL.md: `/v1/embed` in §10, the `info` op in §3.3.
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.125.0` → `^0.128.0`
+- `@google/genai` `^2.22.0` → `^2.24.0`
+- `openai` `^7.15.0` → `^7.23.0`
+
+### Fixed
+
+- `bufferOpts` coalescing flushed text and tool-argument deltas together under
+  the kind of the last one, so text before a tool call could reach
+  `realtimeHandler` labelled `function_call`. A change of kind now flushes
+  first.
+
 ## [1.4.0] — Feat: images in messages
 
 ### Added

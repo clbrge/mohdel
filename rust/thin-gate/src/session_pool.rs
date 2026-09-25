@@ -32,8 +32,8 @@ use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, Mutex};
 
 use crate::metrics;
-use crate::protocol::Event;
-use crate::server::SessionConfig;
+use crate::protocol::{Event, TypedError};
+use crate::server::{oneshot_exchange_typed, SessionConfig};
 
 /// Timeout for the startup ping/pong readiness handshake.
 pub const READINESS_TIMEOUT: Duration = Duration::from_secs(15);
@@ -661,6 +661,41 @@ impl SessionPool {
     pub fn failure_streak(&self) -> u32 {
         self.inner.failure_streak.load(Ordering::Relaxed)
     }
+
+    /// The catalog entry a call with `model` would run on, from the
+    /// catalog the sessions hold: `None` for a model they do not know,
+    /// the call's own error for an effort or speed lane the entry
+    /// cannot take. Asked of a session, never over HTTP: the catalog
+    /// flows down to sessions and the gate keeps none of it.
+    pub async fn info(&self, model: &str) -> Result<Option<serde_json::Value>, TypedError> {
+        let call_id = format!("info-{}", INFO_SEQ.fetch_add(1, Ordering::Relaxed));
+        let request = InfoRequest {
+            op: "info",
+            call_id: &call_id,
+            model,
+        };
+        match oneshot_exchange_typed::<InfoSessionLine>(self, &request, "info").await? {
+            InfoSessionLine::InfoDone { result } => Ok(result),
+            InfoSessionLine::Error { error } => Err(error),
+        }
+    }
+}
+
+static INFO_SEQ: AtomicU64 = AtomicU64::new(0);
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InfoRequest<'a> {
+    op: &'static str,
+    call_id: &'a str,
+    model: &'a str,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum InfoSessionLine {
+    InfoDone { result: Option<serde_json::Value> },
+    Error { error: TypedError },
 }
 
 /// Exponential backoff: `BACKOFF_BASE * 2^(streak-1)`, capped at

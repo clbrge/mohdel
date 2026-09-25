@@ -1198,35 +1198,48 @@ async fn dispatch_embed_via_pool(
     }
 }
 
-/// Acquire a session, write one tagged envelope line, read exactly one
-/// terminal line back (one-shot paths have no streaming), parse it as
-/// `L`, release the session. On any failure the session is discarded
-/// and the ready-to-send error response is returned as `Err`. `what`
-/// names the path ("image", "transcription") in error details.
+/// HTTP form of [`oneshot_exchange_typed`]: the error becomes the
+/// ready-to-send response, `503` when the pool is busy, `500` otherwise.
 async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
     pool: &SessionPool,
     tagged: &impl Serialize,
     what: &str,
 ) -> Result<L, Response<Body>> {
-    let mut envelope_bytes = match serde_json::to_vec(tagged) {
-        Ok(b) => b,
-        Err(e) => {
-            return Err(typed_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Severity::Error,
-                "failed to serialize envelope",
-                &format!("{e}"),
-                "PROTOCOL_SERIALIZE",
-                false,
-            ));
-        }
-    };
+    oneshot_exchange_typed(pool, tagged, what)
+        .await
+        .map_err(|error| {
+            let status = match error.kind.as_deref() {
+                Some("SESSION_POOL_BUSY") => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            };
+            typed_error_json_response(status, &error)
+        })
+}
+
+/// Acquire a session, write one tagged envelope line, read exactly one
+/// terminal line back (one-shot paths have no streaming), parse it as
+/// `L`, release the session. On any failure the session is discarded
+/// and the error returned. `what` names the path ("image",
+/// "transcription", "info") in error details.
+pub(crate) async fn oneshot_exchange_typed<L: serde::de::DeserializeOwned>(
+    pool: &SessionPool,
+    tagged: &impl Serialize,
+    what: &str,
+) -> Result<L, TypedError> {
+    let mut envelope_bytes = serde_json::to_vec(tagged).map_err(|e| {
+        exchange_error(
+            Severity::Error,
+            "failed to serialize envelope",
+            &format!("{e}"),
+            "PROTOCOL_SERIALIZE",
+            false,
+        )
+    })?;
 
     let mut session = match pool.acquire().await {
         Ok(s) => s,
         Err(AcquireError::Timeout) => {
-            return Err(typed_error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
+            return Err(exchange_error(
                 Severity::Warn,
                 "session pool busy",
                 "no session became free within the acquire timeout",
@@ -1235,8 +1248,7 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
             ));
         }
         Err(AcquireError::Closed) => {
-            return Err(typed_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
+            return Err(exchange_error(
                 Severity::Fatal,
                 "session pool is closed",
                 "pool channel closed on acquire",
@@ -1259,8 +1271,7 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
 
     if let Err(e) = write_result {
         pool.discard(session);
-        return Err(typed_error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
+        return Err(exchange_error(
             Severity::Error,
             "failed to write envelope to session stdin",
             &format!("{e}"),
@@ -1275,8 +1286,7 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
     let line = match read {
         Ok(0) => {
             pool.discard(session);
-            return Err(typed_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
+            return Err(exchange_error(
                 Severity::Error,
                 "session subprocess exited mid-call",
                 &format!("EOF before {what} response"),
@@ -1286,8 +1296,7 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
         }
         Err(e) => {
             pool.discard(session);
-            return Err(typed_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
+            return Err(exchange_error(
                 Severity::Error,
                 "error reading session stdout",
                 &format!("{e}"),
@@ -1303,8 +1312,7 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
         Ok(p) => p,
         Err(e) => {
             pool.discard(session);
-            return Err(typed_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
+            return Err(exchange_error(
                 Severity::Error,
                 "session emitted unexpected line",
                 &format!("{e}"),
@@ -1317,6 +1325,22 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
     // Session is clean after one-shot terminal → release.
     pool.release(session);
     Ok(parsed)
+}
+
+fn exchange_error(
+    severity: Severity,
+    message: &str,
+    detail: &str,
+    kind: &str,
+    retryable: bool,
+) -> TypedError {
+    TypedError {
+        message: message.to_string(),
+        detail: Some(detail.to_string()),
+        severity,
+        retryable,
+        kind: Some(kind.to_string()),
+    }
 }
 
 fn oneshot_ok_response<T: Serialize>(result: &T) -> Response<Body> {
@@ -1460,7 +1484,11 @@ pub fn typed_error_response(
         retryable,
         kind: Some(kind.to_string()),
     };
-    let body_bytes = serde_json::to_vec(&err).unwrap_or_else(|_| b"{}".to_vec());
+    typed_error_json_response(status, &err)
+}
+
+fn typed_error_json_response(status: StatusCode, err: &TypedError) -> Response<Body> {
+    let body_bytes = serde_json::to_vec(err).unwrap_or_else(|_| b"{}".to_vec());
     let body = Full::new(Bytes::from(body_bytes)).boxed();
 
     Response::builder()

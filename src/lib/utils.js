@@ -64,7 +64,9 @@ export const createRealtimeDeltaBuffer = (handler, opts = {}) => {
 
   const push = (type, delta) => {
     if (!handler || !delta) return
-    lastType = type || lastType || 'message'
+    const kind = type || lastType
+    if (buffer && kind !== lastType) flushInternal(true)
+    lastType = kind
     buffer += delta
     flushInternal(false)
   }

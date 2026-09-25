@@ -237,6 +237,32 @@ lifetime and lock down the host accordingly.
   `result.status = 'incomplete'` and `result.warning = 'cancelled'`.
 - Stale or unknown `callId` **MUST** be silently ignored.
 
+### 3.3 One-shot: `info`
+
+```json
+{ "op": "info", "callId": "<id>", "model": "<provider>/<id>[:effort][@speed]" }
+```
+
+Asks the session for the catalog entry a call with `model` would run
+on. Queued like an envelope; answered with exactly one line, outside
+the §4 event stream:
+
+```json
+{ "type": "info_done", "result": { "...": "the catalog entry" } }
+```
+
+- `result` is the entry resolved as a call resolves `model`: the exact
+  key, else the key with `:effort` and `@speed` removed. When a lane is
+  named, `result.speed` carries it; the lane overlay is left as declared
+  under `speeds`.
+- An unknown model **MUST** answer `result: null`.
+- An effort or speed lane the entry cannot take **MUST** answer the
+  `error` line (§4.4) a call would terminate with
+  (`SESSION_INVALID_OUTPUT_EFFORT`, `SESSION_INVALID_SPEED`,
+  `SESSION_SPEED_NOT_IMPLEMENTED`, `SESSION_UNKNOWN_PROVIDER`).
+- Internal to the gate and its embedders (`SessionPool::info`); there is
+  no HTTP route.
+
 ## 4. Stdout — four events
 
 ```ts
@@ -426,9 +452,10 @@ stdin/stdout framing.
 - **Sockets:** data plane (`--data`) serves calls; admin plane
   (`--admin`) serves health. Owner-only permissions; no TCP listener.
 - **Requests:** `POST /v1/call`, `POST /v1/image`,
-  `POST /v1/transcription` with `Content-Type: application/json` and
-  the envelope (§3.1) as the body; `GET /v1/health` on the admin plane.
-  One request per connection; `Connection: close` is honoured.
+  `POST /v1/transcription`, `POST /v1/embed` with
+  `Content-Type: application/json` and the envelope (§3.1) as the
+  body; `GET /v1/health` on the admin plane. One request per
+  connection; `Connection: close` is honoured.
 - **`/v1/call` response:** `200 OK`, `Content-Type: application/x-ndjson`,
   `Transfer-Encoding: chunked`. The body is the §4 event stream, one
   event per LF-terminated line, ending after the terminal event. Chunk
@@ -436,10 +463,10 @@ stdin/stdout framing.
   framing rules and the 16 MiB per-line cap apply). Failures raised by
   the session arrive inside the stream as a terminal `error` event
   under a `200` (e.g. `SESSION_UNKNOWN_MODEL`).
-- **`/v1/image`, `/v1/transcription`, `/v1/health` responses:**
+- **`/v1/image`, `/v1/transcription`, `/v1/embed`, `/v1/health` responses:**
   `200 OK`, `Content-Type: application/json`, `Content-Length` set;
-  the body is an `ImageResult`, a `TranscriptionResult`, or
-  `{ status, version, uptime_ms }`.
+  the body is an `ImageResult`, a `TranscriptionResult`, an
+  `EmbedResult`, or `{ status, version, uptime_ms }`.
 - **Rejections before dispatch:** a non-200 status with a `TypedError`
   (§4.4) JSON body — `400` (`PROTOCOL_INVALID_ENVELOPE`), `401`,
   `413`, `503` (`SESSION_POOL_BUSY`), `500`. A body that does not

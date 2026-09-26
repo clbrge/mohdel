@@ -493,7 +493,7 @@ Test files under `rust/thin-gate/tests/`:
 | `protocol.rs` | serde (de)serialization of envelope/events/results |
 | `server.rs` | HTTP layer, synthetic dispatch, 404/400 paths |
 | `session_dispatch.rs` | real `node js/session/bin.js` spawn + dispatch + graceful abort + `/v1/abort` |
-| `oneshot_abandon.rs` | one-shot handler dropped mid-exchange: the session finishes and returns to the pool |
+| `oneshot_abandon.rs` | one-shot handler dropped mid-exchange: the session finishes and returns to the pool; `dispatch_*` dropped while queued never reaches a session; a detached `Exchange` resolves |
 | `policy.rs` | `RoutePolicy` + `QuotaPolicy` + `Enforcer` end-to-end |
 | `config.rs` | TOML `ConfigSource` parsing, defaults, malformed, env override |
 | `supervision.rs` | readiness ping/pong + readiness timeout + garbage-response handling |

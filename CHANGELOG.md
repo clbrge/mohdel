@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.1.0] — Feat: a dispatch boundary for one-shot calls
+
+### Added
+
+- thin-gate: `dispatch_embed`, `dispatch_image` and `dispatch_transcription`
+  return once a one-shot request has a session, with an `Exchange` that owns
+  its result: it resolves to the route's response, can be awaited from another
+  task, and when dropped leaves the exchange to complete and release its
+  session. Dropping the dispatch future while the request waits for a session
+  never reaches the session. `handle_embed`, `handle_image` and
+  `handle_transcription` are the same functions awaited in place. All are
+  exported at the crate root and in the prelude.
+
 ## [3.0.0] — Breaking: "cancel" becomes "abort" / Fix: an abandoned one-shot call cost the pool a session / Feat: `POST /v1/abort` keeps the aborted `done`
 
 ### Breaking

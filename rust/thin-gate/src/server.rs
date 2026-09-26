@@ -24,6 +24,7 @@
 //! via `serve_data_with_state`.
 
 use std::convert::Infallible;
+use std::future::Future;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -1029,24 +1030,38 @@ fn stream_error(
 // success, `{type:"error", error}` on adapter failure.
 
 /// HTTP handler for `POST /v1/image`. See `handle_call` for the
-/// composition use case.
+/// composition use case; [`dispatch_image`] splits it at dispatch.
 pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    match dispatch_image(req, state).await {
+        Ok(exchange) => exchange.await,
+        Err(refused) => refused,
+    }
+}
+
+/// `POST /v1/image` up to dispatch: the refusal response when the request
+/// is refused before it reaches a session (body, auth, policy, pool busy or
+/// closed), otherwise the running [`Exchange`] once it has one. Dropping
+/// this future before it returns never reaches a session.
+pub async fn dispatch_image(
+    req: Request<Incoming>,
+    state: Arc<GateState>,
+) -> Result<Exchange, Response<Body>> {
     let body = match read_body(req, MAX_CALL_BODY_BYTES).await {
         Ok(b) => b,
-        Err(refused) => return refused,
+        Err(refused) => return Err(refused),
     };
 
     let mut envelope: ImageEnvelope = match serde_json::from_slice::<ImageEnvelope>(&body) {
         Ok(e) => {
             if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
-                return typed_error_response(
+                return Err(typed_error_response(
                     StatusCode::BAD_REQUEST,
                     Severity::Error,
                     "invalid envelope",
                     &reason,
                     "PROTOCOL_INVALID_ENVELOPE",
                     false,
-                );
+                ));
             }
             e
         }
@@ -1054,40 +1069,40 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
             // See note at the matching `CallEnvelope` parse site
             // above — do not switch to a value-echoing deserializer
             // without sanitizing detail here.
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::BAD_REQUEST,
                 Severity::Error,
                 "invalid envelope",
                 &format!("{e}"),
                 "PROTOCOL_INVALID_ENVELOPE",
                 false,
-            );
+            ));
         }
     };
 
     if let Err(refused) =
         resolve_auth(&state, &envelope.auth_id, &envelope.model, &mut envelope.auth).await
     {
-        return refused;
+        return Err(refused);
     }
 
     if let Err(denied) =
         enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await
     {
-        return denied.into_oneshot();
+        return Err(denied.into_oneshot());
     }
 
     let pool = match &state.pool {
         Some(p) => p.clone(),
         None => {
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::SERVICE_UNAVAILABLE,
                 Severity::Error,
                 "image path requires a session pool",
                 "no pool configured",
                 "SESSION_POOL_UNAVAILABLE",
                 false,
-            );
+            ));
         }
     };
 
@@ -1095,24 +1110,38 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
 }
 
 /// HTTP handler for `POST /v1/transcription`. See `handle_call` for the
-/// composition use case.
+/// composition use case; [`dispatch_transcription`] splits it at dispatch.
 pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    match dispatch_transcription(req, state).await {
+        Ok(exchange) => exchange.await,
+        Err(refused) => refused,
+    }
+}
+
+/// `POST /v1/transcription` up to dispatch: the refusal response when the request
+/// is refused before it reaches a session (body, auth, policy, pool busy or
+/// closed), otherwise the running [`Exchange`] once it has one. Dropping
+/// this future before it returns never reaches a session.
+pub async fn dispatch_transcription(
+    req: Request<Incoming>,
+    state: Arc<GateState>,
+) -> Result<Exchange, Response<Body>> {
     let body = match read_body(req, MAX_CALL_BODY_BYTES).await {
         Ok(b) => b,
-        Err(refused) => return refused,
+        Err(refused) => return Err(refused),
     };
 
     let mut envelope: TranscriptionEnvelope = match serde_json::from_slice::<TranscriptionEnvelope>(&body) {
         Ok(e) => {
             if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
-                return typed_error_response(
+                return Err(typed_error_response(
                     StatusCode::BAD_REQUEST,
                     Severity::Error,
                     "invalid envelope",
                     &reason,
                     "PROTOCOL_INVALID_ENVELOPE",
                     false,
-                );
+                ));
             }
             e
         }
@@ -1120,40 +1149,40 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
             // See note at the matching `CallEnvelope` parse site
             // above — do not switch to a value-echoing deserializer
             // without sanitizing detail here.
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::BAD_REQUEST,
                 Severity::Error,
                 "invalid envelope",
                 &format!("{e}"),
                 "PROTOCOL_INVALID_ENVELOPE",
                 false,
-            );
+            ));
         }
     };
 
     if let Err(refused) =
         resolve_auth(&state, &envelope.auth_id, &envelope.model, &mut envelope.auth).await
     {
-        return refused;
+        return Err(refused);
     }
 
     if let Err(denied) =
         enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await
     {
-        return denied.into_oneshot();
+        return Err(denied.into_oneshot());
     }
 
     let pool = match &state.pool {
         Some(p) => p.clone(),
         None => {
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::SERVICE_UNAVAILABLE,
                 Severity::Error,
                 "transcription path requires a session pool",
                 "no pool configured",
                 "SESSION_POOL_UNAVAILABLE",
                 false,
-            );
+            ));
         }
     };
 
@@ -1161,24 +1190,38 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
 }
 
 /// HTTP handler for `POST /v1/embed`. See `handle_call` for the
-/// composition use case.
+/// composition use case; [`dispatch_embed`] splits it at dispatch.
 pub async fn handle_embed(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    match dispatch_embed(req, state).await {
+        Ok(exchange) => exchange.await,
+        Err(refused) => refused,
+    }
+}
+
+/// `POST /v1/embed` up to dispatch: the refusal response when the request
+/// is refused before it reaches a session (body, auth, policy, pool busy or
+/// closed), otherwise the running [`Exchange`] once it has one. Dropping
+/// this future before it returns never reaches a session.
+pub async fn dispatch_embed(
+    req: Request<Incoming>,
+    state: Arc<GateState>,
+) -> Result<Exchange, Response<Body>> {
     let body = match read_body(req, MAX_CALL_BODY_BYTES).await {
         Ok(b) => b,
-        Err(refused) => return refused,
+        Err(refused) => return Err(refused),
     };
 
     let mut envelope: EmbedEnvelope = match serde_json::from_slice::<EmbedEnvelope>(&body) {
         Ok(e) => {
             if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
-                return typed_error_response(
+                return Err(typed_error_response(
                     StatusCode::BAD_REQUEST,
                     Severity::Error,
                     "invalid envelope",
                     &reason,
                     "PROTOCOL_INVALID_ENVELOPE",
                     false,
-                );
+                ));
             }
             e
         }
@@ -1186,40 +1229,40 @@ pub async fn handle_embed(req: Request<Incoming>, state: Arc<GateState>) -> Resp
             // See note at the matching `CallEnvelope` parse site
             // above — do not switch to a value-echoing deserializer
             // without sanitizing detail here.
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::BAD_REQUEST,
                 Severity::Error,
                 "invalid envelope",
                 &format!("{e}"),
                 "PROTOCOL_INVALID_ENVELOPE",
                 false,
-            );
+            ));
         }
     };
 
     if let Err(refused) =
         resolve_auth(&state, &envelope.auth_id, &envelope.model, &mut envelope.auth).await
     {
-        return refused;
+        return Err(refused);
     }
 
     if let Err(denied) =
         enforce_policy(&state, &envelope.auth_id, &envelope.model, u32::try_from(envelope.input.len()).unwrap_or(u32::MAX)).await
     {
-        return denied.into_oneshot();
+        return Err(denied.into_oneshot());
     }
 
     let pool = match &state.pool {
         Some(p) => p.clone(),
         None => {
-            return typed_error_response(
+            return Err(typed_error_response(
                 StatusCode::SERVICE_UNAVAILABLE,
                 Severity::Error,
                 "embed path requires a session pool",
                 "no pool configured",
                 "SESSION_POOL_UNAVAILABLE",
                 false,
-            );
+            ));
         }
     };
 
@@ -1264,71 +1307,101 @@ enum EmbedSessionLine {
 async fn dispatch_image_via_pool(
     pool: SessionPool,
     envelope: ImageEnvelope,
-) -> Response<Body> {
+) -> Result<Exchange, Response<Body>> {
     let tagged = OneShotDriverEnvelope { op: "image", inner: &envelope };
-    match oneshot_exchange::<ImageSessionLine>(&pool, &tagged, "image").await {
+    dispatch_oneshot::<ImageSessionLine>(&pool, &tagged, "image", |outcome| match outcome {
         Ok(ImageSessionLine::ImageDone { result }) => oneshot_ok_response(&result),
         Ok(ImageSessionLine::Error { error }) => oneshot_error_response(&error),
-        Err(resp) => resp,
-    }
+        Err(error) => exchange_error_response(&error),
+    })
+    .await
 }
 
 async fn dispatch_transcription_via_pool(
     pool: SessionPool,
     envelope: TranscriptionEnvelope,
-) -> Response<Body> {
+) -> Result<Exchange, Response<Body>> {
     let tagged = OneShotDriverEnvelope { op: "transcription", inner: &envelope };
-    match oneshot_exchange::<TranscriptionSessionLine>(&pool, &tagged, "transcription").await {
+    dispatch_oneshot::<TranscriptionSessionLine>(&pool, &tagged, "transcription", |outcome| match outcome {
         Ok(TranscriptionSessionLine::TranscriptionDone { result }) => oneshot_ok_response(&result),
         Ok(TranscriptionSessionLine::Error { error }) => oneshot_error_response(&error),
-        Err(resp) => resp,
-    }
+        Err(error) => exchange_error_response(&error),
+    })
+    .await
 }
 
 async fn dispatch_embed_via_pool(
     pool: SessionPool,
     envelope: EmbedEnvelope,
-) -> Response<Body> {
+) -> Result<Exchange, Response<Body>> {
     let tagged = OneShotDriverEnvelope { op: "embed", inner: &envelope };
-    match oneshot_exchange::<EmbedSessionLine>(&pool, &tagged, "embed").await {
+    dispatch_oneshot::<EmbedSessionLine>(&pool, &tagged, "embed", |outcome| match outcome {
         Ok(EmbedSessionLine::EmbedDone { result }) => oneshot_ok_response(&result),
         Ok(EmbedSessionLine::Error { error }) => oneshot_error_response(&error),
-        Err(resp) => resp,
+        Err(error) => exchange_error_response(&error),
+    })
+    .await
+}
+
+/// A dispatched one-shot request: its session has the envelope and the
+/// exchange runs on its own task. Resolves to the route's response.
+/// Dropping it does not stop the exchange: the call completes and its
+/// session is released. A panic in the exchange resumes on await.
+pub struct Exchange {
+    what: &'static str,
+    task: tokio::task::JoinHandle<Response<Body>>,
+}
+
+impl Future for Exchange {
+    type Output = Response<Body>;
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Response<Body>> {
+        let what = self.what;
+        std::pin::Pin::new(&mut self.task)
+            .poll(cx)
+            .map(|joined| joined.unwrap_or_else(|e| exchange_error_response(&join_failure(what, e))))
     }
 }
 
-/// HTTP form of [`oneshot_exchange_typed`]: the error becomes the
-/// ready-to-send response, `503` when the pool is busy, `500` otherwise.
-async fn oneshot_exchange<L: serde::de::DeserializeOwned + Send + 'static>(
+async fn dispatch_oneshot<L: serde::de::DeserializeOwned + Send + 'static>(
     pool: &SessionPool,
     tagged: &impl Serialize,
     what: &'static str,
-) -> Result<L, Response<Body>> {
-    oneshot_exchange_typed(pool, tagged, what)
-        .await
-        .map_err(|error| {
-            let status = match error.kind.as_deref() {
-                Some("SESSION_POOL_BUSY") => StatusCode::SERVICE_UNAVAILABLE,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            };
-            typed_error_json_response(status, &error)
-        })
+    finish: fn(Result<L, TypedError>) -> Response<Body>,
+) -> Result<Exchange, Response<Body>> {
+    match spawn_oneshot(pool, tagged, what, finish).await {
+        Ok(task) => Ok(Exchange { what, task }),
+        Err(error) => Err(exchange_error_response(&error)),
+    }
 }
 
-/// Acquire a session, write one tagged envelope line, read exactly one
-/// terminal line back (one-shot paths have no streaming), parse it as
-/// `L`, release the session. On any failure the session is discarded
-/// and the error returned. `what` names the path ("image",
-/// "transcription", "info") in error details.
-///
-/// Once a session is acquired the exchange runs on its own task, so a
-/// caller that drops this future does not cut it: the session finishes
-/// the call and goes back to the pool.
-pub(crate) async fn oneshot_exchange_typed<L: serde::de::DeserializeOwned + Send + 'static>(
+/// `503` when the pool is busy, `500` for any other failure of the
+/// exchange itself.
+fn exchange_error_response(error: &TypedError) -> Response<Body> {
+    let status = match error.kind.as_deref() {
+        Some("SESSION_POOL_BUSY") => StatusCode::SERVICE_UNAVAILABLE,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    typed_error_json_response(status, error)
+}
+
+/// Acquire a session and spawn the exchange on it, `finish` applied to its
+/// outcome. There is no await between acquisition and the spawn, so a
+/// caller dropped before this returns never reaches a session, and once it
+/// returns the exchange runs to completion whatever happens to the handle.
+async fn spawn_oneshot<L, T>(
     pool: &SessionPool,
     tagged: &impl Serialize,
     what: &'static str,
-) -> Result<L, TypedError> {
+    finish: fn(Result<L, TypedError>) -> T,
+) -> Result<tokio::task::JoinHandle<T>, TypedError>
+where
+    L: serde::de::DeserializeOwned + Send + 'static,
+    T: Send + 'static,
+{
     let envelope_bytes = serde_json::to_vec(tagged).map_err(|e| {
         exchange_error(
             Severity::Error,
@@ -1361,18 +1434,36 @@ pub(crate) async fn oneshot_exchange_typed<L: serde::de::DeserializeOwned + Send
         }
     };
 
-    let exchange = tokio::spawn(oneshot_exchange_on(pool.clone(), session, envelope_bytes, what));
-    match exchange.await {
-        Ok(outcome) => outcome,
-        Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
-        Err(e) => Err(exchange_error(
-            Severity::Fatal,
-            "session pool is closed",
-            &format!("{what} exchange stopped by runtime shutdown: {e}"),
-            "SESSION_POOL_CLOSED",
-            false,
-        )),
+    let pool = pool.clone();
+    Ok(tokio::spawn(async move {
+        finish(oneshot_exchange_on(pool, session, envelope_bytes, what).await)
+    }))
+}
+
+/// A panic resumes; a task stopped by runtime shutdown becomes an error.
+fn join_failure(what: &'static str, e: tokio::task::JoinError) -> TypedError {
+    if e.is_panic() {
+        std::panic::resume_unwind(e.into_panic());
     }
+    exchange_error(
+        Severity::Fatal,
+        "session pool is closed",
+        &format!("{what} exchange stopped by runtime shutdown: {e}"),
+        "SESSION_POOL_CLOSED",
+        false,
+    )
+}
+
+/// One exchange awaited in place: [`spawn_oneshot`], then its result.
+/// `what` names the path ("image", "transcription", "info") in error
+/// details.
+pub(crate) async fn oneshot_exchange_typed<L: serde::de::DeserializeOwned + Send + 'static>(
+    pool: &SessionPool,
+    tagged: &impl Serialize,
+    what: &'static str,
+) -> Result<L, TypedError> {
+    let task = spawn_oneshot::<L, Result<L, TypedError>>(pool, tagged, what, |outcome| outcome).await?;
+    task.await.unwrap_or_else(|e| Err(join_failure(what, e)))
 }
 
 async fn oneshot_exchange_on<L: serde::de::DeserializeOwned>(

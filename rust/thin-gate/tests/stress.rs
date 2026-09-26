@@ -1,10 +1,10 @@
-//! Stress tests — pool under load, cancel storms, session death.
+//! Stress tests — pool under load, abandon storms, session death.
 //!
 //! These are correctness tests under concurrency, not perf
 //! benchmarks. Each test uses the real `js/session/bin.js` to
 //! exercise the full spawn + readiness + dispatch + event-stream
 //! pipeline end-to-end. Surfaces deadlocks, session-death recovery
-//! races, and cancel-mid-stream leaks that unit tests miss.
+//! races, and abort-mid-stream leaks that unit tests miss.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -219,11 +219,11 @@ async fn one_hundred_concurrent_calls_all_complete() {
     server.abort();
 }
 
-// ---------- Test B: cancel storm ----------
+// ---------- Test B: abandon storm ----------
 
 #[tokio::test]
-async fn cancel_storm_followed_by_healthy_calls() {
-    let path = temp_sock("cancel-storm");
+async fn abandon_storm_followed_by_healthy_calls() {
+    let path = temp_sock("abandon-storm");
     let _g = SocketGuard(path.clone());
 
     let pool = SessionPool::new(node_session_cfg(), 2)
@@ -237,14 +237,14 @@ async fn cancel_storm_followed_by_healthy_calls() {
     wait_for(&path).await;
 
     // Fire a batch of requests that each disconnect after the first
-    // frame. With pool size 2 and 20 cancels, cancel_and_drain /
+    // frame. With pool size 2 and 20 abandoned calls, abort_and_drain /
     // spawn_replacement paths get hammered.
     for n in 0..20 {
-        let res = post(&path, envelope(&format!("cancel-{n}"))).await;
+        let res = post(&path, envelope(&format!("abandon-{n}"))).await;
         let _bytes = read_first_and_drop(res).await;
     }
 
-    // Give graceful cancel + any respawns a moment to settle.
+    // Give the graceful aborts + any respawns a moment to settle.
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Now fire a batch of normal calls — all must complete, proving

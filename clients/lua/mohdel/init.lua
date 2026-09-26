@@ -171,8 +171,8 @@ function Stream:events()
   return function() return self:next() end
 end
 
---- Closes the socket. Closing before the terminal event is how a
--- caller cancels: the gate infers cancel from the connection close.
+--- Closes the socket. Closing before the terminal event abandons the
+-- call: the gate aborts it and its usage is lost.
 function Stream:close()
   self._finished = true
   if not self._closed then

@@ -55,13 +55,13 @@ describe('session/adapters/echo', () => {
     expect(done.result.timestamps.end).toMatch(/^\d+$/)
   })
 
-  test('pre-aborted signal yields cancelled done immediately', async () => {
+  test('pre-aborted signal yields aborted done immediately', async () => {
     const controller = new AbortController()
     controller.abort()
     const events = await collect(echo(envelope(), { signal: controller.signal }))
     expect(events.length).toBe(1)
     expect(events[0].type).toBe('done')
     expect(events[0].result.status).toBe(STATUS_INCOMPLETE)
-    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.warning).toBe('aborted')
   })
 })

@@ -63,15 +63,15 @@ describe('factory bridge — runAnswer', () => {
     expect(seen.signal).toBe(controller.signal)
   })
 
-  test('an aborted `options.signal` cancels the call', async () => {
+  test('an aborted `options.signal` aborts the call', async () => {
     const controller = new AbortController()
     controller.abort()
     const result = await runAnswer({ ...baseArgs, options: { signal: controller.signal } }, deps)
     expect(result.status).toBe('incomplete')
-    expect(result.warning).toBe('cancelled')
+    expect(result.warning).toBe('aborted')
   })
 
-  test('abort mid-stream resolves with the cancelled result and partial output, never throws', async () => {
+  test('abort mid-stream resolves with the aborted result and partial output, never throws', async () => {
     const controller = new AbortController()
     const midStream = async function * (_envelope, adapterDeps) {
       yield { type: 'delta', delta: { type: 'message', delta: 'par' } }
@@ -87,12 +87,12 @@ describe('factory bridge — runAnswer', () => {
           thinkingTokens: 0,
           cost: 0,
           timestamps: { start: '0', first: '0', end: '0' },
-          warning: 'cancelled'
+          warning: 'aborted'
         }
       }
     }
     const pending = runAnswer({ ...baseArgs, options: { signal: controller.signal } }, { ...deps, resolveAdapter: () => midStream })
-    await expect(pending).resolves.toMatchObject({ status: 'incomplete', warning: 'cancelled', output: 'par' })
+    await expect(pending).resolves.toMatchObject({ status: 'incomplete', warning: 'aborted', output: 'par' })
   })
 
   test('unknown provider throws MohdelError carrying the error type', async () => {

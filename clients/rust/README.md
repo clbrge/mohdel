@@ -54,8 +54,13 @@ client.embed(&embed_envelope).await?;          // EmbedResult, one vector per in
 client.health().await?;                        // Health { status, version, uptime_ms }
 ```
 
-Dropping the stream before the terminal event closes the connection, which
-is how a caller cancels an in-flight call.
+`client.call` returns a `Call`: the stream of events, plus
+`call.abort_request()` for `client.abort(&request)`, which aborts it in
+flight. Keep reading the stream: it ends with the aborted `done` and the
+usage reported before the cut. The request names the gate that streams the
+call, so an abort that reaches another gate fails with `CALL_MISDIRECTED`
+instead of doing nothing. Dropping the stream before the terminal event abandons the
+call; the gate aborts it, and that `done` is lost.
 
 `coalesce` merges a stream's deltas with the JS facade's `bufferOpts` rules:
 
@@ -70,7 +75,9 @@ it implements `std::error::Error`). Client-side tags: `NET_ERROR` (socket;
 retryable), `PROTOCOL_HTTP_ERROR` (malformed or non-JSON non-200; retryable
 for 5xx), `PROTOCOL_INVALID_EVENT` (non-event line, over-long line,
 malformed result), `PROTOCOL_INVALID_ENVELOPE` (an envelope that does not
-serialize), `CONFIGURATION_MISSING` (`health` without `with_admin`).
+serialize), `CONFIGURATION_MISSING` (`health` without `with_admin`),
+`PROTOCOL_GATE_UNIDENTIFIED` (`abort_request` on a response that did not
+name its gate).
 
 ## Tests
 

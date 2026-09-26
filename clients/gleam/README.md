@@ -62,8 +62,10 @@ pub fn main() {
 }
 ```
 
-Returning `Stop` from the callback closes the connection, which is how a
-caller cancels an in-flight call.
+Returning `Stop` from the callback closes the connection and abandons the
+call: the gate aborts it, and its aborted `done`, with the usage reported
+before the cut, is lost. `POST /v1/abort` keeps it (PROTOCOL.md §10); this
+client does not send it yet.
 
 `envelope` covers the common fields (`key`, `auth_id`, `call_id`,
 `output_budget`, `output_effort`, `identifier`, `prompt_json` for a

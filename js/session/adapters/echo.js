@@ -1,14 +1,14 @@
 /**
  * Echo adapter — deterministic stub. Emits two message deltas and a
  * `done` event with a synthetic `AnswerResult`. Honors `signal` for
- * test-controlled cancellation.
+ * test-controlled aborts.
  *
  * @module session/adapters/echo
  */
 
 import { STATUS_COMPLETED } from '#core/status.js'
 
-import { cancelledDone } from './_cancelled.js'
+import { abortedDone } from './_aborted.js'
 
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
@@ -22,7 +22,7 @@ export async function * echo (envelope, { signal } = {}) {
 
   for (const delta of ['Hello', ', world.']) {
     if (signal?.aborted) {
-      yield cancelledDone(start, first, envelope, output, 0, 0)
+      yield abortedDone(start, first, envelope, output, 0, 0)
       return
     }
     if (first === null) first = String(process.hrtime.bigint())
@@ -31,7 +31,7 @@ export async function * echo (envelope, { signal } = {}) {
   }
 
   if (signal?.aborted) {
-    yield cancelledDone(start, first, envelope, output, 0, 0)
+    yield abortedDone(start, first, envelope, output, 0, 0)
     return
   }
 

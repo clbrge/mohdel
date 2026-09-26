@@ -24,16 +24,16 @@ async function collect (iter) {
 }
 
 describe('echo adapter honors signal', () => {
-  test('pre-aborted signal yields only a cancelled done', async () => {
+  test('pre-aborted signal yields only an aborted done', async () => {
     const controller = new AbortController()
     controller.abort()
     const events = await collect(echo(envelope(), { signal: controller.signal }))
     expect(events.length).toBe(1)
     expect(events[0].type).toBe('done')
-    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.warning).toBe('aborted')
   })
 
-  test('abort mid-stream yields partial deltas then cancelled done', async () => {
+  test('abort mid-stream yields partial deltas then aborted done', async () => {
     const controller = new AbortController()
     const iter = echo(envelope(), { signal: controller.signal })
 
@@ -45,12 +45,12 @@ describe('echo adapter honors signal', () => {
 
     expect(out[0].type).toBe('delta')
     expect(out.at(-1).type).toBe('done')
-    expect(out.at(-1).result.warning).toBe('cancelled')
+    expect(out.at(-1).result.warning).toBe('aborted')
   })
 })
 
 describe('run() abort handling', () => {
-  test('pre-aborted + adapter returning early yields cancelled done', async () => {
+  test('pre-aborted + adapter returning early yields aborted done', async () => {
     const noop = async function * () { /* returns without yielding */ }
     const controller = new AbortController()
     controller.abort()
@@ -61,10 +61,10 @@ describe('run() abort handling', () => {
     }))
     expect(events.length).toBe(1)
     expect(events[0].type).toBe('done')
-    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.warning).toBe('aborted')
   })
 
-  test('adapter that throws on abort produces cancelled done', async () => {
+  test('adapter that throws on abort produces aborted done', async () => {
     const throwing = async function * () {
       throw Object.assign(new Error('aborted'), { name: 'AbortError' })
     }
@@ -76,10 +76,10 @@ describe('run() abort handling', () => {
       signal: controller.signal
     }))
     expect(events.at(-1).type).toBe('done')
-    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.warning).toBe('aborted')
   })
 
-  test('mid-stream cancel via signal stops adapter yielding and returns cancelled done', async () => {
+  test('mid-stream abort via signal stops adapter yielding and returns aborted done', async () => {
     const slow = async function * (_env, { signal } = {}) {
       yield { type: 'delta', delta: { type: 'message', delta: 'a' } }
       for (let i = 0; i < 20; i++) {
@@ -96,7 +96,7 @@ describe('run() abort handling', () => {
               thinkingTokens: 0,
               cost: 0,
               timestamps: { start: end, first: end, end },
-              warning: 'cancelled'
+              warning: 'aborted'
             }
           }
           return
@@ -117,6 +117,6 @@ describe('run() abort handling', () => {
     }
 
     expect(out.at(-1).type).toBe('done')
-    expect(out.at(-1).result.warning).toBe('cancelled')
+    expect(out.at(-1).result.warning).toBe('aborted')
   })
 })

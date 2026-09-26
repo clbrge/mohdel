@@ -44,7 +44,9 @@ let () =
 ```
 
 `Mohdel.next stream` pulls one event; `Mohdel.close stream` before the
-terminal event closes the connection, which is how a caller cancels.
+terminal event closes the connection and abandons the call: the gate aborts
+it, and its aborted `done`, with the usage reported before the cut, is lost.
+`POST /v1/abort` keeps it (PROTOCOL.md §10); this client does not send it yet.
 `Mohdel.image`, `Mohdel.transcription` and `Mohdel.health` are one-shot.
 
 `Envelope` covers the common fields (`key`, `auth_id`, `call_id`,

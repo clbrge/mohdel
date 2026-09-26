@@ -2,7 +2,7 @@ mod common;
 
 use futures::StreamExt;
 use mohdel_client::Client;
-use mohdel_protocol::{EmbedEnvelope, Event, ImageEnvelope, MediaRef, Status, TranscriptionEnvelope};
+use mohdel_protocol::{AbortRequest, EmbedEnvelope, Event, ImageEnvelope, MediaRef, Status, TranscriptionEnvelope};
 
 #[tokio::test]
 async fn call_streams_events_and_sends_the_envelope() {
@@ -81,7 +81,7 @@ async fn truncated_chunked_body_is_protocol_http_error() {
 }
 
 #[tokio::test]
-async fn dropping_the_stream_early_is_a_clean_cancel() {
+async fn dropping_the_stream_early_is_a_clean_abandon() {
     let (client, transport) = common::client(common::fixture("call-200-stream.raw"), 64);
     let mut events = client.call(&common::envelope()).await.unwrap();
     assert!(matches!(events.next().await, Some(Ok(Event::Delta { .. }))));
@@ -225,4 +225,63 @@ fn envelope_serializes_camel_case_and_round_trips() {
     );
     let back: mohdel_protocol::CallEnvelope = serde_json::from_str(&text).unwrap();
     assert_eq!(back.model, "local/llama3.1-8b");
+}
+
+#[tokio::test]
+async fn abort_request_names_the_call_and_the_gate_that_streams_it() {
+    let (client, _) = common::client(common::fixture("call-200-stream.raw"), 64);
+    let call = client.call(&common::envelope()).await.unwrap();
+    assert_eq!(
+        call.abort_request().unwrap(),
+        AbortRequest { call_id: "c-1".into(), auth_id: "u-1".into(), gate: "5f3c9a1e0b7d2468".into() }
+    );
+}
+
+#[tokio::test]
+async fn abort_request_without_the_gate_header_is_gate_unidentified() {
+    let (client, _) = common::client(common::fixture("call-200-error-event.raw"), 64);
+    let call = client.call(&common::envelope()).await.unwrap();
+    let error = call.abort_request().unwrap_err();
+    assert_eq!(error.kind.as_deref(), Some("PROTOCOL_GATE_UNIDENTIFIED"));
+}
+
+fn abort_request() -> AbortRequest {
+    AbortRequest { call_id: "c-1".into(), auth_id: "u-1".into(), gate: "g-1".into() }
+}
+
+#[tokio::test]
+async fn abort_posts_the_request_and_takes_202() {
+    let accepted = b"HTTP/1.1 202 Accepted\r\ncontent-length: 0\r\n\r\n".to_vec();
+    let (client, transport) = common::client(accepted, 64);
+    client.abort(&abort_request()).await.unwrap();
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests[0].0.to_str(), Some("/tmp/data.sock"));
+    let text = String::from_utf8(requests[0].1.clone()).unwrap();
+    assert!(text.starts_with("POST /v1/abort HTTP/1.1\r\n"));
+    let body = text.split("\r\n\r\n").nth(1).unwrap();
+    let sent: serde_json::Value = serde_json::from_str(body).unwrap();
+    assert_eq!(sent, serde_json::json!({ "callId": "c-1", "authId": "u-1", "gate": "g-1" }));
+}
+
+fn typed_404_or_421(status: &str, kind: &str) -> Vec<u8> {
+    let body = format!(r#"{{"message":"refused","severity":"warn","retryable":false,"type":"{kind}"}}"#);
+    format!(
+        "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .into_bytes()
+}
+
+#[tokio::test]
+async fn abort_of_a_call_not_in_flight_is_call_not_found() {
+    let (client, _) = common::client(typed_404_or_421("404 Not Found", "CALL_NOT_FOUND"), 64);
+    let error = client.abort(&abort_request()).await.unwrap_err();
+    assert_eq!(error.kind.as_deref(), Some("CALL_NOT_FOUND"));
+}
+
+#[tokio::test]
+async fn abort_at_another_gate_is_call_misdirected() {
+    let (client, _) = common::client(typed_404_or_421("421 Misdirected Request", "CALL_MISDIRECTED"), 64);
+    let error = client.abort(&abort_request()).await.unwrap_err();
+    assert_eq!(error.kind.as_deref(), Some("CALL_MISDIRECTED"));
 }

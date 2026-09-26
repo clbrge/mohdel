@@ -49,13 +49,13 @@ describe('fake adapter — slow', () => {
     expect(events.at(-1).type).toBe('done')
   })
 
-  test('abort mid-stream yields cancelled done', async () => {
+  test('abort mid-stream yields aborted done', async () => {
     const spec = { mode: 'slow', tokens: 100, delayMs: 20 }
     const controller = new AbortController()
     setTimeout(() => controller.abort(), 30)
     const events = await collect(fake(envelope(JSON.stringify(spec)), { signal: controller.signal }))
     expect(events.at(-1).type).toBe('done')
-    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.warning).toBe('aborted')
     expect(events.at(-1).result.status).toBe('incomplete')
   })
 })
@@ -92,14 +92,14 @@ describe('fake adapter — hang', () => {
     const events = await collect(fake(envelope(JSON.stringify({ mode: 'hang' })), { signal: controller.signal }))
     expect(events.length).toBe(1)
     expect(events[0].type).toBe('done')
-    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.warning).toBe('aborted')
   })
 
   test('pre-aborted signal resolves immediately', async () => {
     const controller = new AbortController()
     controller.abort()
     const events = await collect(fake(envelope(JSON.stringify({ mode: 'hang' })), { signal: controller.signal }))
-    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.warning).toBe('aborted')
   })
 })
 
@@ -126,17 +126,17 @@ describe('fake adapter — incomplete', () => {
   })
 })
 
-describe('fake adapter — cancel_after', () => {
+describe('fake adapter — abort_after', () => {
   test('emits N deltas then waits for abort', async () => {
     const controller = new AbortController()
     setTimeout(() => controller.abort(), 20)
     const events = await collect(fake(
-      envelope(JSON.stringify({ mode: 'cancel_after', tokens: 3 })),
+      envelope(JSON.stringify({ mode: 'abort_after', tokens: 3 })),
       { signal: controller.signal }
     ))
     const deltas = events.filter(e => e.type === 'delta')
     expect(deltas.length).toBe(3)
-    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.warning).toBe('aborted')
   })
 })
 

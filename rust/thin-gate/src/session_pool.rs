@@ -8,19 +8,21 @@
 //! Protocol with session (established in `js/session/driver.js`):
 //!   - thin-gate writes one CallEnvelope line to session stdin
 //!   - session emits events (NDJSON) on stdout until a terminal
-//!     event (`call.finish` / `call.error` / `call.cancelled`)
+//!     event (`done` / `error`)
 //!   - thin-gate reads until it sees the terminal, releases the
 //!     session back to the pool for the next call
 //!
 //! Failure modes handled:
 //!   - session spawn fails at pool init → pool creation returns Err
 //!   - session dies mid-call (stdout EOF or IO error) → emit
-//!     terminal `session.died` call.error, respawn replacement
+//!     terminal `SESSION_DIED` error, respawn replacement
 //!   - session emits non-Event line → emit terminal
-//!     `session.invalid_event`, respawn replacement
-//!   - client disconnects mid-call (body stream dropped) → kill
-//!     session (unrecoverable protocol state), respawn replacement
+//!     `SESSION_INVALID_EVENT` error, respawn replacement
+//!   - client disconnects mid-call (body stream dropped) → send
+//!     `abort`, drain to the terminal, release the session; kill and
+//!     respawn only if the drain fails or times out
 
+use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -29,7 +31,7 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex};
 
 use crate::metrics;
 use crate::protocol::{Event, TypedError};
@@ -306,27 +308,16 @@ impl PooledSession {
         }
     }
 
-    /// Send a cancel control message for `call_id` and drain stdout
+    /// Send an abort control message for `call_id` and drain stdout
     /// until a terminal event or timeout. Returns `Ok(self)` if the
-    /// session cleanly cancelled and is ready for pool reuse;
+    /// session cleanly aborted and is ready for pool reuse;
     /// `Err` otherwise (caller should drop + respawn).
-    pub async fn cancel_and_drain(
+    pub async fn abort_and_drain(
         mut self,
         call_id: &str,
         timeout: Duration,
     ) -> Result<Self, ()> {
-        let msg = serde_json::json!({ "op": "cancel", "callId": call_id });
-        let line = match serde_json::to_vec(&msg) {
-            Ok(b) => b,
-            Err(_) => return Err(()),
-        };
-        if self.stdin.write_all(&line).await.is_err() {
-            return Err(());
-        }
-        if self.stdin.write_all(b"\n").await.is_err() {
-            return Err(());
-        }
-        if self.stdin.flush().await.is_err() {
+        if write_abort(&mut self.stdin, call_id).await.is_err() {
             return Err(());
         }
 
@@ -365,6 +356,49 @@ impl PooledSession {
     }
 }
 
+/// `{op:"abort", callId}` on a session's stdin.
+pub(crate) async fn write_abort(stdin: &mut ChildStdin, call_id: &str) -> std::io::Result<()> {
+    let mut line = serde_json::to_vec(&serde_json::json!({ "op": "abort", "callId": call_id }))?;
+    line.push(b'\n');
+    stdin.write_all(&line).await?;
+    stdin.flush().await
+}
+
+type CallKey = (String, String);
+
+#[derive(Default)]
+struct AbortRegistry {
+    next_id: u64,
+    calls: HashMap<CallKey, Vec<(u64, oneshot::Sender<()>)>>,
+}
+
+/// A streaming call's entry in the pool's abort registry, removed on drop.
+pub(crate) struct CallAbort {
+    pool: SessionPool,
+    key: CallKey,
+    id: u64,
+    requested: oneshot::Receiver<()>,
+}
+
+impl CallAbort {
+    /// Resolves once `SessionPool::abort` names this call.
+    pub(crate) async fn requested(&mut self) -> bool {
+        (&mut self.requested).await.is_ok()
+    }
+}
+
+impl Drop for CallAbort {
+    fn drop(&mut self) {
+        let mut registry = self.pool.inner.aborts.lock().expect("abort registry poisoned");
+        if let Some(entries) = registry.calls.get_mut(&self.key) {
+            entries.retain(|(id, _)| *id != self.id);
+            if entries.is_empty() {
+                registry.calls.remove(&self.key);
+            }
+        }
+    }
+}
+
 struct PoolInner {
     sender: mpsc::Sender<PooledSession>,
     receiver: Mutex<mpsc::Receiver<PooledSession>>,
@@ -379,6 +413,8 @@ struct PoolInner {
     /// before any catalog was available start at 0 too, matching —
     /// they stay in-sync until the first `notify`.
     catalog_version: AtomicU64,
+    aborts: std::sync::Mutex<AbortRegistry>,
+    instance: String,
 }
 
 /// Why `SessionPool::acquire` gave up.
@@ -457,6 +493,8 @@ impl SessionPool {
                 cfg,
                 failure_streak: AtomicU32::new(0),
                 catalog_version: AtomicU64::new(0),
+                aborts: std::sync::Mutex::new(AbortRegistry::default()),
+                instance: new_instance_id(),
             }),
         })
     }
@@ -485,9 +523,9 @@ impl SessionPool {
     ///
     /// When the session's seeded catalog version is behind the pool's,
     /// the latest snapshot is fetched from `cfg.catalog` and injected
-    /// into the session before it's handed out. On injection failure
-    /// the session is discarded, a replacement is queued, and the
-    /// caller gets the next one in the channel.
+    /// on a task of its own, which returns the session to the channel;
+    /// the caller waits for the next session there. On injection failure
+    /// the session is discarded and a replacement is queued.
     pub async fn acquire(&self) -> Result<PooledSession, AcquireError> {
         // Full wait time from caller's perspective — includes any
         // internal loop iterations that discard a session and retry
@@ -530,35 +568,49 @@ impl SessionPool {
                 sess.catalog_version = pool_ver;
                 return Some(sess);
             };
-            match sess.send_catalog(&json).await {
-                Ok(()) => {
-                    sess.catalog_version = pool_ver;
-                    return Some(sess);
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
-                    // The snapshot was rejected before anything reached
-                    // stdin, so the session is healthy and the fault is
-                    // the embedder's. Discarding here would destroy a
-                    // session per acquire and never converge, since the
-                    // next snapshot is equally bad. Serve the stale
-                    // catalog and keep reporting.
-                    eprintln!("acquire: rejected catalog snapshot ({e}); serving stale catalog");
-                    sess.catalog_version = pool_ver;
-                    return Some(sess);
-                }
-                Err(e) => {
-                    // Injection failed — stdin is now in an
-                    // indeterminate state. Kill this session (drop
-                    // triggers kill_on_drop), spawn a replacement,
-                    // and wait for the next session in the channel.
-                    eprintln!(
-                        "acquire: set_catalog refresh failed ({e}); discarding session"
-                    );
-                    drop(sess);
-                    metrics::session_alive_delta(-1);
-                    self.spawn_replacement();
-                    continue;
-                }
+            let pool = self.clone();
+            tokio::spawn(async move { pool.refresh_and_requeue(sess, &json, pool_ver).await });
+        }
+    }
+
+    /// Owns a stale session through its `set_catalog` write, so an
+    /// `acquire` dropped or timed out meanwhile cannot kill it, then puts
+    /// it back in the channel for the next waiter.
+    async fn refresh_and_requeue(&self, mut sess: PooledSession, json: &str, pool_ver: u64) {
+        match sess.send_catalog(json).await {
+            Ok(()) => sess.catalog_version = pool_ver,
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                // The snapshot was rejected before anything reached
+                // stdin, so the session is healthy and the fault is
+                // the embedder's. Discarding here would destroy a
+                // session per acquire and never converge, since the
+                // next snapshot is equally bad. Serve the stale
+                // catalog and keep reporting.
+                eprintln!("acquire: rejected catalog snapshot ({e}); serving stale catalog");
+                sess.catalog_version = pool_ver;
+            }
+            Err(e) => {
+                // Injection failed — stdin is now in an
+                // indeterminate state. Kill this session (drop
+                // triggers kill_on_drop) and spawn a replacement.
+                eprintln!("acquire: set_catalog refresh failed ({e}); discarding session");
+                drop(sess);
+                metrics::session_alive_delta(-1);
+                self.spawn_replacement();
+                return;
+            }
+        }
+        match self.inner.sender.try_send(sess) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(sess)) => {
+                eprintln!("acquire: pool channel full after catalog refresh; discarding session and replacing");
+                drop(sess);
+                metrics::session_alive_delta(-1);
+                self.spawn_replacement();
+            }
+            Err(mpsc::error::TrySendError::Closed(sess)) => {
+                drop(sess);
+                metrics::session_alive_delta(-1);
             }
         }
     }
@@ -657,6 +709,44 @@ impl SessionPool {
         }
     }
 
+    /// Random per pool; `/v1/call` sends it as `GATE_HEADER` and
+    /// `/v1/abort` checks it.
+    pub(crate) fn instance(&self) -> &str {
+        &self.inner.instance
+    }
+
+    pub(crate) fn register_abort(&self, call_id: &str, auth_id: &str) -> CallAbort {
+        let (tx, rx) = oneshot::channel();
+        let key = (call_id.to_string(), auth_id.to_string());
+        let mut registry = self.inner.aborts.lock().expect("abort registry poisoned");
+        let id = registry.next_id;
+        registry.next_id += 1;
+        registry.calls.entry(key.clone()).or_default().push((id, tx));
+        drop(registry);
+        CallAbort { pool: self.clone(), key, id, requested: rx }
+    }
+
+    /// Abort the streaming calls in flight under `(call_id, auth_id)`:
+    /// each session is sent `{op:"abort"}` and its stream stays open
+    /// until the session's aborted `done`. `false` when none is in
+    /// flight, including one whose terminal has already been read.
+    pub fn abort(&self, call_id: &str, auth_id: &str) -> bool {
+        let key = (call_id.to_string(), auth_id.to_string());
+        let entries = self
+            .inner
+            .aborts
+            .lock()
+            .expect("abort registry poisoned")
+            .calls
+            .remove(&key)
+            .unwrap_or_default();
+        let found = !entries.is_empty();
+        for (_, tx) in entries {
+            let _ = tx.send(());
+        }
+        found
+    }
+
     /// Current consecutive-failure count — for metrics / debug.
     pub fn failure_streak(&self) -> u32 {
         self.inner.failure_streak.load(Ordering::Relaxed)
@@ -682,6 +772,12 @@ impl SessionPool {
 }
 
 static INFO_SEQ: AtomicU64 = AtomicU64::new(0);
+
+fn new_instance_id() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    format!("{:016x}", hasher.finish())
+}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]

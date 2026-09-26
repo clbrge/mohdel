@@ -25,7 +25,7 @@ import {
   WARNING_INSUFFICIENT_OUTPUT_BUDGET
 } from '#core/status.js'
 
-import { cancelledDone } from './_cancelled.js'
+import { abortedDone } from './_aborted.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { hasImagePart, loadImageParts, loadImages } from './_images.js'
@@ -99,7 +99,7 @@ export async function * openai (envelope, deps = {}) {
 
     for await (const event of stream) {
       if (signal?.aborted) {
-        yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+        yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
         return
       }
       switch (event.type) {
@@ -170,7 +170,7 @@ export async function * openai (envelope, deps = {}) {
     }
   } catch (e) {
     if (signal?.aborted) {
-      yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+      yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
       return
     }
     log?.warn({ err: e }, '[mohdel:openai] stream failed')
@@ -179,7 +179,7 @@ export async function * openai (envelope, deps = {}) {
   }
 
   if (signal?.aborted) {
-    yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+    yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
     return
   }
 

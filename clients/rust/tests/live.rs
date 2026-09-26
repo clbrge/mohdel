@@ -58,7 +58,7 @@ async fn live_budget_incomplete() {
 }
 
 #[tokio::test]
-async fn live_drop_cancels_then_next_call_works() {
+async fn live_drop_abandons_then_next_call_works() {
     let Some((client, model)) = live() else { return };
     let mut events = client
         .call(&envelope(&model, "Count slowly from 1 to 100, one number per line.", 200))

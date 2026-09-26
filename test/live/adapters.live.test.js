@@ -13,7 +13,7 @@
  * `MOHDEL_LIVE_LOCAL_MODEL` (default `llama3.1:8b`).
  *
  * Per-provider quirks (defined in SPECS below):
- *   - `streams: false` → skip delta-count assertion + cancel test
+ *   - `streams: false` → skip delta-count assertion + abort test
  *     (the adapter emits a single synthetic delta in non-streaming
  *     mode, so counting is meaningless).
  *   - `truncateBudget` → outputBudget for the incomplete-status test.
@@ -87,11 +87,11 @@ describe('live adapter smoke', () => {
         expect(done.result.warning).toBe('insufficientOutputBudget')
       }, 30_000)
 
-      // Cancel mid-stream verifies AbortSignal propagation through the
+      // Abort mid-stream verifies AbortSignal propagation through the
       // SDK to the provider. Meaningless for non-streaming adapters
       // (single synthetic delta arrives only once the full response is
       // already in), so skip.
-      test.skipIf(!spec.streams)('cancel mid-stream → warning: cancelled', async () => {
+      test.skipIf(!spec.streams)('abort mid-stream → warning: aborted', async () => {
         const controller = new AbortController()
         const events = []
         for await (const ev of adapter(envelope({
@@ -105,7 +105,7 @@ describe('live adapter smoke', () => {
         }
         const done = events.at(-1)
         expect(done.type).toBe('done')
-        expect(done.result.warning).toBe('cancelled')
+        expect(done.result.warning).toBe('aborted')
       }, 30_000)
     })
   }

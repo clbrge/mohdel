@@ -30,7 +30,11 @@ export function requestUnix ({ socketPath, path, method, body, signal, headers }
     const h = { ...(headers || {}) }
     if (body !== undefined) h['content-type'] = 'application/json'
 
-    const req = http.request({ socketPath, path, method, headers: h }, resolve)
+    const onAbort = () => req.destroy(new Error('aborted'))
+    const req = http.request({ socketPath, path, method, headers: h }, (res) => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve(res)
+    })
     req.on('error', reject)
 
     if (signal) {
@@ -39,11 +43,7 @@ export function requestUnix ({ socketPath, path, method, body, signal, headers }
         reject(new Error('aborted'))
         return
       }
-      const onAbort = () => req.destroy(new Error('aborted'))
       signal.addEventListener('abort', onAbort, { once: true })
-      // Released on `close` rather than on resolve: the promise
-      // resolves at response headers, and cancellation has to stay
-      // live for the streaming body that follows.
       req.on('close', () => signal.removeEventListener('abort', onAbort))
     }
 

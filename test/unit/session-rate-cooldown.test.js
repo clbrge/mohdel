@@ -130,13 +130,13 @@ describe('session/run — cooldown enforcement', () => {
     expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
   })
 
-  // Regression: a cancelled `done` terminal must NOT wipe an
-  // accumulated failure streak. Cancel is caller-side; it says
+  // Regression: an aborted `done` terminal must NOT wipe an
+  // accumulated failure streak. Abort is caller-side; it says
   // nothing about provider recovery.
-  test('cancelled done does not reset cooldown failure count', async () => {
+  test('aborted done does not reset cooldown failure count', async () => {
     const fx = fixtures()
     const retryableErr = { message: 'overloaded', severity: 'warn', retryable: true, type: 'RATE_LIMIT' }
-    const cancelledAdapter = async function * () {
+    const abortedAdapter = async function * () {
       yield {
         type: 'done',
         result: {
@@ -147,7 +147,7 @@ describe('session/run — cooldown enforcement', () => {
           thinkingTokens: 0,
           cost: 0,
           timestamps: { start: '0', first: '0', end: '0' },
-          warning: 'cancelled'
+          warning: 'aborted'
         }
       }
     }
@@ -161,9 +161,9 @@ describe('session/run — cooldown enforcement', () => {
     }))
     expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
 
-    // Caller-side cancel arrives.
+    // Caller-side abort arrives.
     await collect(run(envelope(), {
-      ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => cancelledAdapter
+      ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => abortedAdapter
     }))
     // Streak unchanged — next real failure triggers cooldown.
     await collect(run(envelope(), {

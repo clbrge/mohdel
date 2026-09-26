@@ -188,8 +188,8 @@ describe('session/adapters/gemini', () => {
   })
 })
 
-describe('session/adapters/gemini — cancel', () => {
-  test('abort mid-stream → cancelled done with the partial output', async () => {
+describe('session/adapters/gemini — abort', () => {
+  test('abort mid-stream → aborted done with the partial output', async () => {
     const { client } = makeClient({
       chunks: [chunk('Hi'), chunk(' there'), chunk('!', 'STOP')]
     })
@@ -202,16 +202,16 @@ describe('session/adapters/gemini — cancel', () => {
     expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
     const done = events.at(-1)
     expect(done.result.status).toBe(STATUS_INCOMPLETE)
-    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.warning).toBe('aborted')
     expect(done.result.output).toBe('Hi there')
   })
 
-  test('SDK throwing under an aborted signal → cancelled done, not an error event', async () => {
+  test('SDK throwing under an aborted signal → aborted done, not an error event', async () => {
     const controller = new AbortController()
     controller.abort()
     const { client } = makeClient({ throws: new Error('Request was aborted.') })
     const events = await collect(gemini(envelope(), { client, signal: controller.signal }))
     expect(events.map(e => e.type)).toEqual(['done'])
-    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.warning).toBe('aborted')
   })
 })

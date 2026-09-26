@@ -15,7 +15,7 @@ StandardJS — no semicolons, 2-space indent, single quotes. Enforced via `npm r
 
 ### Module naming: `_`-prefix for shared internals
 
-Files under `js/session/adapters/` (and a few neighboring dirs) that start with `_` (e.g. `_catalog.js`, `_pricing.js`, `_chat_completions.js`, `_cancelled.js`, `_lazy_json_cache.js`) are **shared internals** — helpers consumed by sibling files in the same directory, not part of the public module surface. The non-`_` files (`anthropic.js`, `openai.js`, etc.) are the public shape; `_`-prefixed modules may be refactored or removed without wire-level concern. Don't import `_`-prefixed files from outside their directory.
+Files under `js/session/adapters/` (and a few neighboring dirs) that start with `_` (e.g. `_catalog.js`, `_pricing.js`, `_chat_completions.js`, `_aborted.js`, `_lazy_json_cache.js`) are **shared internals** — helpers consumed by sibling files in the same directory, not part of the public module surface. The non-`_` files (`anthropic.js`, `openai.js`, etc.) are the public shape; `_`-prefixed modules may be refactored or removed without wire-level concern. Don't import `_`-prefixed files from outside their directory.
 
 ## CLI Design
 
@@ -161,12 +161,12 @@ export async function * myprovider (envelope, deps = {}) {
   try {
     const stream = await client.chat.stream(request, { signal })
     for await (const event of stream) {
-      if (signal?.aborted) return                           // cancellation
+      if (signal?.aborted) return                           // abort
       // map event.type → yield { type: 'content.delta', ... }
       // track usage, finish_reason, max_tokens-style truncation
     }
   } catch (e) {
-    if (signal?.aborted) return                             // run() emits call.cancelled
+    if (signal?.aborted) return                             // run() yields the aborted done
     yield { type: 'call.error', call_id: callId, error: classifyProviderError(e) }
     return
   }
@@ -188,8 +188,8 @@ export async function * myprovider (envelope, deps = {}) {
 
 ### Rules
 
-- **Emit exactly one terminal event** (`call.finish` / `call.error` / `call.cancelled`) per call. `run()` emits `session.adapter_no_terminal` if you forget.
-- **Honor `signal`.** Pass to the SDK's streaming method. In the catch block, check `signal?.aborted` before yielding `call.error` — on abort, return silently and let `run()` emit `call.cancelled`.
+- **Emit exactly one terminal event** (`done` / `error`) per call. `run()` emits `session.adapter_no_terminal` if you forget.
+- **Honor `signal`.** Pass to the SDK's streaming method. In the catch block, check `signal?.aborted` before yielding `call.error` — on abort, return silently and let `run()` yield the aborted `done`.
 - **Classify errors via `./_errors.js::classifyProviderError`.** Provider SDKs expose a `.status` property; the shared helper maps it to canonical TypedError shapes (401/403 → `auth.invalid`, 429 → `provider.rate_limit`, 5xx → `provider.unavailable`).
 - **Never echo provider response bodies** on error (they may reflect the API key back). Use the generic messages from `classifyProviderError`.
 - **Status contract** — `max_tokens`-style truncation is `status: 'incomplete'` + `warning: 'insufficientOutputBudget'` + `finish_reason: 'length'`. Per-provider mapping documented in the adapter files.
@@ -351,8 +351,8 @@ one and you ship a release that crashes embedders.
 
 1. **JS type** — add the field to the JSDoc in `js/core/events.js`.
 2. **JS adapter(s)** — produce the field in `js/session/adapters/*.js`,
-   including the `cancelledDone` path in `_cancelled.js` if the field
-   should survive mid-stream cancellation.
+   including the `abortedDone` path in `_aborted.js` if the field
+   should survive a mid-stream abort.
 3. **JS pricing** — extend `_pricing.js` `computeCost` if the field
    contributes to cost.
 4. **Rust struct** — add to `protocol.rs` as `Option<...>` with

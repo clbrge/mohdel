@@ -276,7 +276,7 @@ const result = await mo.use('anthropic/claude-sonnet-4-6').answer('Hello')
 console.log(result.output, result.cost)
 ```
 
-No subprocess, no setup beyond your API key. Right for CLI tools (`mo ask`), scripts, tests, and single-process services — which is most projects. Pass an `AbortSignal` as `answer(prompt, { signal })` to cancel in flight.
+No subprocess, no setup beyond your API key. Right for CLI tools (`mo ask`), scripts, tests, and single-process services — which is most projects. Pass an `AbortSignal` as `answer(prompt, { signal })` to abort in flight.
 
 The factory reads the catalog from `~/.config/mohdel/curated.json` and keys from the environment, the same defaults a gate session starts from. `mohdel({ models })` replaces the catalog for the process, factory and session runtime alike, the way `set_catalog` replaces it in a gate session. `mohdel({ configurations: { openai: { apiKey } } })` overrides the key per provider.
 
@@ -333,7 +333,7 @@ Mohdel splits into three planes that can be deployed independently:
 ```
 
 - **`mohdel/client`** (JS) — thin stub that callers import. Opens a unix socket to thin-gate, sends a `CallEnvelope`, receives an async-iterable of `Event`s. Zero transitive provider-SDK imports — caller-side code stays light.
-- **`mohdel-thin-gate`** (Rust binary, prebuilt and shipped via the `mohdel-thin-gate-<platform>` npm sub-packages) — scheduler / state owner / supervisor. Binds the data-plane socket, validates the envelope, dispatches to a pooled session subprocess, relays events back, handles graceful cancellation on client disconnect. Binds the admin plane for `GET /v1/health`. Pushes OTLP metrics (sessions alive/respawned, calls by provider/status, call-duration histogram, cooldown / quota / policy rejections) when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Internal trait hooks (`RoutePolicy`, `QuotaPolicy`, `ConfigSource`, `CachePolicy`) make the crate testable and fork-friendly for deployments that need bespoke policy — not a published-library surface.
+- **`mohdel-thin-gate`** (Rust binary, prebuilt and shipped via the `mohdel-thin-gate-<platform>` npm sub-packages) — scheduler / state owner / supervisor. Binds the data-plane socket, validates the envelope, dispatches to a pooled session subprocess, relays events back, aborts gracefully on client disconnect. Binds the admin plane for `GET /v1/health`. Pushes OTLP metrics (sessions alive/respawned, calls by provider/status, call-duration histogram, cooldown / quota / policy rejections) when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Internal trait hooks (`RoutePolicy`, `QuotaPolicy`, `ConfigSource`, `CachePolicy`) make the crate testable and fork-friendly for deployments that need bespoke policy — not a published-library surface.
 - **`mohdel/session`** (JS subprocess) — provider executor. Spawned by thin-gate, reads envelopes from stdin, dispatches to the matching adapter, writes events to stdout. A napi-rs addon was scoped for hot-loop optimization but current benchmarks show per-call JS CPU is not the bottleneck; the stub stays under `rust/napi-addon/` for future reactivation.
 
 ### Running thin-gate
@@ -355,7 +355,7 @@ With no session-bin configured, thin-gate runs in demo mode: `POST /v1/call` ret
 
 ### Calling from JS
 
-The client snippet under [Library Usage](#library-usage) above is the full surface: `call(envelope, { socketPath, signal?, headers? })` returns an async iterable of events. `headers` go with the request, for a router in front of the gate that authenticates its callers. Pass an `AbortSignal` to cancel in flight; thin-gate forwards a cancel control message to the session and reuses it on the pool, and the client ends the stream with the same cancelled `done` the in-process path returns (status `incomplete`, warning `cancelled`, the partial output it relayed, zero tokens). The envelope is the flat `answer(prompt, options)` surface plus transport metadata (`callId`, `authId`, `auth.key`, optional `traceparent`); see [`js/core/envelope.js`](js/core/envelope.js) for the full field list.
+The client snippet under [Library Usage](#library-usage) above is the full surface: `call(envelope, { socketPath, signal?, headers? })` returns an async iterable of events. `headers` go with the request and with its abort, for a router in front of the gate that authenticates its callers. Pass an `AbortSignal` to abort in flight; the client posts `/v1/abort`, thin-gate forwards an abort control message to the session and reuses it on the pool, and the stream ends with the session's aborted `done`, the one the in-process path returns (status `incomplete`, warning `aborted`, the partial output and the usage reported before the cut). The envelope is the flat `answer(prompt, options)` surface plus transport metadata (`callId`, `authId`, `auth.key`, optional `traceparent`); see [`js/core/envelope.js`](js/core/envelope.js) for the full field list.
 
 ### Other languages
 
@@ -376,7 +376,7 @@ end
 
 ### Canonical types (frozen wire contract)
 
-Wire format is JSON over NDJSON frames, camelCase. Types are defined in `js/core/` (JSDoc) and mirrored in `rust/protocol/src/protocol.rs` (serde, the `mohdel-protocol` crate). Cross-language conformance tests enforce round-trip fidelity. The session-side protocol (envelopes in, events out, cancel control messages) is specified in [PROTOCOL.md](PROTOCOL.md) — read that to implement a session in another language.
+Wire format is JSON over NDJSON frames, camelCase. Types are defined in `js/core/` (JSDoc) and mirrored in `rust/protocol/src/protocol.rs` (serde, the `mohdel-protocol` crate). Cross-language conformance tests enforce round-trip fidelity. The session-side protocol (envelopes in, events out, abort control messages) is specified in [PROTOCOL.md](PROTOCOL.md) — read that to implement a session in another language.
 
 - **`CallEnvelope`** — flat `answer()` options plus transport metadata: `callId`, `authId`, `auth.key`, `traceparent?`, `baggage?`, `provider`, `model`, `prompt`, `outputBudget?`, `outputType?`, `outputStyle?`, `outputEffort?`, `images?`, `videos?`, `cache?`, `tools?`, `toolChoice?`, `parallelToolCalls?`, `identifier?`.
 - **`Event`** — three-variant union discriminated on `type`:
@@ -385,10 +385,10 @@ Wire format is JSON over NDJSON frames, camelCase. Types are defined in `js/core
   - `{ type: 'error', error: TypedError }`
 - **`AnswerResult`** — `status`, `output`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cost` (single number), `timestamps`, `warning?`, `toolCalls?`.
 - **`Status`** — `'completed' | 'tool_use' | 'incomplete'`.
-- **`Warning`** — additive string union: `'insufficientOutputBudget'`, `'cancelled'`, ...
+- **`Warning`** — additive string union: `'insufficientOutputBudget'`, `'aborted'`, ...
 - **`TypedError`** — `{ message, detail?, severity, retryable, type }`. `type` is the canonical tag callers branch on (e.g. `'AUTH_INVALID'`, `'PROVIDER_COOLDOWN'`), optional on the wire; `message` is a short human-readable label; `detail` is the provider's own rejection text; `severity` is `'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'`.
 
-A `cancel` control message `{ op: "cancel", callId }` on session stdin aborts the matching in-flight call.
+An `abort` control message `{ op: "abort", callId }` on session stdin aborts the matching in-flight call.
 
 Extending the frozen wire types is breaking — additive changes only on trait method sets and non-frozen internals. See [ARCHITECTURE.md §What isn't frozen](ARCHITECTURE.md#what-isnt-frozen) for the refinable-vs-frozen split.
 
@@ -398,8 +398,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-session-adapter). Short version:
 
 1. Create `js/session/adapters/<provider>.js` exporting `async function* <provider>(envelope, { client?, signal? })`.
 2. Map provider-native events to the canonical Event union.
-3. Pass `{ signal }` to the SDK's streaming method so cancellation aborts in-flight HTTP.
-4. On SDK throw: if `signal?.aborted`, return silently (run() emits call.cancelled); else yield `call.error` via `classifyProviderError(e)` from `./_errors.js`.
+3. Pass `{ signal }` to the SDK's streaming method so an abort tears down in-flight HTTP.
+4. On SDK throw: if `signal?.aborted`, return silently (run() yields the aborted `done`); else yield `{ type: 'error', error: classifyProviderError(e) }` from `./_errors.js`.
 5. Register in `js/session/adapters/index.js`.
 6. Write unit tests with a dependency-injected mock client.
 7. Optionally add a gated live test in `test/live/<provider>.live.test.js`.
@@ -492,11 +492,12 @@ Test files under `rust/thin-gate/tests/`:
 | `conformance.rs` | JS↔Rust protocol round-trip |
 | `protocol.rs` | serde (de)serialization of envelope/events/results |
 | `server.rs` | HTTP layer, synthetic dispatch, 404/400 paths |
-| `session_dispatch.rs` | real `node js/session/bin.js` spawn + dispatch + graceful cancel |
+| `session_dispatch.rs` | real `node js/session/bin.js` spawn + dispatch + graceful abort + `/v1/abort` |
+| `oneshot_abandon.rs` | one-shot handler dropped mid-exchange: the session finishes and returns to the pool |
 | `policy.rs` | `RoutePolicy` + `QuotaPolicy` + `Enforcer` end-to-end |
 | `config.rs` | TOML `ConfigSource` parsing, defaults, malformed, env override |
 | `supervision.rs` | readiness ping/pong + readiness timeout + garbage-response handling |
-| `stress.rs` | 100 concurrent calls, cancel storm, session-death-under-load |
+| `stress.rs` | 100 concurrent calls, abort storm, session-death-under-load |
 
 Spawning tests require `node` in PATH.
 
@@ -528,11 +529,11 @@ For deterministic stress, benchmark, and bug-repro work, register `provider: "fa
 { mode: 'volume',       tokens: 1000 }              // throughput stress
 { mode: 'slow',         tokens: 50, delayMs: 100 }  // streaming cadence
 { mode: 'error',        type: 'AUTH_INVALID' }      // error classification
-{ mode: 'hang' }                                    // cancel / timeout plumbing
+{ mode: 'hang' }                                    // abort / timeout plumbing
 { mode: 'tool',         name: 'f', args: { x: 1 } } // tool round-trip
 { mode: 'incomplete' }                              // status contract
 { mode: 'crash' }                                   // process isolation (exits the adapter process)
-{ mode: 'cancel_after', tokens: 5 }                 // cancel mid-stream
+{ mode: 'abort_after', tokens: 5 }                 // abort mid-stream
 ```
 
 All modes honor `AbortSignal`. The benchmarks in `bench/` use this to pin adapter work to a fixed shape and isolate what's being measured — see `bench/bench.js` (throughput) and `bench/isolation.js` (crash containment).

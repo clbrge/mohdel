@@ -3,7 +3,7 @@
  * returns either a result or a typed error, never throwing.
  *
  * Mirrors `run_transcription.js`: one synchronous request, no streaming, no
- * cancellation path beyond the caller's own signal. Rate limits are enforced
+ * abort path beyond the caller's own signal. Rate limits are enforced
  * as in `run.js`, minus the speed lanes embeddings do not have.
  *
  * @module session/run_embedding

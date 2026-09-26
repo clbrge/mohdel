@@ -98,7 +98,7 @@
  *   USD, computed from curated pricing. Single number (not a breakdown).
  * @property {Timestamps} timestamps
  * @property {string} [warning]
- *   `'insufficientOutputBudget' | 'cancelled' | ...` additive union.
+ *   `'insufficientOutputBudget' | 'aborted' | ...` additive union.
  * @property {ToolCall[]} [toolCalls]
  *   Present when `status === 'tool_use'`.
  * @property {number} [maxInterFrameMs]

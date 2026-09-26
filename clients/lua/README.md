@@ -42,7 +42,8 @@ end
 local result = c:call(envelope):collect()   -- done.result; raises the error event
 print(result.output, result.inputTokens, result.outputTokens, result.cost)
 
--- cancel: close before the terminal event
+-- abandon: close before the terminal event; the gate aborts the call and
+-- its usage is lost (`POST /v1/abort` keeps it; this client does not send it yet)
 local s = c:call(envelope)
 print(s:next().type)  -- 'delta'
 s:close()

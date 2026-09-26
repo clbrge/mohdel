@@ -14,7 +14,7 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **Client** — the JS module callers `import` (`mohdel/client`). Opens a unix socket to `thin-gate`, sends a `CallEnvelope`, and yields events. Holds zero provider-SDK code.
 
-**Thin-gate** — the Rust binary (`mohdel-thin-gate`) that owns the data socket, validates envelopes, dispatches to a pooled session subprocess, and relays events back. Also handles cancellation, quota, and OTLP metrics. Cross-process integrations go through here.
+**Thin-gate** — the Rust binary (`mohdel-thin-gate`) that owns the data socket, validates envelopes, dispatches to a pooled session subprocess, and relays events back. Also handles aborts, quota, and OTLP metrics. Cross-process integrations go through here.
 
 **Session** — the JS subprocess (one of N in a pool) that actually runs the provider SDK and emits events to stdout. Spawned and supervised by `thin-gate`.
 
@@ -62,7 +62,7 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **`CallEnvelope`** — the request structure: model, prompt, optional tools/images/etc., plus transport metadata. The full surface is documented in [`js/core/envelope.js`](../js/core/envelope.js) and [PROTOCOL.md](../PROTOCOL.md).
 
-**`callId`** — caller-assigned id for one specific call. Used to correlate logs, spans, and the cancel control message.
+**`callId`** — caller-assigned id for one specific call. Used to correlate logs, spans, and the abort control message.
 
 **`authId`** — caller-assigned id for the *user* (or workspace, or tenant) on whose behalf the call runs. Drives quota grouping and identifier mapping (e.g. Anthropic's `metadata.user_id`).
 
@@ -91,7 +91,7 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 - `tool_use` — model wants to call a tool; the loop is the caller's responsibility.
 - `incomplete` — output was truncated (provider-specific finish reasons for "max tokens reached" all map here). Look at `warning` for the reason.
 
-**`warning`** — non-fatal qualifier on a successful result. Examples: `'insufficientOutputBudget'`, `'cancelled'`. Additive string union — new warnings can be added without breaking the wire.
+**`warning`** — non-fatal qualifier on a successful result. Examples: `'insufficientOutputBudget'`, `'aborted'`. Additive string union — new warnings can be added without breaking the wire.
 
 **`TypedError`** — error event payload: `{ message, detail?, severity, retryable, type }`.
 - `message` — short human-readable label, stable per classification (e.g. `'provider error 400'`, `'authentication failed'`). Not the branching key.
@@ -102,7 +102,11 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **Cooldown** — provider-wide circuit-breaker state in `thin-gate`. After a string of failures from one provider, new calls fast-fail with `PROVIDER_COOLDOWN` instead of hitting the wire. Visible as `mohdel.cooldown.rejections` in metrics and `mohdel.cooldown` on the call span.
 
-**Cancel** — the caller aborts a call by closing the `AbortSignal` passed to `call()`. Thin-gate sends `{ op: "cancel", callId }` on session stdin; the adapter passes it down to the provider SDK. The session is reused on the pool.
+**Abort** — the caller asks mohdel to stop a call on its side, through the `AbortSignal` passed to `answer()` or `call()`, or `POST /v1/abort` at the gate. The session aborts its provider request (thin-gate sends `{ op: "abort", callId }` on session stdin) and the call's stream ends with the aborted `done`: `status: incomplete`, `warning: aborted`, and the usage the provider had reported before the cut, priced. That usage is a lower bound: the provider is not asked to stop, only disconnected, and bills what it processed. The session is reused on the pool.
+
+**Abandon** — the caller drops the stream. mohdel aborts the call the same way, but the `done` has no reader and is lost.
+
+"Cancel" is reserved for a provider-side cancel, which mohdel does not offer.
 
 ---
 

@@ -7,11 +7,12 @@
  * phase, so any non-trivial task on a thinking-capable provider can
  * blow that limit and surface as a `NET_ERROR / "terminated"` mid-run.
  *
- * We disable the inter-chunk idle timeout. Cancellation comes from
- * three layers above us:
- *   1. caller's `AbortSignal` (per-run timeout, user cancel)
- *   2. SDK request-level timeout (OpenAI/Anthropic/Groq default 600 s)
- *   3. provider-side stream limits
+ * We disable the inter-chunk idle timeout, so nothing in this process
+ * bounds a stream once its headers have arrived: the SDKs' request
+ * timeout is armed around `fetch` only and cleared when the headers
+ * land. What can still end a stream:
+ *   1. caller's `AbortSignal` (per-run timeout, user abort)
+ *   2. provider-side stream limits
  *
  * Headers timeout stays bounded — connect + first response must be
  * fast even when the body afterwards may be slow.

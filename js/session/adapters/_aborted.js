@@ -1,11 +1,11 @@
 /**
- * Shared `cancelledDone` helper for adapters that need to synthesize
+ * Shared `abortedDone` helper for adapters that need to synthesize
  * a terminal `done` event on `signal.aborted` mid-stream.
  *
- * @module session/adapters/_cancelled
+ * @module session/adapters/_aborted
  */
 
-import { STATUS_INCOMPLETE, WARNING_CANCELLED } from '#core/status.js'
+import { STATUS_INCOMPLETE, WARNING_ABORTED } from '#core/status.js'
 import { costFor } from './_pricing.js'
 
 /**
@@ -16,12 +16,12 @@ import { costFor } from './_pricing.js'
  * @param {number} inputTokens
  * @param {number} outputTokens
  * @param {{cacheWriteInputTokens?: number, cacheReadInputTokens?: number}} [extra]
- *   Optional cache token counts captured before cancellation. Threaded through
- *   so the cancellation-cost calculation prices any cache writes/reads that
+ *   Optional cache token counts captured before the abort. Threaded through
+ *   so the abort-cost calculation prices any cache writes/reads that
  *   already happened before the abort.
  * @returns {import('#core/events.js').DoneEvent}
  */
-export function cancelledDone (start, first, envelope, output, inputTokens, outputTokens, extra = {}) {
+export function abortedDone (start, first, envelope, output, inputTokens, outputTokens, extra = {}) {
   const end = String(process.hrtime.bigint())
   const cacheWriteInputTokens = extra.cacheWriteInputTokens || 0
   const cacheReadInputTokens = extra.cacheReadInputTokens || 0
@@ -40,7 +40,7 @@ export function cancelledDone (start, first, envelope, output, inputTokens, outp
         { inputTokens, outputTokens, thinkingTokens: 0, cacheWriteInputTokens, cacheReadInputTokens }
       ),
       timestamps: { start, first: first ?? end, end },
-      warning: WARNING_CANCELLED
+      warning: WARNING_ABORTED
     }
   }
 }

@@ -119,7 +119,7 @@ for await (const ev of call(envelope, {
 
 `call` opens a unix socket, POSTs the envelope as JSON, and parses the response body as NDJSON events.
 
-`AbortSignal` forwards: the client closes the HTTP connection, the gate infers cancel, and forwards a `{op:"cancel", callId}` control message to the session. Session returns a `done` terminal with `warning: 'cancelled'`; the pool reuses the session.
+`AbortSignal` forwards: once the gate has answered, the client posts `/v1/abort` with the call's `callId` and `authId` and the `mohdel-gate` token of the gate's response, the gate sends the session a `{op:"abort", callId}` control message, and the stream ends with the session's `done` (`warning: 'aborted'`), carrying the partial output and the usage reported before the cut, as in-process. The pool reuses the session. The iterator waits for that `done` with no limit of its own; to stop waiting, stop iterating, which abandons the call and loses its usage. An abort before the gate answered drops the request, and the client ends with an aborted `done` of its own at zero usage. An abort the gate refuses is thrown: `CALL_MISDIRECTED` when it reached a gate that did not stream the call, or the router's own error when it has no `/v1/abort` route.
 
 ## Envelope shape
 
@@ -208,7 +208,7 @@ Three variants:
     inputTokens, outputTokens, thinkingTokens,
     cost,
     timestamps: { start, first, end },
-    warning?: 'insufficientOutputBudget' | 'cancelled',
+    warning?: 'insufficientOutputBudget' | 'aborted',
     toolCalls?: [{ id, name, arguments }]
   }
 }
@@ -485,7 +485,8 @@ The bridge maps `tool_result` → `tool` role and preserves `assistant.toolCalls
     end:   '123457000'              // completion
   },
   warning: undefined,               // 'insufficientOutputBudget' on budget truncation;
-                                    // 'cancelled' when caller-side abort completed mid-stream
+                                    // 'aborted' when caller-side abort completed mid-stream:
+                                    // usage is then a lower bound, as far as the provider reported it
   toolCalls: undefined              // Array<{ id, name, arguments }> when status === 'tool_use'
 }
 ```
@@ -943,7 +944,7 @@ await model.answer(JSON.stringify({ mode: 'incomplete' }))
 await model.answer(JSON.stringify({ mode: 'tool', name: 'f', args: { x: 1 } }))
 await model.answer(JSON.stringify({ mode: 'hang' }))          // aborts via AbortSignal
 await model.answer(JSON.stringify({ mode: 'crash' }))         // process.exit — isolation demo
-await model.answer(JSON.stringify({ mode: 'cancel_after', tokens: 3 }))
+await model.answer(JSON.stringify({ mode: 'abort_after', tokens: 3 }))
 ```
 
 All modes honor `AbortSignal`. No network, no API key required. Works identically through either integration path.

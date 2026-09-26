@@ -288,7 +288,7 @@ async function uploadFile (filePath, mimeType, ctx) {
 /**
  * Raise an `AbortError` when `signal` is aborted. The gemini
  * adapter's video-load catch block already converts this shape to
- * the standard cancelled terminal via the outer `signal?.aborted`
+ * the standard aborted terminal via the outer `signal?.aborted`
  * check in `run.js`.
  *
  * @param {AbortSignal | undefined} signal

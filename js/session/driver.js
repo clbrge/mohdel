@@ -4,7 +4,7 @@
  * Reads lines from stdin concurrently with running calls:
  *   - Envelope line (no `op` field): queued for sequential dispatch
  *     via `run()`. Events written to stdout as NDJSON.
- *   - Control message `{op:"cancel", callId}`: if it matches the
+ *   - Control message `{op:"abort", callId}`: if it matches the
  *     in-flight call, aborts via AbortController.
  *
  * Single-call-at-a-time per process.
@@ -22,9 +22,9 @@ import { runEmbedding } from './run_embedding.js'
 import { runInfo } from './run_info.js'
 import { setCatalog } from './adapters/_catalog.js'
 
-// Bounded memory for pre-dequeue cancels. Hostile/buggy supervisors
+// Bounded memory for pre-dequeue aborts. Hostile/buggy supervisors
 // spamming random callIds can't grow the set without bound.
-const PRECANCEL_CAP = 128
+const EARLY_ABORT_CAP = 128
 
 /**
  * @param {NodeJS.ReadableStream} stdin
@@ -40,17 +40,17 @@ export async function drive (stdin, stdout) {
   let queueNotify = null
   let stdinClosed = false
   let framingError = null
-  /** Cancel messages received before their envelope was dequeued.
+  /** Abort messages received before their envelope was dequeued.
    *  JS Sets are insertion-ordered, so `values().next()` is the
    *  oldest entry — cheap FIFO eviction at cap. */
-  const precancelled = new Set()
+  const earlyAborted = new Set()
 
-  function recordPrecancel (callId) {
-    if (precancelled.has(callId)) return
-    if (precancelled.size >= PRECANCEL_CAP) {
-      precancelled.delete(precancelled.values().next().value)
+  function recordEarlyAbort (callId) {
+    if (earlyAborted.has(callId)) return
+    if (earlyAborted.size >= EARLY_ABORT_CAP) {
+      earlyAborted.delete(earlyAborted.values().next().value)
     }
-    precancelled.add(callId)
+    earlyAborted.add(callId)
   }
 
   /**
@@ -94,13 +94,13 @@ export async function drive (stdin, stdout) {
       return
     }
 
-    if (obj && typeof obj === 'object' && obj.op === 'cancel') {
+    if (obj && typeof obj === 'object' && obj.op === 'abort') {
       if (currentCall && currentCall.callId === obj.callId) {
         currentCall.controller.abort()
       } else {
-        // Pre-dequeue cancel: remember the callId so the envelope
+        // Pre-dequeue abort: remember the callId so the envelope
         // aborts immediately on dispatch. Honored once then cleared.
-        recordPrecancel(obj.callId)
+        recordEarlyAbort(obj.callId)
       }
       return
     }
@@ -197,7 +197,7 @@ export async function drive (stdin, stdout) {
 
     const envelope = envelopeQueue.shift()
     const controller = new AbortController()
-    if (precancelled.delete(envelope.callId)) controller.abort()
+    if (earlyAborted.delete(envelope.callId)) controller.abort()
     currentCall = { callId: envelope.callId, controller }
 
     try {

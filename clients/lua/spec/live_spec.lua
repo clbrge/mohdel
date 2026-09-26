@@ -41,7 +41,7 @@ if socket_path then
       assert.are.equal('insufficientOutputBudget', result.warning)
     end)
 
-    it('closing mid-stream cancels; the next call still works', function()
+    it('closing mid-stream abandons; the next call still works', function()
       local stream = c:call(envelope({
         outputBudget = 200, prompt = 'Count slowly from 1 to 100, one number per line.',
       }))

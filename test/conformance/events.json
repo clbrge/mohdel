@@ -66,7 +66,7 @@
       "warning": "insufficientOutputBudget"
     }
   },
-  "done-incomplete-cancelled": {
+  "done-incomplete-aborted": {
     "type": "done",
     "result": {
       "status": "incomplete",
@@ -80,7 +80,7 @@
         "first": "1050",
         "end": "1100"
       },
-      "warning": "cancelled"
+      "warning": "aborted"
     }
   },
   "done-completed-with-cache-write": {

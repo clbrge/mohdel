@@ -402,3 +402,35 @@ async fn release_into_a_full_channel_leaves_the_pool_serviceable() {
         .expect("pool still serves after a full-channel release");
     pool.release(again);
 }
+
+/// An `acquire` timed out while its session takes a `set_catalog` write
+/// leaves the session to the pool: the write finishes on its own task and
+/// the next `acquire` gets it, refreshed. The snapshot is large enough
+/// that the write is still in flight when the 1 ms timeout fires.
+#[tokio::test]
+async fn acquire_dropped_mid_refresh_leaves_the_session_to_the_pool() {
+    let (guard, trace) = TraceGuard::new("drop-mid-refresh");
+    let cell: CatalogCell = std::sync::Arc::new(Mutex::new(Some(
+        r#"{"openai/gpt-5":{"inputPrice":1}}"#.to_string(),
+    )));
+    let cfg = fake_session_cfg(&trace, Some(make_source(cell.clone())));
+
+    let pool = SessionPool::new(cfg, 1).await.expect("pool");
+    wait_for_lines(&guard, 1, "initial spawn").await;
+
+    let pad = "x".repeat(8 * 1024 * 1024);
+    *cell.lock().unwrap() = Some(format!(r#"{{"openai/gpt-5":{{"pad":"{pad}"}}}}"#));
+    pool.notify_catalog_changed();
+
+    let abandoned = tokio::time::timeout(Duration::from_millis(1), pool.acquire()).await;
+    assert!(abandoned.is_err(), "the first acquire must be dropped mid-refresh");
+
+    let sess = tokio::time::timeout(Duration::from_secs(5), pool.acquire())
+        .await
+        .expect("the next acquire must not wait out the acquire timeout")
+        .expect("acquire");
+    assert_eq!(sess.catalog_version(), 1, "the session came back refreshed");
+    let lines = wait_for_lines(&guard, 2, "refresh landed").await;
+    assert_eq!(lines, vec!["1", "1"], "one refresh, no respawn");
+    pool.release(sess);
+}

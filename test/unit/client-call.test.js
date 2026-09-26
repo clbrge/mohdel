@@ -191,34 +191,133 @@ describe('client/call — HTTP error paths', () => {
   })
 })
 
-// ---------- Caller abort → cancelled terminal ----------
+// ---------- Caller abort → aborted terminal ----------
 
 describe('client/call — abort', () => {
-  test('abort mid-stream → cancelled done with the relayed partial output, no throw', async () => {
+  const doneLine = (result) => JSON.stringify({ type: 'done', result }) + '\n'
+  const deltaLine = (type, delta) => JSON.stringify({ type: 'delta', delta: { type, delta } }) + '\n'
+  const readBody = (req) => new Promise((resolve) => {
+    let b = ''
+    req.on('data', (c) => { b += c })
+    req.on('end', () => resolve(b))
+  })
+
+  test('abort mid-stream → posts /v1/abort and ends with the gate\'s aborted done, usage kept', async () => {
+    const aborted = {
+      status: 'incomplete',
+      output: 'hel',
+      inputTokens: 7,
+      outputTokens: 2,
+      thinkingTokens: 0,
+      cost: 0.0003,
+      timestamps: { start: '1', first: '2', end: '3' },
+      warning: 'aborted'
+    }
+    let callRes = null
+    let abortRequest = null
+    handler = async (req, res) => {
+      if (req.url === '/v1/abort') {
+        abortRequest = { body: JSON.parse(await readBody(req)), key: req.headers['x-router-key'] }
+        res.writeHead(202)
+        res.end()
+        callRes.end(doneLine(aborted))
+        return
+      }
+      callRes = res
+      res.writeHead(200, { 'content-type': 'application/x-ndjson', 'mohdel-gate': 'g1' })
+      res.write(deltaLine('message', 'hel'))
+      res.write(deltaLine('function_call', '{"a":1}'))
+    }
+
+    const controller = new AbortController()
+    const events = []
+    const options = { socketPath: sockPath, signal: controller.signal, headers: { 'x-router-key': 'k1' } }
+    for await (const ev of call(envelope(), options)) {
+      events.push(ev)
+      if (events.length === 2) controller.abort()
+    }
+    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
+    expect(events.at(-1).result).toEqual(aborted)
+    expect(abortRequest).toEqual({ body: { callId: 'c1', authId: 'a1', gate: 'g1' }, key: 'k1' })
+  })
+
+  test('abort answered CALL_NOT_FOUND → the call had ended; its own terminal arrives', async () => {
+    let callRes = null
     handler = (req, res) => {
-      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
-      res.write(JSON.stringify({ type: 'delta', delta: { type: 'message', delta: 'hel' } }) + '\n')
-      res.write(JSON.stringify({ type: 'delta', delta: { type: 'function_call', delta: '{"a":1}' } }) + '\n')
-      // Never ends on its own: only the client's abort finishes this call.
-      req.on('close', () => res.destroy())
+      if (req.url === '/v1/abort') {
+        res.writeHead(404, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ message: 'no such call in flight', severity: 'warn', retryable: false, type: 'CALL_NOT_FOUND' }))
+        callRes.end(doneLine({
+          status: 'completed',
+          output: 'hello',
+          inputTokens: 1,
+          outputTokens: 1,
+          thinkingTokens: 0,
+          cost: 0,
+          timestamps: { start: '0', first: '0', end: '0' }
+        }))
+        return
+      }
+      callRes = res
+      res.writeHead(200, { 'content-type': 'application/x-ndjson', 'mohdel-gate': 'g1' })
+      res.write(deltaLine('message', 'hello'))
     }
 
     const controller = new AbortController()
     const events = []
     for await (const ev of call(envelope(), { socketPath: sockPath, signal: controller.signal })) {
       events.push(ev)
-      if (events.length === 2) controller.abort()
+      controller.abort()
     }
-    expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
-    const done = events.at(-1)
-    expect(done.result.status).toBe('incomplete')
-    expect(done.result.warning).toBe('cancelled')
-    expect(done.result.output).toBe('hel')
-    expect(done.result.inputTokens).toBe(0)
-    expect(done.result.cost).toBe(0)
+    expect(events.map(e => e.type)).toEqual(['delta', 'done'])
+    expect(events.at(-1).result.status).toBe('completed')
   })
 
-  test('already-aborted signal → cancelled done without connecting', async () => {
+  const refusedAbort = async (callHeaders, abortStatus, abortType) => {
+    let abortPosted = false
+    handler = (req, res) => {
+      if (req.url === '/v1/abort') {
+        abortPosted = true
+        res.writeHead(abortStatus, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ message: 'refused', severity: 'error', retryable: false, type: abortType }))
+        return
+      }
+      res.writeHead(200, { 'content-type': 'application/x-ndjson', ...callHeaders })
+      res.write(deltaLine('message', 'hel'))
+      req.on('close', () => res.destroy())
+    }
+
+    const controller = new AbortController()
+    const events = []
+    try {
+      for await (const ev of call(envelope(), { socketPath: sockPath, signal: controller.signal })) {
+        events.push(ev)
+        controller.abort()
+      }
+      expect.unreachable('should have thrown')
+    } catch (err) {
+      expect(events.map(e => e.type)).toEqual(['delta'])
+      return { type: err.type, abortPosted }
+    }
+  }
+
+  test('abort at a gate that did not stream the call → throws CALL_MISDIRECTED', async () => {
+    const { type } = await refusedAbort({ 'mohdel-gate': 'g1' }, 421, 'CALL_MISDIRECTED')
+    expect(type).toBe('CALL_MISDIRECTED')
+  })
+
+  test('abort refused by a router without the route → throws the refusal', async () => {
+    const { type } = await refusedAbort({ 'mohdel-gate': 'g1' }, 404, 'PROTOCOL_NOT_FOUND')
+    expect(type).toBe('PROTOCOL_NOT_FOUND')
+  })
+
+  test('call response without mohdel-gate → abort throws PROTOCOL_GATE_UNIDENTIFIED, posts nothing', async () => {
+    const { type, abortPosted } = await refusedAbort({}, 202, 'unused')
+    expect(type).toBe('PROTOCOL_GATE_UNIDENTIFIED')
+    expect(abortPosted).toBe(false)
+  })
+
+  test('already-aborted signal → aborted done without connecting', async () => {
     let connected = false
     handler = (_req, res) => {
       connected = true
@@ -231,26 +330,29 @@ describe('client/call — abort', () => {
     const events = await collect(call(envelope(), { socketPath: sockPath, signal: controller.signal }))
     expect(connected).toBe(false)
     expect(events.map(e => e.type)).toEqual(['done'])
-    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.warning).toBe('aborted')
     expect(events[0].result.output).toBe(null)
   })
 
-  test('abort after the terminal arrived → single terminal, no synthesized second one', async () => {
+  test('abort after the terminal arrived → single terminal, no abort posted', async () => {
+    let abortPosted = false
     handler = (req, res) => {
+      if (req.url === '/v1/abort') {
+        abortPosted = true
+        res.writeHead(404, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ message: 'no such call in flight', severity: 'warn', retryable: false, type: 'CALL_NOT_FOUND' }))
+        return
+      }
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
-      res.write(JSON.stringify({
-        type: 'done',
-        result: {
-          status: 'completed',
-          output: 'ok',
-          inputTokens: 1,
-          outputTokens: 1,
-          thinkingTokens: 0,
-          cost: 0,
-          timestamps: { start: '0', first: '0', end: '0' }
-        }
-      }) + '\n')
-      req.on('close', () => res.destroy())
+      res.end(doneLine({
+        status: 'completed',
+        output: 'ok',
+        inputTokens: 1,
+        outputTokens: 1,
+        thinkingTokens: 0,
+        cost: 0,
+        timestamps: { start: '0', first: '0', end: '0' }
+      }))
     }
 
     const controller = new AbortController()
@@ -261,11 +363,12 @@ describe('client/call — abort', () => {
     }
     expect(events.map(e => e.type)).toEqual(['done'])
     expect(events[0].result.status).toBe('completed')
+    expect(abortPosted).toBe(false)
   })
 })
 
 describe('client/call — abort while the response headers are still pending', () => {
-  test('→ cancelled done, no throw', async () => {
+  test('→ aborted done, no throw', async () => {
     handler = (req, res) => {
       // Holds the request without answering; only the client's abort ends it.
       req.on('close', () => res.destroy())
@@ -276,7 +379,7 @@ describe('client/call — abort while the response headers are still pending', (
     const events = await collect(call(envelope(), { socketPath: sockPath, signal: controller.signal }))
     expect(events.map(e => e.type)).toEqual(['done'])
     expect(events[0].result.status).toBe('incomplete')
-    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.warning).toBe('aborted')
     expect(events[0].result.output).toBe(null)
   })
 })

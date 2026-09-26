@@ -278,11 +278,11 @@ describe('gemini video injection', () => {
   // failure tests above + the image adapter equivalent in
   // `session-images.test.js`.
 
-  test('pre-aborted signal yields a cancelled done terminal (not an error)', async () => {
+  test('pre-aborted signal yields an aborted done terminal (not an error)', async () => {
     // loadVideos throws AbortError at the top of its loop before any
     // file ops run, so no tmp file plumbing is needed — the adapter's
-    // signal-aware catch converts the AbortError into a cancelled
-    // terminal, matching every other adapter's cancel semantics.
+    // signal-aware catch converts the AbortError into an aborted
+    // terminal, matching every other adapter's abort semantics.
     const controller = new AbortController()
     controller.abort()
 
@@ -294,7 +294,7 @@ describe('gemini video injection', () => {
     const terminal = events.at(-1)
     expect(terminal.type).toBe('done')
     expect(terminal.result.status).toBe('incomplete')
-    expect(terminal.result.warning).toBe('cancelled')
+    expect(terminal.result.warning).toBe('aborted')
   })
 })
 

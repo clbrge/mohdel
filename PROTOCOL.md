@@ -21,7 +21,7 @@ transport metadata.** The envelope is the answer options flat; the
 terminal `done` event carries the full `AnswerResult`. Transport
 metadata is limited to what a subprocess boundary actually needs:
 `callId` (correlate), `authId` (quota-scope), `auth.key` (provider
-API key), `traceparent` (W3C trace context), and a cancel control
+API key), `traceparent` (W3C trace context), and an abort control
 message.
 
 ## 2. Transport
@@ -237,16 +237,31 @@ If a deployment's threat model includes local process inspection,
 treat each session subprocess as carrying the secret for its full
 lifetime and lock down the host accordingly.
 
-### 3.2 Control: `cancel`
+### 3.2 Control: `abort`
 
 ```json
-{ "op": "cancel", "callId": "<id>" }
+{ "op": "abort", "callId": "<id>" }
 ```
 
 - If `callId` matches the in-flight call, the session **MUST** abort
   it and emit a terminal `done` event with
-  `result.status = 'incomplete'` and `result.warning = 'cancelled'`.
+  `result.status = 'incomplete'` and `result.warning = 'aborted'`.
+  Its usage is a lower bound: what the provider had reported before the
+  cut, priced.
 - Stale or unknown `callId` **MUST** be silently ignored.
+
+Two words for a caller stopping a call:
+
+- **abort** — the caller asks mohdel to stop a call on its side. The
+  session aborts its provider request and reports the usage it had been
+  told so far. The provider is not asked to stop, only disconnected,
+  and bills what it processed; the aborted `done`'s usage is a lower
+  bound.
+- **abandon** — the caller drops the stream. mohdel aborts the call the
+  same way, but the `done` has no reader and is lost.
+
+"Cancel" is reserved for a provider-side cancel, which mohdel does not
+offer.
 
 ### 3.3 One-shot: `info`
 
@@ -318,7 +333,7 @@ caller sets `idleHeartbeatMs` on the envelope. Re-emitted every
 `idleHeartbeatMs` while the silence persists; the timer resets on
 the next real event. Advisory only — mohdel never aborts on its
 own. Consumers decide whether to log, bump a watchdog, or trigger
-an external cancel. Never terminal; further events may follow.
+an external abort. Never terminal; further events may follow.
 
 `idleHeartbeatMs` has a floor of **250 ms**. A positive value below
 it is raised to the floor and the session logs a `warn` naming both
@@ -337,7 +352,7 @@ interface AnswerResult {
   cost:           number                 // USD — single number
   timestamps:     { start: string, first: string, end: string }
                                          // process.hrtime.bigint() as strings (ns)
-  warning?:       string                 // 'insufficientOutputBudget' | 'cancelled' | ...
+  warning?:       string                 // 'insufficientOutputBudget' | 'aborted' | ...
   toolCalls?:     Array<{
     id:        string
     name:      string
@@ -389,14 +404,14 @@ Per envelope:
 |--------------|---------------------------------------------------------|
 | `completed`  | Model finished normally with final output               |
 | `tool_use`   | Model emitted tool calls and expects a round-trip       |
-| `incomplete` | Call was cut short (truncation, safety filter, cancel)  |
+| `incomplete` | Call was cut short (truncation, safety filter, abort)   |
 
 `warning` qualifies `incomplete` status:
 
 | Warning                     | When                                        |
 |-----------------------------|---------------------------------------------|
 | `insufficientOutputBudget`  | Response truncated by output budget         |
-| `cancelled`                 | Call aborted by a cancel control message    |
+| `aborted`                   | Call stopped by an abort (§3.2)             |
 
 Per-provider truncation signals (for adapter implementors):
 - **Anthropic**: `message_delta.stop_reason === 'max_tokens'`
@@ -446,9 +461,9 @@ Frozen at 0.90. Post-release:
 - [ ] Reports `status: 'incomplete'` + `warning: 'insufficientOutputBudget'`
       on output-budget truncation
 - [ ] Reports `status: 'tool_use'` when finishing on tool calls
-- [ ] Honors `{op:'cancel', callId}` — aborts, emits `done` with
-      `warning: 'cancelled'`
-- [ ] Ignores cancel for unknown / stale `callId`
+- [ ] Honors `{op:'abort', callId}` — aborts, emits `done` with
+      `warning: 'aborted'`
+- [ ] Ignores an abort for unknown / stale `callId`
 - [ ] Handles malformed stdin without crashing
 - [ ] Returns to idle between calls
 - [ ] Exits cleanly on stdin EOF
@@ -465,7 +480,8 @@ stdin/stdout framing.
 - **Requests:** `POST /v1/call`, `POST /v1/image`,
   `POST /v1/transcription`, `POST /v1/embed` with
   `Content-Type: application/json` and the envelope (§3.1) as the
-  body; `GET /v1/health` on the admin plane. One request per
+  body; `POST /v1/abort` with `{ callId, authId, gate }`; `GET /v1/health`
+  on the admin plane. One request per
   connection; `Connection: close` is honoured.
 - **`/v1/call` response:** `200 OK`, `Content-Type: application/x-ndjson`,
   `Transfer-Encoding: chunked`. The body is the §4 event stream, one
@@ -473,7 +489,9 @@ stdin/stdout framing.
   boundaries carry no meaning: de-chunk, then split on `\n` only (§2
   framing rules and the 16 MiB per-line cap apply). Failures raised by
   the session arrive inside the stream as a terminal `error` event
-  under a `200` (e.g. `SESSION_UNKNOWN_MODEL`).
+  under a `200` (e.g. `SESSION_UNKNOWN_MODEL`). A gate with a session
+  pool names itself in a `mohdel-gate` header: an opaque token an
+  abort of this call must carry.
 - **`/v1/image`, `/v1/transcription`, `/v1/embed`, `/v1/health` responses:**
   `200 OK`, `Content-Type: application/json`, `Content-Length` set;
   the body is an `ImageResult`, a `TranscriptionResult`, an
@@ -483,9 +501,22 @@ stdin/stdout framing.
   `413`, `503` (`SESSION_POOL_BUSY`), `500`. A body that does not
   parse as a `TypedError` is reported as `PROTOCOL_HTTP_ERROR`,
   retryable for 5xx.
-- **Cancel:** close the connection. The gate infers the cancel and the
-  session finishes with `done` + `warning: "cancelled"` upstream; the
-  closed client receives nothing further.
+- **Abort:** `POST /v1/abort` with the `callId` and `authId` of an
+  in-flight `/v1/call`, and `gate`, the `mohdel-gate` of its
+  response. `202` with an empty body: the gate sends the session
+  `abort` (§3.2), and the call's own stream ends with the session's
+  aborted `done`, which the client keeps reading. The wait for that
+  `done` has no limit of its own; a client that stops waiting abandons
+  the call. `404` (`CALL_NOT_FOUND`): this gate has no such call in
+  flight; for the ids of a call it streamed, its terminal was already
+  sent, and the client reads on to it. `421` (`CALL_MISDIRECTED`): the
+  abort reached a gate that did not stream the call; nothing was
+  aborted, and the client reports it. A `/v1/call` response without
+  `mohdel-gate` cannot be aborted; the client reports
+  `PROTOCOL_GATE_UNIDENTIFIED`.
+- **Abandon:** close the connection. The gate aborts the call the same
+  way, but its `done` has no reader and is lost; a client that
+  abandons has no usage to report.
 - **Non-events:** a line that is not one of the four §4 events is a
   framing violation; the client reports `PROTOCOL_INVALID_EVENT` and
   closes.

@@ -348,7 +348,7 @@ let test_truncated_chunked_body () =
   Alcotest.check err_kind "kind" (Some "PROTOCOL_HTTP_ERROR")
     (kind_of (get_err (collect c (envelope ()))))
 
-let test_close_cancels () =
+let test_close_abandons () =
   let c, _, closed = client (fixture "call-200-stream.raw") in
   let stream = get (call c (envelope ())) in
   (match next stream with
@@ -526,7 +526,7 @@ let () =
           case "non-JSON non-200 is PROTOCOL_HTTP_ERROR" test_non_json_rejection;
           case "non-event line is PROTOCOL_INVALID_EVENT" test_non_event_line;
           case "truncated chunked body" test_truncated_chunked_body;
-          case "close cancels" test_close_cancels;
+          case "close abandons" test_close_abandons;
           case "empty response is NET_ERROR" test_empty_response;
           case "image" test_image;
           case "image malformed" test_image_malformed;

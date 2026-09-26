@@ -24,8 +24,10 @@
 //! # Ok(()) }
 //! ```
 //!
-//! Dropping the stream before the terminal event closes the connection,
-//! which is how a caller cancels an in-flight call.
+//! [`Client::abort`] with [`Call::abort_request`] aborts an in-flight call:
+//! its stream stays open and ends with the aborted `done`, carrying the
+//! usage reported before the cut. Dropping the stream instead abandons the
+//! call, and that `done` with it.
 
 pub mod coalesce;
 pub mod wire;
@@ -33,6 +35,7 @@ pub mod wire;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -43,8 +46,8 @@ use tokio::net::UnixStream;
 pub use mohdel_protocol as protocol;
 pub use coalesce::{coalesce, BufferOpts};
 use mohdel_protocol::{
-    AnswerResult, CallEnvelope, EmbedEnvelope, EmbedResult, Event, ImageEnvelope, ImageResult,
-    Severity, TranscriptionEnvelope, TranscriptionResult, TypedError,
+    AbortRequest, AnswerResult, CallEnvelope, EmbedEnvelope, EmbedResult, Event, ImageEnvelope,
+    ImageResult, Severity, TranscriptionEnvelope, TranscriptionResult, TypedError, GATE_HEADER,
 };
 
 use wire::{Body, Framer, Head, WireError};
@@ -52,9 +55,40 @@ use wire::{Body, Framer, Head, WireError};
 /// A byte reader for one response; dropping it closes the connection.
 pub type Reader = Box<dyn AsyncRead + Send + Unpin>;
 
-/// The events of one call. Dropping it before the terminal event closes
-/// the connection, which is how a caller cancels.
 pub type EventStream = Pin<Box<dyn Stream<Item = Result<Event, TypedError>> + Send>>;
+
+/// The events of one call. Dropping it before the terminal event closes
+/// the connection and abandons the call; see [`Client::abort`].
+pub struct Call {
+    events: EventStream,
+    call_id: String,
+    auth_id: String,
+    gate: Option<String>,
+}
+
+impl Call {
+    /// What [`Client::abort`] sends for this call. `PROTOCOL_GATE_UNIDENTIFIED`
+    /// when the gate's response did not name the gate.
+    pub fn abort_request(&self) -> Result<AbortRequest, TypedError> {
+        let Some(gate) = self.gate.clone() else {
+            return Err(typed(
+                "PROTOCOL_GATE_UNIDENTIFIED",
+                &format!("the /v1/call response carries no {GATE_HEADER} header"),
+                None,
+                false,
+            ));
+        };
+        Ok(AbortRequest { call_id: self.call_id.clone(), auth_id: self.auth_id.clone(), gate })
+    }
+}
+
+impl Stream for Call {
+    type Item = Result<Event, TypedError>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.get_mut().events.as_mut().poll_next(cx)
+    }
+}
 
 /// Opens a connection to the socket path and sends the request bytes.
 /// The default is a unix socket; tests substitute a replay.
@@ -132,8 +166,8 @@ impl Client {
     }
 
     /// Streams the events of one call. The last item is the `done` or
-    /// `error` event; dropping the stream earlier cancels the call.
-    pub async fn call(&self, envelope: &CallEnvelope) -> Result<EventStream, TypedError> {
+    /// `error` event; dropping the stream earlier abandons the call.
+    pub async fn call(&self, envelope: &CallEnvelope) -> Result<Call, TypedError> {
         let body = serde_json::to_vec(envelope).map_err(|e| {
             typed("PROTOCOL_INVALID_ENVELOPE", "envelope does not serialize", Some(e.to_string()), false)
         })?;
@@ -150,9 +184,14 @@ impl Client {
             queue: std::collections::VecDeque::new(),
             finished: false,
         };
-        Ok(Box::pin(futures::stream::unfold(state, |mut state| async move {
-            state.next().await.map(|item| (item, state))
-        })))
+        Ok(Call {
+            events: Box::pin(futures::stream::unfold(state, |mut state| async move {
+                state.next().await.map(|item| (item, state))
+            })),
+            call_id: envelope.call_id.clone(),
+            auth_id: envelope.auth_id.clone(),
+            gate: head.headers.get(GATE_HEADER).cloned(),
+        })
     }
 
     /// Drains one call: the `done` result, or the `error` event as the error.
@@ -200,6 +239,23 @@ impl Client {
         })?;
         self.fetch_json(&self.socket, "POST", wire::EMBED_PATH, Some(&body), "thin-gate returned a malformed EmbedResult")
             .await
+    }
+
+    /// Aborts the call named by `request`, from [`Call::abort_request`].
+    /// Keep reading its stream: it ends with the aborted `done`.
+    /// `CALL_NOT_FOUND` when the call's terminal was already sent;
+    /// `CALL_MISDIRECTED` when the request reached a gate that did not
+    /// stream the call.
+    pub async fn abort(&self, request: &AbortRequest) -> Result<(), TypedError> {
+        let body = serde_json::to_vec(request).map_err(|e| {
+            typed("PROTOCOL_INVALID_ENVELOPE", "abort request does not serialize", Some(e.to_string()), false)
+        })?;
+        let (reader, head, rest) = self.open(&self.socket, "POST", wire::ABORT_PATH, Some(&body)).await?;
+        let bytes = read_all(reader, &head, rest).await?;
+        if head.status != 202 {
+            return Err(rejection(head.status, &bytes));
+        }
+        Ok(())
     }
 
     pub async fn health(&self) -> Result<Health, TypedError> {

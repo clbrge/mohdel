@@ -22,7 +22,7 @@ import { classifyProviderError } from './_errors.js'
 import { hasImagePart, loadImage, loadImageParts } from './_images.js'
 import { isTrustedMedia, mediaError, mediaScheme } from './_media.js'
 import { costFor } from './_pricing.js'
-import { cancelledDone } from './_cancelled.js'
+import { abortedDone } from './_aborted.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 import {
   STATUS_COMPLETED,
@@ -116,7 +116,7 @@ export async function * runChatCompletions (envelope, client, config, deps = {})
     response = await client.chat.completions.create(args, { signal: deps.signal })
   } catch (e) {
     if (deps.signal?.aborted) {
-      yield cancelledDone(start, null, envelope, '', 0, 0)
+      yield abortedDone(start, null, envelope, '', 0, 0)
       return
     }
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] request failed`)
@@ -182,7 +182,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     stream = await client.chat.completions.create(args, { signal: deps.signal })
   } catch (e) {
     if (deps.signal?.aborted) {
-      yield cancelledDone(start, null, envelope, '', 0, 0)
+      yield abortedDone(start, null, envelope, '', 0, 0)
       return
     }
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] request failed`)
@@ -193,7 +193,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
   try {
     for await (const chunk of stream) {
       if (deps.signal?.aborted) {
-        yield cancelledDone(start, first, envelope, contentParts.join(''), 0, 0)
+        yield abortedDone(start, first, envelope, contentParts.join(''), 0, 0)
         return
       }
       const choice = chunk.choices?.[0]
@@ -249,7 +249,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     }
   } catch (e) {
     if (deps.signal?.aborted) {
-      yield cancelledDone(start, first, envelope, contentParts.join(''), 0, 0)
+      yield abortedDone(start, first, envelope, contentParts.join(''), 0, 0)
       return
     }
     deps.log?.warn({ err: e }, `[mohdel:${config.provider}] stream failed`)
@@ -258,7 +258,7 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
   }
 
   if (deps.signal?.aborted) {
-    yield cancelledDone(start, first, envelope, contentParts.join(''), 0, 0)
+    yield abortedDone(start, first, envelope, contentParts.join(''), 0, 0)
     return
   }
 

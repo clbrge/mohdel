@@ -14,7 +14,7 @@
  *     skipped for non-retryable provider errors). Span ends with
  *     `gen_ai.*` + `mohdel.*` attributes.
  *
- * Terminal events are `done` (success / incomplete / cancelled /
+ * Terminal events are `done` (success / incomplete / aborted /
  * tool_use) and `error`. The adapter is expected to emit exactly
  * one terminal per call. If it returns without one, `run()`
  * synthesizes an `error`.
@@ -37,7 +37,7 @@ import {
   endSpanError,
   remoteParentFromTraceparent
 } from './_tracing.js'
-import { STATUS_INCOMPLETE, WARNING_CANCELLED } from '#core/status.js'
+import { STATUS_INCOMPLETE, WARNING_ABORTED } from '#core/status.js'
 
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
@@ -227,12 +227,12 @@ export async function * run (envelope, {
         sawDelta = true
       } else if (ev.type === 'done') {
         sawTerminal = true
-        // A cancelled terminal is the caller's action, not evidence
+        // An aborted terminal is the caller's action, not evidence
         // of provider recovery — don't wipe an accumulated failure
         // streak. Every other `done` state (completed /
         // incomplete-budget / tool_use) IS a genuine provider-side
         // success and resets the streak.
-        if (ev.result?.warning !== WARNING_CANCELLED) {
+        if (ev.result?.warning !== WARNING_ABORTED) {
           cooldown.reset(provider)
         }
         if (tpmLimit != null && ev.result) {
@@ -267,7 +267,7 @@ export async function * run (envelope, {
     }
   } catch (e) {
     if (signal?.aborted && !sawTerminal) {
-      const fallback = cancelledFallback()
+      const fallback = abortedFallback()
       if (fallback.result) fallback.result.maxInterFrameMs = maxInterFrameMs
       finalizeSpanOk(span, fallback.result, sawDelta, maxInterFrameMs)
       yield fallback
@@ -281,7 +281,7 @@ export async function * run (envelope, {
 
   if (!sawTerminal) {
     if (signal?.aborted) {
-      const fallback = cancelledFallback()
+      const fallback = abortedFallback()
       if (fallback.result) fallback.result.maxInterFrameMs = maxInterFrameMs
       finalizeSpanOk(span, fallback.result, sawDelta, maxInterFrameMs)
       yield fallback
@@ -561,7 +561,7 @@ function recordFailureFromError (cooldown, provider, err) {
 }
 
 /** @returns {import('#core/events.js').DoneEvent} */
-function cancelledFallback () {
+function abortedFallback () {
   const now = String(process.hrtime.bigint())
   return {
     type: 'done',
@@ -573,7 +573,7 @@ function cancelledFallback () {
       thinkingTokens: 0,
       cost: 0,
       timestamps: { start: now, first: now, end: now },
-      warning: WARNING_CANCELLED
+      warning: WARNING_ABORTED
     }
   }
 }

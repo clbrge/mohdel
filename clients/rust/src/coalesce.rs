@@ -8,7 +8,7 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use mohdel_protocol::{DeltaChunk, DeltaKind, Event, TypedError};
 
 use crate::EventStream;
@@ -30,10 +30,13 @@ impl Default for BufferOpts {
 }
 
 /// Wraps a call's events; dropping the result drops the call's stream,
-/// so cancelling works as before.
-pub fn coalesce(events: EventStream, opts: BufferOpts) -> EventStream {
+/// which abandons the call.
+pub fn coalesce(
+    events: impl Stream<Item = Result<Event, TypedError>> + Send + 'static,
+    opts: BufferOpts,
+) -> EventStream {
     let state = Coalescer {
-        inner: events,
+        inner: Box::pin(events),
         opts,
         buffer: String::new(),
         units: 0,

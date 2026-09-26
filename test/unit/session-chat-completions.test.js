@@ -306,7 +306,7 @@ describe('reasoning_content capture + roundtrip', () => {
     expect(done.result.output).toBe('visible')
   })
 
-  test('streaming: abort mid-stream → done with warning cancelled, not a clean completion', async () => {
+  test('streaming: abort mid-stream → done with warning aborted, not a clean completion', async () => {
     const controller = new AbortController()
     const chunks = [
       { choices: [{ delta: { content: 'one ' } }] },
@@ -335,12 +335,12 @@ describe('reasoning_content capture + roundtrip', () => {
     const done = events.at(-1)
     expect(done.type).toBe('done')
     expect(done.result.status).toBe('incomplete')
-    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.warning).toBe('aborted')
     expect(done.result.output).toBe('one two ')
     expect(events.some(e => e.type === 'error')).toBe(false)
   })
 
-  test('abort before first byte → done with warning cancelled, not an error event', async () => {
+  test('abort before first byte → done with warning aborted, not an error event', async () => {
     const controller = new AbortController()
     controller.abort()
     const client = {
@@ -353,7 +353,7 @@ describe('reasoning_content capture + roundtrip', () => {
     const events = await collect(fireworks(envelope('fireworks', 'accounts/fireworks/models/k2p6'), { client, signal: controller.signal }))
     const done = events.at(-1)
     expect(done.type).toBe('done')
-    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.warning).toBe('aborted')
     expect(done.result.output).toBe(null)
   })
 
@@ -734,7 +734,7 @@ describe('qwen adapter', () => {
 //
 // Each wrapper must forward deps.signal as requestOptions (second arg) to the
 // SDK's chat.completions.create. Without it, AbortController.abort() can't
-// cancel an in-flight HTTP request — it only stops event iteration.
+// abort an in-flight HTTP request — it only stops event iteration.
 
 describe('signal propagation', () => {
   test('groq forwards deps.signal to SDK', async () => {
@@ -883,11 +883,11 @@ describe('chat-completions runner — abort checkpoints', () => {
       if (events.filter(e => e.type === 'delta').length === 2) controller.abort()
     }
     expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
-    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.warning).toBe('aborted')
     expect(events.at(-1).result.output).toBe('one two ')
   })
 
-  test('stream catch: an SDK stream that throws after abort → cancelled done, no error event', async () => {
+  test('stream catch: an SDK stream that throws after abort → aborted done, no error event', async () => {
     const controller = new AbortController()
     const events = []
     for await (const ev of fireworks(envelope('fireworks', 'accounts/fireworks/models/k2p6'), { client: streamingClient(chunks, { throwOnAbort: true }), signal: controller.signal })) {
@@ -896,11 +896,11 @@ describe('chat-completions runner — abort checkpoints', () => {
     }
     expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
     expect(events.at(-1).result.status).toBe('incomplete')
-    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.warning).toBe('aborted')
     expect(events.at(-1).result.output).toBe('one two ')
   })
 
-  test('non-streaming path: request throwing under an aborted signal → cancelled done', async () => {
+  test('non-streaming path: request throwing under an aborted signal → aborted done', async () => {
     const controller = new AbortController()
     controller.abort()
     const client = {
@@ -912,7 +912,7 @@ describe('chat-completions runner — abort checkpoints', () => {
     }
     const events = await collect(deepseek(envelope('deepseek', 'deepseek-v4-flash'), { client, signal: controller.signal }))
     expect(events.map(e => e.type)).toEqual(['done'])
-    expect(events[0].result.warning).toBe('cancelled')
+    expect(events[0].result.warning).toBe('aborted')
     expect(events[0].result.output).toBe(null)
   })
 })

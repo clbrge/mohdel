@@ -25,7 +25,7 @@ import {
   WARNING_INSUFFICIENT_OUTPUT_BUDGET
 } from '#core/status.js'
 
-import { cancelledDone } from './_cancelled.js'
+import { abortedDone } from './_aborted.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { loadImageParts, loadImages } from './_images.js'
@@ -80,7 +80,7 @@ export async function * gemini (envelope, deps = {}) {
       if (parts.length) injectParts(contents, parts)
     } catch (e) {
       if (signal?.aborted) {
-        yield cancelledDone(start, first, envelope, '', 0, 0)
+        yield abortedDone(start, first, envelope, '', 0, 0)
         return
       }
       log?.warn({ err: e }, '[mohdel:gemini] video load failed')
@@ -98,7 +98,7 @@ export async function * gemini (envelope, deps = {}) {
   // from `params.config.abortSignal` — a second-arg `{signal}` is
   // dropped (verified against the compiled SDK at
   // node_modules/@google/genai/dist/index.cjs). Merge into config
-  // so cancellation actually tears down the HTTPS request, not just
+  // so an abort actually tears down the HTTPS request, not just
   // the local loop.
   if (signal) {
     request.config = { ...(request.config ?? {}), abortSignal: signal }
@@ -122,7 +122,7 @@ export async function * gemini (envelope, deps = {}) {
 
     for await (const chunk of stream) {
       if (signal?.aborted) {
-        yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+        yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
         return
       }
 
@@ -178,7 +178,7 @@ export async function * gemini (envelope, deps = {}) {
     }
   } catch (e) {
     if (signal?.aborted) {
-      yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+      yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
       return
     }
     log?.warn({ err: e }, '[mohdel:gemini] stream failed')
@@ -187,7 +187,7 @@ export async function * gemini (envelope, deps = {}) {
   }
 
   if (signal?.aborted) {
-    yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+    yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
     return
   }
 

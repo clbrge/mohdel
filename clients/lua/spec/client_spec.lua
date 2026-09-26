@@ -75,7 +75,7 @@ describe('call', function()
     assert.is_true(t.last_source.closed)
   end)
 
-  it('close() before the terminal event closes the socket (cancel)', function()
+  it('close() before the terminal event closes the socket (abandon)', function()
     local c, t = client(H.fixture('call-200-stream.raw'))
     local stream = c:call(ENVELOPE)
     assert.are.equal('delta', stream:next().type)

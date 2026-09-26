@@ -24,7 +24,7 @@ import {
   WARNING_INSUFFICIENT_OUTPUT_BUDGET
 } from '#core/status.js'
 
-import { cancelledDone } from './_cancelled.js'
+import { abortedDone } from './_aborted.js'
 import { getSpec } from './_catalog.js'
 import { classifyProviderError } from './_errors.js'
 import { hasImagePart, loadImageParts, loadImages } from './_images.js'
@@ -58,7 +58,7 @@ import { streamingDispatcher } from './_dispatcher.js'
  *
  * **Cost impact:** provably zero when `thinkingPrice == outputPrice`
  * (true for every Anthropic entry in the curated catalog today) —
- * the heuristic error cancels in `cost = i*ip + o*op + t*tp` because
+ * the heuristic error drops out of `cost = i*ip + o*op + t*tp` because
  * `o*op + t*op = (o+t)*op = totalOutput*op`. If a catalog maintainer
  * ever sets asymmetric Anthropic pricing, cost drifts by
  * `estimate_error × (thinkingPrice − outputPrice)` — that's a
@@ -134,7 +134,7 @@ export async function * anthropic (envelope, deps = {}) {
 
     for await (const event of stream) {
       if (signal?.aborted) {
-        yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
+        yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
         return
       }
       switch (event.type) {
@@ -208,7 +208,7 @@ export async function * anthropic (envelope, deps = {}) {
     }
   } catch (e) {
     if (signal?.aborted) {
-      yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
+      yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
       return
     }
     log?.warn({ err: e }, '[mohdel:anthropic] stream failed')
@@ -217,7 +217,7 @@ export async function * anthropic (envelope, deps = {}) {
   }
 
   if (signal?.aborted) {
-    yield cancelledDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
+    yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
     return
   }
 

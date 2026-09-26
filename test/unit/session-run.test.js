@@ -77,7 +77,7 @@ describe('session/run', () => {
     expect(events[0].error.message).toContain('provider exploded')
   })
 
-  test('adapter that throws with aborted signal yields cancelled done', async () => {
+  test('adapter that throws with aborted signal yields aborted done', async () => {
     const throwing = async function * () {
       throw new Error('aborted')
     }
@@ -88,7 +88,7 @@ describe('session/run', () => {
       signal: controller.signal
     }))
     expect(events.at(-1).type).toBe('done')
-    expect(events.at(-1).result.warning).toBe('cancelled')
+    expect(events.at(-1).result.warning).toBe('aborted')
   })
 
   test('adapter returning without terminal + no abort yields SESSION_ADAPTER_NO_TERMINAL', async () => {

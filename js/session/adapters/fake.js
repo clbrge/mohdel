@@ -18,11 +18,11 @@
  * | `incomplete`  | `warning`                      | `done` with status=incomplete + warning              |
  * | `error`       | `type`, `message`, `retryable` | yield typed error event                              |
  * | `hang`        | –                              | never emits a terminal (caller aborts via signal)    |
- * | `cancel_after`| `tokens`                       | emit N deltas then wait for `signal.aborted`         |
+ * | `abort_after`| `tokens`                       | emit N deltas then wait for `signal.aborted`         |
  * | `crash`       | `code`                         | `process.exit(code\|1)` — kills whichever process is running the adapter. Used by the isolation benchmark to demonstrate that via-gate the crash stays in the session subprocess, in-process it takes down the caller. |
  *
  * Every mode honors `deps.signal`: when aborted mid-stream, emits a
- * `cancelled` done event. That keeps consumer behavior uniform with
+ * `aborted` done event. That keeps consumer behavior uniform with
  * the real provider adapters.
  *
  * @module session/adapters/fake
@@ -35,7 +35,7 @@ import {
   WARNING_INSUFFICIENT_OUTPUT_BUDGET
 } from '#core/status.js'
 
-import { cancelledDone } from './_cancelled.js'
+import { abortedDone } from './_aborted.js'
 
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
@@ -63,7 +63,7 @@ export async function * fake (envelope, deps = {}) {
 
     case 'hang':
       await waitForAbort(signal)
-      yield cancelledDone(start, first, envelope, '', 0, 0)
+      yield abortedDone(start, first, envelope, '', 0, 0)
       return
 
     case 'crash': {
@@ -120,7 +120,7 @@ export async function * fake (envelope, deps = {}) {
       let output = ''
       for (let i = 0; i < total; i++) {
         if (signal?.aborted) {
-          yield cancelledDone(start, first, envelope, output, approxTokens(output), approxTokens(output))
+          yield abortedDone(start, first, envelope, output, approxTokens(output), approxTokens(output))
           return
         }
         if (first === null) first = String(process.hrtime.bigint())
@@ -130,7 +130,7 @@ export async function * fake (envelope, deps = {}) {
         if (delayMs > 0) {
           await sleep(delayMs, signal)
           if (signal?.aborted) {
-            yield cancelledDone(start, first, envelope, output, approxTokens(output), approxTokens(output))
+            yield abortedDone(start, first, envelope, output, approxTokens(output), approxTokens(output))
             return
           }
         }
@@ -145,7 +145,7 @@ export async function * fake (envelope, deps = {}) {
       return
     }
 
-    case 'cancel_after': {
+    case 'abort_after': {
       const total = clampPositive(spec.tokens, 3)
       let output = ''
       for (let i = 0; i < total; i++) {
@@ -155,7 +155,7 @@ export async function * fake (envelope, deps = {}) {
         yield { type: 'delta', delta: { type: 'message', delta: chunk } }
       }
       await waitForAbort(signal)
-      yield cancelledDone(start, first, envelope, output, approxTokens(output), approxTokens(output))
+      yield abortedDone(start, first, envelope, output, approxTokens(output), approxTokens(output))
       return
     }
 

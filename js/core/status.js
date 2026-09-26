@@ -5,7 +5,7 @@
  *   - `completed`  — the call finished normally.
  *   - `tool_use`   — the model emitted tool calls; the caller is
  *                    expected to round-trip results back.
- *   - `incomplete` — the call was cut short (budget, cancel, policy).
+ *   - `incomplete` — the call was cut short (budget, abort, policy).
  *
  * Rust mirror: `rust/thin-gate/src/protocol.rs::Status`.
  *
@@ -18,13 +18,13 @@
  * Warning values emitted on `AnswerResult.warning` when status is
  * `incomplete`:
  *   - `insufficientOutputBudget` — the model hit `max_tokens`.
- *   - `cancelled` — the call was aborted via a cancel control
+ *   - `aborted` — the call was aborted via an abort control
  *     message or `AbortSignal`.
  *
  * Additive: future releases may add new warning strings; consumers
  * should treat unknown warnings as pass-through metadata.
  *
- * @typedef {('insufficientOutputBudget'|'cancelled'|string)} Warning
+ * @typedef {('insufficientOutputBudget'|'aborted'|string)} Warning
  */
 
 export const STATUS_COMPLETED = 'completed'
@@ -37,4 +37,4 @@ export const STATUSES = Object.freeze([
 ])
 
 export const WARNING_INSUFFICIENT_OUTPUT_BUDGET = 'insufficientOutputBudget'
-export const WARNING_CANCELLED = 'cancelled'
+export const WARNING_ABORTED = 'aborted'

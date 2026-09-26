@@ -77,7 +77,7 @@ pub fn live_budget_incomplete_test() {
   }
 }
 
-pub fn live_stop_cancels_then_next_call_works_test() {
+pub fn live_stop_abandons_then_next_call_works_test() {
   case live() {
     Error(_) -> Nil
     Ok(#(client, model)) -> {

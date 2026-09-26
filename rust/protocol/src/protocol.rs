@@ -71,7 +71,7 @@ pub struct CallEnvelope {
     /// `idle_heartbeat_ms` of adapter silence (no delta / done /
     /// error). Advisory only — mohdel never aborts on its own;
     /// consumers decide whether to log, bump a watchdog, or trigger
-    /// an external cancel. Omitting the field disables the heartbeat.
+    /// an external abort. Omitting the field disables the heartbeat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_heartbeat_ms: Option<u32>,
 
@@ -608,6 +608,23 @@ pub struct EmbedResult {
 #[serde(rename_all = "snake_case")]
 pub enum EmbedStatus {
     Completed,
+}
+
+// ---------- AbortRequest (gate HTTP only) ----------
+//
+// Body of `POST /v1/abort`. The aborted call's own stream carries the
+// outcome: the session's aborted `done`. `gate` echoes the `GATE_HEADER`
+// of the call's `/v1/call` response, so a gate that did not stream the
+// call refuses the abort instead of reporting it ended.
+
+pub const GATE_HEADER: &str = "mohdel-gate";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AbortRequest {
+    pub call_id: String,
+    pub auth_id: String,
+    pub gate: String,
 }
 
 impl std::fmt::Display for TypedError {

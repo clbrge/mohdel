@@ -12,8 +12,8 @@ Each provider runs three checks:
 2. **outputBudget truncation** — small budget + demanding prompt
    produces `status: 'incomplete'` + `warning: 'insufficientOutputBudget'`
    (the mohdel status contract).
-3. **cancel mid-stream** (streaming only) — `AbortSignal` reaches the
-   SDK and the `done` event carries `warning: 'cancelled'`.
+3. **abort mid-stream** (streaming only) — `AbortSignal` reaches the
+   SDK and the `done` event carries `warning: 'aborted'`.
 
 ## Running
 
@@ -39,7 +39,7 @@ fireworks, openrouter, cerebras, deepseek, groq, mistral, novita.**
 
 ## Cost
 
-Each happy-path and cancel test makes one real API call to a cheap
+Each happy-path and abort test makes one real API call to a cheap
 model. The truncation test is capped at ~16 output tokens. A full
 11-provider run is a few cents. Don't loop this in CI without
 thinking about it.

@@ -24,8 +24,8 @@ pub type Client {
   Client(socket: String, admin_socket: Option(String), transport: Transport)
 }
 
-/// What the event callback wants next. `Stop` closes the connection,
-/// which is how a caller cancels an in-flight call.
+/// What the event callback wants next. `Stop` closes the connection and
+/// abandons the call: the gate aborts it and its usage is lost.
 pub type Next {
   Continue
   Stop

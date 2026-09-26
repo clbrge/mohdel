@@ -58,11 +58,25 @@ describe('requestUnix abort wiring', () => {
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 
-  test('aborting mid-stream still destroys the request', async () => {
+  test('aborting before the response headers destroys the request', async () => {
+    const socketPath = await listen(() => {})
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 20)
+
+    await expect(requestUnix({
+      socketPath,
+      path: '/v1/call',
+      method: 'POST',
+      body: {},
+      signal: controller.signal
+    })).rejects.toThrow('aborted')
+  })
+
+  test('aborting after the response headers leaves the body to the caller', async () => {
     const socketPath = await listen((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
       res.write('{"type":"delta"}\n')
-      // Never ends: only an abort can finish this response.
+      setTimeout(() => res.end('{"type":"done"}\n'), 50)
     })
     const controller = new AbortController()
 
@@ -74,8 +88,9 @@ describe('requestUnix abort wiring', () => {
       signal: controller.signal
     })
 
-    setTimeout(() => controller.abort(), 20)
-    await expect(drain(res)).rejects.toThrow()
+    controller.abort()
+    expect(await drain(res)).toBe('{"type":"delta"}\n{"type":"done"}\n')
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 
   test('an already-aborted signal rejects before connecting', async () => {

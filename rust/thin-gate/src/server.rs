@@ -13,6 +13,8 @@
 //!   - Post-dispatch: `done` resets cooldown and records token usage;
 //!     adapter error events feed `recordFailure` (immediate for
 //!     `AUTH_INVALID`).
+//!   - `POST /v1/abort` — aborts an in-flight `/v1/call`, whose own
+//!     stream then ends with the session's aborted `done`.
 //!   - anything else → 404 + `TypedError`.
 //!
 //! **Admin plane** (`serve_admin`): `GET /v1/health`.
@@ -33,6 +35,7 @@ use http_body_util::{BodyExt, Full, LengthLimitError, Limited, StreamBody};
 use hyper::body::{Frame, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
+use hyper::header::HeaderValue;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use serde::{Deserialize, Serialize};
@@ -46,11 +49,11 @@ use crate::enforcer::{cooldown_key, Enforcer, Limits};
 use crate::hooks::{AuthPolicy, QuotaPolicy, QuotaSpec, RequireInlineAuth, RoutePolicy};
 use crate::metrics;
 use crate::protocol::{
-    AnswerResult, Auth, CallEnvelope, DeltaChunk, DeltaKind, EmbedEnvelope, EmbedResult, Event,
-    ImageEnvelope, ImageResult, Severity, Status, TranscriptionEnvelope, TranscriptionResult,
-    TypedError,
+    AbortRequest, AnswerResult, Auth, CallEnvelope, DeltaChunk, DeltaKind, EmbedEnvelope,
+    EmbedResult, Event, ImageEnvelope, ImageResult, Severity, Status, TranscriptionEnvelope,
+    TranscriptionResult, TypedError, GATE_HEADER,
 };
-use crate::session_pool::{AcquireError, PooledSession, SessionPool};
+use crate::session_pool::{write_abort, AcquireError, CallAbort, PooledSession, SessionPool};
 
 pub type Body = BoxBody<Bytes, Infallible>;
 
@@ -248,6 +251,8 @@ async fn handle_data(req: Request<Incoming>, state: Arc<GateState>) -> Response<
         handle_transcription(req, state).await
     } else if method == Method::POST && path == "/v1/embed" {
         handle_embed(req, state).await
+    } else if method == Method::POST && path == "/v1/abort" {
+        handle_abort(req, state).await
     } else {
         not_found_response(&method, &path)
     }
@@ -286,28 +291,25 @@ pub(crate) const MAX_NDJSON_LINE_BYTES: usize = 16 * 1024 * 1024;
 /// this directly; the default `serve_data_with_state` uses it via
 /// `handle_data`.
 pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    let mut response = call_response(req, state.clone()).await;
+    if let Some(pool) = &state.pool {
+        response.headers_mut().insert(
+            GATE_HEADER,
+            HeaderValue::from_str(pool.instance()).expect("instance id is hex"),
+        );
+    }
+    response
+}
+
+async fn call_response(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
     // We fully buffer the body before parsing. Moot in practice
     // because images/videos travel as `fileUri` references (not
     // inline payloads), so the envelope is small. Pipelining
     // body-read with policy load would shave a few ms on large
     // inline payloads but isn't worth the restructuring cost.
-    let body = match Limited::new(req.into_body(), MAX_CALL_BODY_BYTES).collect().await {
-        Ok(b) => b.to_bytes(),
-        Err(e) => {
-            let too_large = e.downcast_ref::<LengthLimitError>().is_some();
-            return typed_error_response(
-                if too_large { StatusCode::PAYLOAD_TOO_LARGE } else { StatusCode::BAD_REQUEST },
-                Severity::Error,
-                if too_large {
-                    "request body exceeds maximum size"
-                } else {
-                    "failed to read request body"
-                },
-                &format!("{e}"),
-                if too_large { "PROTOCOL_PAYLOAD_TOO_LARGE" } else { "PROTOCOL_READ_BODY" },
-                false,
-            );
-        }
+    let body = match read_body(req, MAX_CALL_BODY_BYTES).await {
+        Ok(b) => b,
+        Err(refused) => return refused,
     };
 
     let mut envelope: CallEnvelope = match serde_json::from_slice::<CallEnvelope>(&body) {
@@ -394,6 +396,76 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
     match &state.pool {
         Some(pool) => dispatch_via_pool(pool.clone(), &envelope, spec, state.enforcer.clone()).await,
         None => synthetic_response(&envelope, spec, state.enforcer.clone()),
+    }
+}
+
+async fn read_body(req: Request<Incoming>, cap: usize) -> Result<Bytes, Response<Body>> {
+    match Limited::new(req.into_body(), cap).collect().await {
+        Ok(b) => Ok(b.to_bytes()),
+        Err(e) => {
+            let too_large = e.downcast_ref::<LengthLimitError>().is_some();
+            Err(typed_error_response(
+                if too_large { StatusCode::PAYLOAD_TOO_LARGE } else { StatusCode::BAD_REQUEST },
+                Severity::Error,
+                if too_large { "request body exceeds maximum size" } else { "failed to read request body" },
+                &format!("{e}"),
+                if too_large { "PROTOCOL_PAYLOAD_TOO_LARGE" } else { "PROTOCOL_READ_BODY" },
+                false,
+            ))
+        }
+    }
+}
+
+const MAX_ABORT_BODY_BYTES: usize = 4 * 1024;
+
+/// HTTP handler for `POST /v1/abort`. The named `/v1/call` keeps its
+/// stream open and ends it with the session's aborted `done`: `202`
+/// when a call in flight was found, `404 CALL_NOT_FOUND` when this gate
+/// has none under that pair, `421 CALL_MISDIRECTED` when the request's
+/// `gate` is not this gate's. See `handle_call` for the composition use
+/// case.
+pub async fn handle_abort(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    let body = match read_body(req, MAX_ABORT_BODY_BYTES).await {
+        Ok(b) => b,
+        Err(refused) => return refused,
+    };
+    let request: AbortRequest = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            return typed_error_response(
+                StatusCode::BAD_REQUEST,
+                Severity::Error,
+                "invalid abort request",
+                &format!("{e}"),
+                "PROTOCOL_INVALID_ENVELOPE",
+                false,
+            );
+        }
+    };
+    let Some(pool) = state.pool.as_ref().filter(|pool| pool.instance() == request.gate) else {
+        return typed_error_response(
+            StatusCode::MISDIRECTED_REQUEST,
+            Severity::Error,
+            "abort sent to a gate that did not stream the call",
+            &format!("gate {}", request.gate),
+            "CALL_MISDIRECTED",
+            false,
+        );
+    };
+    if pool.abort(&request.call_id, &request.auth_id) {
+        Response::builder()
+            .status(StatusCode::ACCEPTED)
+            .body(Full::new(Bytes::new()).boxed())
+            .expect("response build")
+    } else {
+        typed_error_response(
+            StatusCode::NOT_FOUND,
+            Severity::Warn,
+            "no such call in flight",
+            &format!("callId {} / authId {}", request.call_id, request.auth_id),
+            "CALL_NOT_FOUND",
+            false,
+        )
     }
 }
 
@@ -589,8 +661,10 @@ async fn dispatch_via_pool(
         );
     }
 
+    let abort = pool.register_abort(&envelope.call_id, &envelope.auth_id);
     let state = PoolStreamState {
         session: Some(session),
+        abort: Some(abort),
         pool,
         call_id: envelope.call_id.clone(),
         auth_id: envelope.auth_id.clone(),
@@ -611,10 +685,11 @@ async fn dispatch_via_pool(
         .expect("response build")
 }
 
-const CANCEL_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
+const ABORT_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 
 struct PoolStreamState {
     session: Option<PooledSession>,
+    abort: Option<CallAbort>,
     pool: SessionPool,
     call_id: String,
     auth_id: String,
@@ -632,10 +707,10 @@ impl Drop for PoolStreamState {
             let pool = self.pool.clone();
             let call_id = self.call_id.clone();
             tokio::spawn(async move {
-                match sess.cancel_and_drain(&call_id, CANCEL_DRAIN_TIMEOUT).await {
+                match sess.abort_and_drain(&call_id, ABORT_DRAIN_TIMEOUT).await {
                     Ok(clean_sess) => pool.release(clean_sess),
                     Err(()) => {
-                        // cancel_and_drain already consumed/dropped the
+                        // abort_and_drain already consumed/dropped the
                         // session, so we can't route through `discard`
                         // — just balance the bookkeeping that `acquire`
                         // set up and queue a replacement.
@@ -714,7 +789,24 @@ async fn pool_stream_next(
 
     let session = state.session.as_mut().expect("session held until terminal");
     let mut buf = String::new();
-    let read = read_capped_line(&mut session.reader, &mut buf, MAX_NDJSON_LINE_BYTES).await;
+    let read = {
+        let line = read_capped_line(&mut session.reader, &mut buf, MAX_NDJSON_LINE_BYTES);
+        tokio::pin!(line);
+        loop {
+            let Some(abort) = state.abort.as_mut() else { break line.await };
+            tokio::select! {
+                read = &mut line => break read,
+                requested = abort.requested() => {
+                    state.abort = None;
+                    if requested {
+                        if let Err(e) = write_abort(&mut session.stdin, &state.call_id).await {
+                            eprintln!("abort {}: session stdin write failed: {e}", state.call_id);
+                        }
+                    }
+                }
+            }
+        }
+    };
 
     match read {
         Ok(0) => {
@@ -777,12 +869,13 @@ async fn pool_stream_next(
                         // terminal. If we only set `stopped = true` and waited
                         // for the next poll to release, a client disconnect
                         // between the two polls would drop `PoolStreamState`
-                        // with `session = Some`, triggering cancel_and_drain
+                        // with `session = Some`, triggering abort_and_drain
                         // on an already-idle session — 2 s timeout + kill +
                         // respawn for nothing.
                         if let Some(sess) = state.session.take() {
                             state.pool.release(sess);
                         }
+                        state.abort = None;
                         state.stopped = true;
                     }
                     buf.push('\n');
@@ -815,10 +908,10 @@ const DELTA_PREFIX: &str = "{\"type\":\"delta\"";
 
 /// Whether a `done` event's `result` represents genuine provider
 /// recovery (i.e. should reset an accumulated cooldown streak).
-/// Cancellation is the caller's action — it says nothing about
+/// An abort is the caller's action — it says nothing about
 /// whether the provider is healthy — so don't clear failures on it.
 pub(crate) fn done_signals_provider_recovery(result: &AnswerResult) -> bool {
-    result.warning.as_deref() != Some("cancelled")
+    result.warning.as_deref() != Some("aborted")
 }
 
 fn apply_enforcer_feedback(state: &mut PoolStreamState, event: &Event) {
@@ -868,6 +961,7 @@ fn record_call_metric(state: &mut PoolStreamState, status: &str) {
 }
 
 fn kill_and_replace(state: &mut PoolStreamState) {
+    state.abort = None;
     if let Some(sess) = state.session.take() {
         state.pool.discard(sess);
     }
@@ -937,19 +1031,9 @@ fn stream_error(
 /// HTTP handler for `POST /v1/image`. See `handle_call` for the
 /// composition use case.
 pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
-    let body = match Limited::new(req.into_body(), MAX_CALL_BODY_BYTES).collect().await {
-        Ok(b) => b.to_bytes(),
-        Err(e) => {
-            let too_large = e.downcast_ref::<LengthLimitError>().is_some();
-            return typed_error_response(
-                if too_large { StatusCode::PAYLOAD_TOO_LARGE } else { StatusCode::BAD_REQUEST },
-                Severity::Error,
-                if too_large { "request body exceeds maximum size" } else { "failed to read request body" },
-                &format!("{e}"),
-                if too_large { "PROTOCOL_PAYLOAD_TOO_LARGE" } else { "PROTOCOL_READ_BODY" },
-                false,
-            );
-        }
+    let body = match read_body(req, MAX_CALL_BODY_BYTES).await {
+        Ok(b) => b,
+        Err(refused) => return refused,
     };
 
     let mut envelope: ImageEnvelope = match serde_json::from_slice::<ImageEnvelope>(&body) {
@@ -1013,19 +1097,9 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
 /// HTTP handler for `POST /v1/transcription`. See `handle_call` for the
 /// composition use case.
 pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
-    let body = match Limited::new(req.into_body(), MAX_CALL_BODY_BYTES).collect().await {
-        Ok(b) => b.to_bytes(),
-        Err(e) => {
-            let too_large = e.downcast_ref::<LengthLimitError>().is_some();
-            return typed_error_response(
-                if too_large { StatusCode::PAYLOAD_TOO_LARGE } else { StatusCode::BAD_REQUEST },
-                Severity::Error,
-                if too_large { "request body exceeds maximum size" } else { "failed to read request body" },
-                &format!("{e}"),
-                if too_large { "PROTOCOL_PAYLOAD_TOO_LARGE" } else { "PROTOCOL_READ_BODY" },
-                false,
-            );
-        }
+    let body = match read_body(req, MAX_CALL_BODY_BYTES).await {
+        Ok(b) => b,
+        Err(refused) => return refused,
     };
 
     let mut envelope: TranscriptionEnvelope = match serde_json::from_slice::<TranscriptionEnvelope>(&body) {
@@ -1089,19 +1163,9 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
 /// HTTP handler for `POST /v1/embed`. See `handle_call` for the
 /// composition use case.
 pub async fn handle_embed(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
-    let body = match Limited::new(req.into_body(), MAX_CALL_BODY_BYTES).collect().await {
-        Ok(b) => b.to_bytes(),
-        Err(e) => {
-            let too_large = e.downcast_ref::<LengthLimitError>().is_some();
-            return typed_error_response(
-                if too_large { StatusCode::PAYLOAD_TOO_LARGE } else { StatusCode::BAD_REQUEST },
-                Severity::Error,
-                if too_large { "request body exceeds maximum size" } else { "failed to read request body" },
-                &format!("{e}"),
-                if too_large { "PROTOCOL_PAYLOAD_TOO_LARGE" } else { "PROTOCOL_READ_BODY" },
-                false,
-            );
-        }
+    let body = match read_body(req, MAX_CALL_BODY_BYTES).await {
+        Ok(b) => b,
+        Err(refused) => return refused,
     };
 
     let mut envelope: EmbedEnvelope = match serde_json::from_slice::<EmbedEnvelope>(&body) {
@@ -1235,10 +1299,10 @@ async fn dispatch_embed_via_pool(
 
 /// HTTP form of [`oneshot_exchange_typed`]: the error becomes the
 /// ready-to-send response, `503` when the pool is busy, `500` otherwise.
-async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
+async fn oneshot_exchange<L: serde::de::DeserializeOwned + Send + 'static>(
     pool: &SessionPool,
     tagged: &impl Serialize,
-    what: &str,
+    what: &'static str,
 ) -> Result<L, Response<Body>> {
     oneshot_exchange_typed(pool, tagged, what)
         .await
@@ -1256,12 +1320,16 @@ async fn oneshot_exchange<L: serde::de::DeserializeOwned>(
 /// `L`, release the session. On any failure the session is discarded
 /// and the error returned. `what` names the path ("image",
 /// "transcription", "info") in error details.
-pub(crate) async fn oneshot_exchange_typed<L: serde::de::DeserializeOwned>(
+///
+/// Once a session is acquired the exchange runs on its own task, so a
+/// caller that drops this future does not cut it: the session finishes
+/// the call and goes back to the pool.
+pub(crate) async fn oneshot_exchange_typed<L: serde::de::DeserializeOwned + Send + 'static>(
     pool: &SessionPool,
     tagged: &impl Serialize,
-    what: &str,
+    what: &'static str,
 ) -> Result<L, TypedError> {
-    let mut envelope_bytes = serde_json::to_vec(tagged).map_err(|e| {
+    let envelope_bytes = serde_json::to_vec(tagged).map_err(|e| {
         exchange_error(
             Severity::Error,
             "failed to serialize envelope",
@@ -1271,7 +1339,7 @@ pub(crate) async fn oneshot_exchange_typed<L: serde::de::DeserializeOwned>(
         )
     })?;
 
-    let mut session = match pool.acquire().await {
+    let session = match pool.acquire().await {
         Ok(s) => s,
         Err(AcquireError::Timeout) => {
             return Err(exchange_error(
@@ -1293,6 +1361,26 @@ pub(crate) async fn oneshot_exchange_typed<L: serde::de::DeserializeOwned>(
         }
     };
 
+    let exchange = tokio::spawn(oneshot_exchange_on(pool.clone(), session, envelope_bytes, what));
+    match exchange.await {
+        Ok(outcome) => outcome,
+        Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+        Err(e) => Err(exchange_error(
+            Severity::Fatal,
+            "session pool is closed",
+            &format!("{what} exchange stopped by runtime shutdown: {e}"),
+            "SESSION_POOL_CLOSED",
+            false,
+        )),
+    }
+}
+
+async fn oneshot_exchange_on<L: serde::de::DeserializeOwned>(
+    pool: SessionPool,
+    mut session: PooledSession,
+    mut envelope_bytes: Vec<u8>,
+    what: &'static str,
+) -> Result<L, TypedError> {
     let write_result = async {
         session.stdin.write_all(&envelope_bytes).await?;
         session.stdin.write_all(b"\n").await?;
@@ -1572,10 +1660,10 @@ mod tests {
     }
 
     #[test]
-    fn cancelled_done_does_not_signal_recovery() {
+    fn aborted_done_does_not_signal_recovery() {
         // Caller aborted; the provider never completed. No health
         // signal, so the cooldown streak must NOT reset.
-        assert!(!done_signals_provider_recovery(&make_result(Some("cancelled"))));
+        assert!(!done_signals_provider_recovery(&make_result(Some("aborted"))));
     }
 
     // Per-line cap on session NDJSON reads.

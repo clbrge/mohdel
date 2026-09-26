@@ -273,21 +273,21 @@ describe('session/driver', () => {
     expect(output()).toBe('')
   })
 
-  test('cancel control mid-call aborts via matching callId', async () => {
-    // Slow adapter: one delta, then waits until cancelled.
-    // But to test through the driver, we need the cancel message arriving
+  test('abort control mid-call aborts via matching callId', async () => {
+    // Slow adapter: one delta, then waits until aborted.
+    // But to test through the driver, we need the abort message arriving
     // while the adapter iterates. We simulate with a delayed adapter that
     // checks signal.aborted between yields.
     // Simpler: rely on the echo adapter's signal handling — pre-abort via
-    // the cancel control, which aborts IMMEDIATELY on signal check.
+    // the abort control, which aborts IMMEDIATELY on signal check.
 
     // Since echo is instant, we test the control-message RECOGNITION
-    // path: cancel before envelope is a no-op (not currentCall); cancel
+    // path: abort before envelope is a no-op (not currentCall); abort
     // for unknown callId while envelope is in-flight is also a no-op.
-    // End-to-end mid-call abort is covered by session-cancel.test.js.
+    // End-to-end mid-call abort is covered by session-abort.test.js.
 
     const stdin = inputStream(
-      JSON.stringify({ op: 'cancel', callId: 'nothing-in-flight' }),
+      JSON.stringify({ op: 'abort', callId: 'nothing-in-flight' }),
       JSON.stringify(envelope({ callId: 'real' }))
     )
     const { stream: stdout, output } = capturingStdout()
@@ -296,16 +296,16 @@ describe('session/driver', () => {
     expect(events.filter(e => e.type === 'done').length).toBe(1)
   })
 
-  // Cancels arriving before the envelope was dequeued must still
+  // Aborts arriving before the envelope was dequeued must still
   // abort the call.
 
-  test('pre-dequeue cancel aborts the matching envelope on dispatch', async () => {
-    // Cancel for 'c-pre' arrives FIRST, then the envelope for 'c-pre'.
-    // Without the pre-dequeue path the driver drops the cancel (no
+  test('pre-dequeue abort aborts the matching envelope on dispatch', async () => {
+    // Abort for 'c-pre' arrives FIRST, then the envelope for 'c-pre'.
+    // Without the pre-dequeue path the driver drops the abort (no
     // currentCall match). Envelope must dispatch with a pre-aborted
-    // controller → run() yields a cancelled done immediately.
+    // controller → run() yields an aborted done immediately.
     const stdin = inputStream(
-      JSON.stringify({ op: 'cancel', callId: 'c-pre' }),
+      JSON.stringify({ op: 'abort', callId: 'c-pre' }),
       JSON.stringify(envelope({ callId: 'c-pre' }))
     )
     const { stream: stdout, output } = capturingStdout()
@@ -313,15 +313,15 @@ describe('session/driver', () => {
     const events = parseNDJSON(output())
     const done = events.at(-1)
     expect(done.type).toBe('done')
-    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.warning).toBe('aborted')
   })
 
-  test('pre-dequeue cancel only fires once, does not leak to next call of same id', async () => {
-    // Cancel for 'dup' → envelope 'dup' (aborts) → envelope 'dup' again
-    // (fresh controller, runs normally). The precancel set must be cleared
+  test('pre-dequeue abort only fires once, does not leak to next call of same id', async () => {
+    // Abort for 'dup' → envelope 'dup' (aborts) → envelope 'dup' again
+    // (fresh controller, runs normally). The early-abort set must be cleared
     // on first match.
     const stdin = inputStream(
-      JSON.stringify({ op: 'cancel', callId: 'dup' }),
+      JSON.stringify({ op: 'abort', callId: 'dup' }),
       JSON.stringify(envelope({ callId: 'dup' })),
       JSON.stringify(envelope({ callId: 'dup' }))
     )
@@ -329,8 +329,8 @@ describe('session/driver', () => {
     await drive(stdin, stdout)
     const dones = parseNDJSON(output()).filter(e => e.type === 'done')
     expect(dones).toHaveLength(2)
-    expect(dones[0].result.warning).toBe('cancelled')
-    expect(dones[1].result.warning).not.toBe('cancelled')
+    expect(dones[0].result.warning).toBe('aborted')
+    expect(dones[1].result.warning).not.toBe('aborted')
   })
 
   // Image envelopes — `op: "image"` dispatches to runImage()
@@ -415,15 +415,15 @@ describe('session/driver', () => {
     expect(lines[0].error.type).toBe('SESSION_UNKNOWN_PROVIDER')
   })
 
-  test('pre-cancel buffer is bounded: flood of unmatched cancels does not grow without bound', async () => {
-    // Send 200 cancels for distinct unknown callIds, then an envelope
-    // matching the FIRST of those cancels. Cap is 128, so the first ~72
-    // cancels have been evicted and the envelope should run normally.
-    const floodCancels = Array.from({ length: 200 }, (_, i) =>
-      JSON.stringify({ op: 'cancel', callId: `ghost-${i}` })
+  test('early-abort buffer is bounded: flood of unmatched aborts does not grow without bound', async () => {
+    // Send 200 aborts for distinct unknown callIds, then an envelope
+    // matching the FIRST of those aborts. Cap is 128, so the first ~72
+    // aborts have been evicted and the envelope should run normally.
+    const floodAborts = Array.from({ length: 200 }, (_, i) =>
+      JSON.stringify({ op: 'abort', callId: `ghost-${i}` })
     )
     const stdin = inputStream(
-      ...floodCancels,
+      ...floodAborts,
       JSON.stringify(envelope({ callId: 'ghost-0' })) // evicted by now
     )
     const { stream: stdout, output } = capturingStdout()
@@ -431,13 +431,13 @@ describe('session/driver', () => {
     const events = parseNDJSON(output())
     const done = events.at(-1)
     expect(done.type).toBe('done')
-    // ghost-0's precancel entry was evicted → call runs normally (no cancel warning)
-    expect(done.result.warning).not.toBe('cancelled')
+    // ghost-0's early-abort entry was evicted → call runs normally (no abort warning)
+    expect(done.result.warning).not.toBe('aborted')
   })
 })
 
-describe('session/driver — cancel control while a call is in flight', () => {
-  test('cancel op on stdin mid-stream aborts the running adapter; stdout ends with the cancelled done', async () => {
+describe('session/driver — abort control while a call is in flight', () => {
+  test('abort op on stdin mid-stream aborts the running adapter; stdout ends with the aborted done', async () => {
     const { PassThrough } = await import('node:stream')
     const stdin = new PassThrough()
     const chunks = []
@@ -449,7 +449,7 @@ describe('session/driver — cancel control while a call is in flight', () => {
         for (const line of text.split('\n').filter(l => l)) {
           const ev = JSON.parse(line)
           if (ev.type === 'delta' && ++deltas === 2) {
-            stdin.write(JSON.stringify({ op: 'cancel', callId: 'inflight' }) + '\n')
+            stdin.write(JSON.stringify({ op: 'abort', callId: 'inflight' }) + '\n')
           }
           if (ev.type === 'done') stdin.end()
         }
@@ -461,7 +461,7 @@ describe('session/driver — cancel control while a call is in flight', () => {
     stdin.write(JSON.stringify(envelope({
       callId: 'inflight',
       model: 'fake/m',
-      prompt: JSON.stringify({ mode: 'cancel_after', tokens: 2 })
+      prompt: JSON.stringify({ mode: 'abort_after', tokens: 2 })
     })) + '\n')
     await driving
 
@@ -469,7 +469,7 @@ describe('session/driver — cancel control while a call is in flight', () => {
     expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
     const done = events.at(-1)
     expect(done.result.status).toBe('incomplete')
-    expect(done.result.warning).toBe('cancelled')
+    expect(done.result.warning).toBe('aborted')
     expect(done.result.output).toBe('tok0 tok1 ')
   })
 })

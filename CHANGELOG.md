@@ -4,6 +4,59 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.0.0] — Breaking: "cancel" becomes "abort" / Fix: an abandoned one-shot call cost the pool a session / Feat: `POST /v1/abort` keeps the aborted `done`
+
+### Breaking
+
+- The session control message is `{ "op": "abort", "callId" }`; `op: "cancel"`
+  is no longer recognized.
+- An aborted call's `done` carries `warning: 'aborted'`, was `'cancelled'`.
+  `WARNING_CANCELLED` is `WARNING_ABORTED`.
+- The fake adapter's `cancel_after` mode is `abort_after`.
+- thin-gate: `PooledSession::cancel_and_drain` is `abort_and_drain`.
+- Rust client: `Client::call` returns a `Call`, a `Stream` of the same events,
+  instead of an `EventStream`.
+
+### Fixed
+
+- thin-gate: an abandoned one-shot call no longer costs the pool a session. A
+  `/v1/embed`, `/v1/image` or `/v1/transcription` handler dropped mid-exchange
+  killed its session with no replacement. The exchange now runs on its own task:
+  the session finishes the call and returns to the pool.
+- thin-gate: a session acquired while the pool pushed it a new catalog was
+  killed with no replacement if the caller left, or the acquire timed out,
+  during that write. This hit every route. The refresh now runs on its own task,
+  which returns the session to the pool.
+
+### Added
+
+- thin-gate: `POST /v1/abort` with `{ callId, authId, gate }` aborts an
+  in-flight `/v1/call`. The call's stream ends with the session's aborted
+  `done`, with the usage reported before the cut. `202` on delivery, `404
+  CALL_NOT_FOUND` when this gate has no such call in flight, `421
+  CALL_MISDIRECTED` when `gate` names another gate. `handle_abort` and
+  `AbortRequest` are exported at the crate root and in the prelude;
+  `SessionPool::abort(call_id, auth_id)` does the same for embedders.
+- thin-gate: a `/v1/call` response from a gate with a session pool carries
+  `mohdel-gate`, a random per-pool token (`GATE_HEADER`).
+- JS client: an abort after the gate has answered posts `/v1/abort` with the
+  call's gate token and keeps reading, so the aborted `done` carries the partial
+  usage, as in-process. It was synthesized with zero usage. An abort before the
+  gate answered still drops the request. A refused abort is thrown, and so is
+  an abort of a response without `mohdel-gate` (`PROTOCOL_GATE_UNIDENTIFIED`).
+- Rust client: `Call::abort_request()` and `Client::abort(&AbortRequest)`.
+  `coalesce` takes any event stream.
+
+### Docs
+
+- PROTOCOL.md and GLOSSARY: **abort** (the caller stops a call on mohdel's
+  side; the `done`'s usage is a lower bound) and **abandon** (the caller drops
+  the stream; the `done` is lost). "Cancel" is reserved for a provider-side
+  cancel. §10 documents `/v1/abort`, the abandon path, and that the wait for an
+  aborted `done` has no limit of its own.
+- Lua, Gleam and OCaml clients: closing a stream abandons the call and loses its
+  usage; these clients do not send `/v1/abort`.
+
 ## [2.0.0] — Fix: one-shot routes ignored the auth policy / Breaking: `AuthPolicy::resolve` signature
 
 ### Fixed

@@ -74,9 +74,9 @@ Wire format is JSON-over-NDJSON, camelCase. Types are authored in `js/core/*.js`
   - `{ type: 'error', error: TypedError }`
 - **`AnswerResult`** — `status`, `output`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cost` (single number), `timestamps`, `warning?`, `toolCalls?`, `speed?`, `servedSpeed?`.
 - **`Status`** — `'completed' | 'tool_use' | 'incomplete'`.
-- **`Warning`** — additive string union: `'insufficientOutputBudget'`, `'cancelled'`, ...
+- **`Warning`** — additive string union: `'insufficientOutputBudget'`, `'aborted'`, ...
 - **`TypedError`** — `{message, detail?, severity, retryable, type}`. `type` is the canonical tag callers branch on; `message` is a short human-readable label; `detail` is the provider's own rejection text.
-- **Control messages** — `{op: 'cancel', callId}` on session stdin aborts the matching in-flight call. `{op: 'ping'}` → `{op: 'pong'}` is the pool readiness handshake.
+- **Control messages** — `{op: 'abort', callId}` on session stdin aborts the matching in-flight call. `{op: 'ping'}` → `{op: 'pong'}` is the pool readiness handshake.
 
 ### Enforcement of the freeze
 
@@ -152,7 +152,7 @@ Same pattern as the admin plane (`tests/admin_compose.rs`).
 
 ### Reusing `SessionPool` for non-mohdel subprocesses
 
-`SessionPool` is generic: it spawns subprocesses that speak the NDJSON stdin/stdout protocol (envelope in, events out, `{op: "ping"}`/`{op: "pong"}` readiness, `{op: "cancel"}` cancellation). Embedders can instantiate a second `SessionPool` with a different `SessionConfig` to supervise their own subprocess type under the same respawn/backoff/cancel-drain semantics — e.g. a pool of orchestration workers alongside the mohdel session pool.
+`SessionPool` is generic: it spawns subprocesses that speak the NDJSON stdin/stdout protocol (envelope in, events out, `{op: "ping"}`/`{op: "pong"}` readiness, `{op: "abort"}` abort). Embedders can instantiate a second `SessionPool` with a different `SessionConfig` to supervise their own subprocess type under the same respawn/backoff/abort-drain semantics — e.g. a pool of orchestration workers alongside the mohdel session pool.
 
 ### Shared metrics
 
@@ -168,7 +168,7 @@ The pool is not a naive blocking queue. Three properties on top of "N pre-warmed
 
 1. **Startup readiness.** `PooledSession::spawn_and_ready(cfg, 3s)` sends a `{op:"ping"}` control message right after spawn and waits for `{op:"pong"}`. A broken-on-boot session (wrong path, syntax error, missing native module, hung init) fails readiness and feeds into backoff — the pool never serves traffic from a session that hasn't proven it can round-trip a frame.
 
-2. **Respawn backoff.** On session death (stdout EOF, IO error, invalid event, cancel-and-drain timeout, readiness failure), the gate queues a replacement. Consecutive spawn failures back off exponentially: 500ms → 1s → 2s → … → 30s cap. Successful spawn resets the streak. Protects against tight respawn loops when the session binary is genuinely broken.
+2. **Respawn backoff.** On session death (stdout EOF, IO error, invalid event, abort-and-drain timeout, readiness failure), the gate queues a replacement. Consecutive spawn failures back off exponentially: 500ms → 1s → 2s → … → 30s cap. Successful spawn resets the streak. Protects against tight respawn loops when the session binary is genuinely broken.
 
 3. **OTel metrics on the admin plane.** When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the gate pushes metrics via OTLP/gRPC to whatever collector takes the session spans (SigNoz, Honeycomb, Jaeger-based stacks). Instruments:
    - `mohdel.sessions.alive` (UpDownCounter)
@@ -179,7 +179,9 @@ The pool is not a naive blocking queue. Three properties on top of "N pre-warmed
 
    No separate scrape endpoint; metrics, spans, and logs all land in the same collector under the same service resource attributes. Choice rationale vs Prometheus-style scraping: stack alignment — the session subprocess already exports spans via OTLP, so reusing the transport avoids standing up another Prometheus.
 
-Cancel-mid-stream handling (`server.rs::PoolStreamState::drop`): when the client disconnects, the gate sends `{op:"cancel", callId}` on session stdin and drains events until the session emits a terminal. Clean drain → session released back to the pool. Timeout or error → session killed, replacement spawned. The drained terminal never reaches the caller (it hung up), so the client synthesizes the cancelled `done` on its side — `js/client/call.js` does; a client in another language must do the same to match the in-process path.
+Abort-mid-stream handling: `POST /v1/abort` names a call by `(callId, authId)` in the pool's abort registry (`SessionPool::abort`, callable by embedders too). Each pool has a random instance id, sent on `/v1/call` responses as `mohdel-gate`; an abort carrying another gate's id is refused with `421 CALL_MISDIRECTED`, so a misrouted abort fails instead of reading as a call that already ended. The call's stream writes `{op:"abort", callId}` to its session and keeps relaying until the session's aborted `done`, which reaches the caller with the usage reported before the cut, as in-process. When the client disconnects instead (`server.rs::PoolStreamState::drop`), the call is abandoned: the gate sends the same abort and drains events until the session emits a terminal. Clean drain → session released back to the pool. Timeout or error → session killed, replacement spawned. That drained terminal has no reader, so its usage is lost.
+
+One-shot routes (`/v1/embed`, `/v1/image`, `/v1/transcription`) run their exchange on a task of their own once a session is acquired: a handler future dropped mid-exchange leaves the session to finish the call and return to the pool.
 
 ## Adapter contract (session side)
 
@@ -189,7 +191,7 @@ An adapter is a plain async generator:
 async function * <provider> (envelope, { client?, signal?, log?, span? }) {
   // 1. Optionally emit delta events as the model streams.
   // 2. Honor signal?.aborted — pass to the SDK, return silently on abort.
-  // 3. On SDK error: check signal first (cancellation is not an error);
+  // 3. On SDK error: check signal first (an abort is not an error);
   //    else yield { type: 'error', error: classifyProviderError(e) }.
   // 4. Yield exactly one terminal: done (completed / incomplete / tool_use) or error.
 }
@@ -235,7 +237,7 @@ The full option mapping is documented in the `runAnswer` docstring so a future a
 | `error` | yield typed error event with caller-chosen type / retryable |
 | `hang` | never emit a terminal (caller aborts via signal) |
 | `crash` | `process.exit(code)` — kills whichever process is running the adapter |
-| `cancel_after` | emit N deltas then wait for `signal.aborted` |
+| `abort_after` | emit N deltas then wait for `signal.aborted` |
 
 Every mode honors `AbortSignal`. The benchmarks in `bench/` use this to pin adapter-side work to a fixed scenario so gate / isolation measurements aren't contaminated by real-provider variance.
 

@@ -661,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "mohdel-client"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -673,7 +673,7 @@ dependencies = [
 
 [[package]]
 name = "mohdel-napi-addon"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "napi",
  "napi-build",
@@ -682,7 +682,7 @@ dependencies = [
 
 [[package]]
 name = "mohdel-protocol"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -691,7 +691,7 @@ dependencies = [
 
 [[package]]
 name = "mohdel-thin-gate"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "async-trait",
  "bytes",

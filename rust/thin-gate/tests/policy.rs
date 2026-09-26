@@ -20,9 +20,11 @@ use tokio::net::UnixStream;
 
 use mohdel_thin_gate::enforcer::Enforcer;
 use mohdel_thin_gate::hooks::{
-    QuotaError, QuotaPolicy, QuotaSpec, RequireInlineAuth, RouteDecision, RouteError, RoutePolicy,
+    AuthError, AuthPolicy, QuotaError, QuotaPolicy, QuotaSpec, RequireInlineAuth, RouteDecision,
+    RouteError, RoutePolicy,
 };
-use mohdel_thin_gate::protocol::{CallEnvelope, Event};
+use mohdel_thin_gate::protocol::{Auth, CallEnvelope, Event};
+use mohdel_thin_gate::secret::SecretString;
 use mohdel_thin_gate::{serve_data_with_state, GateState};
 
 // ---------- Harness ----------
@@ -152,6 +154,21 @@ impl RoutePolicy for PermissiveRoute {
             model_id: env.model.clone(),
             session_pool: None,
         })
+    }
+}
+
+/// Resolves a key for `acme` and nothing else, so a test can tell a
+/// route that consulted the policy from one that never asked.
+struct AcmeOnlyAuth;
+#[async_trait]
+impl AuthPolicy for AcmeOnlyAuth {
+    async fn resolve(&self, _auth_id: &str, model: &str) -> Result<Auth, AuthError> {
+        match model.split('/').next() {
+            Some("acme") => Ok(Auth {
+                key: SecretString::new("sk-acme"),
+            }),
+            _ => Err(AuthError::ProviderNotConfigured(model.into())),
+        }
     }
 }
 
@@ -597,6 +614,56 @@ async fn image_route_enforces_quota() {
     let (status, kind) = oneshot_error(post_to(&path, "/v1/image", body).await).await;
     assert_eq!(kind, "QUOTA_EXCEEDED", "rpm 0 is a killswitch on every route");
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+
+    server.abort();
+}
+
+/// Every route resolves a missing `auth` through the policy, not only
+/// `/v1/call`: an embed or an image without inline auth reached the
+/// session keyless.
+#[tokio::test]
+async fn oneshot_routes_resolve_auth_through_the_policy() {
+    let path = temp_sock("oneshot-auth");
+    let _g = SocketGuard(path.clone());
+
+    let state = GateState {
+        pool: None,
+        route: Arc::new(PermissiveRoute),
+        quota: Arc::new(FixedQuota(permissive_quota())),
+        auth: Arc::new(AcmeOnlyAuth),
+        enforcer: Arc::new(Enforcer::new()),
+    };
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = serve_data_with_state(&serve_path, state).await;
+    });
+    wait_for(&path).await;
+
+    let keyless = |model: &str, extra: serde_json::Value| {
+        let mut v = json!({ "callId": "c1", "authId": "u1", "model": model });
+        v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        Bytes::from(serde_json::to_vec(&v).unwrap())
+    };
+
+    let (status, kind) = oneshot_error(
+        post_to(&path, "/v1/embed", keyless("other/embed", json!({ "input": ["x"] }))).await,
+    )
+    .await;
+    assert_eq!(kind, "AUTH_UNAVAILABLE", "embed asks the policy");
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (_, kind) = oneshot_error(
+        post_to(&path, "/v1/embed", keyless("acme/embed", json!({ "input": ["x"] }))).await,
+    )
+    .await;
+    assert_eq!(kind, "SESSION_POOL_UNAVAILABLE", "a resolved key passes on to dispatch");
+
+    let (status, kind) = oneshot_error(
+        post_to(&path, "/v1/image", keyless("other/image", json!({ "prompt": "a cat" }))).await,
+    )
+    .await;
+    assert_eq!(kind, "AUTH_UNAVAILABLE", "image asks the policy");
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 
     server.abort();
 }

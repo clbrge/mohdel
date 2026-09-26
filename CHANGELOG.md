@@ -4,6 +4,29 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [2.0.0] — Fix: one-shot routes ignored the auth policy / Breaking: `AuthPolicy::resolve` signature
+
+### Fixed
+
+- thin-gate: `/v1/embed`, `/v1/image` and `/v1/transcription` resolve a missing
+  `auth` through the configured `AuthPolicy`, as `/v1/call` does. They
+  dispatched without a key instead.
+
+### Added
+
+- thin-gate: `handle_embed` and `handle_transcription` are re-exported at the crate
+  root and in the prelude, beside `handle_call` and `handle_image`, with
+  `EmbedEnvelope` and `EmbedResult`.
+
+### Breaking
+
+- thin-gate: `AuthPolicy::resolve` takes `(auth_id, model)` instead of a
+  `&CallEnvelope`, so one policy serves every route.
+- thin-gate: under the default `RequireInlineAuth` policy, a `/v1/embed`,
+  `/v1/image` or `/v1/transcription` request without `auth` is refused with
+  `401 AUTH_UNAVAILABLE`, as `/v1/call` is. Keyless providers take
+  `auth: { key: "" }`.
+
 ## [1.6.0] — Feat: caller headers on the JS client
 
 ### Added

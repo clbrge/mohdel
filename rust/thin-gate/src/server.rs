@@ -46,7 +46,7 @@ use crate::enforcer::{cooldown_key, Enforcer, Limits};
 use crate::hooks::{AuthPolicy, QuotaPolicy, QuotaSpec, RequireInlineAuth, RoutePolicy};
 use crate::metrics;
 use crate::protocol::{
-    AnswerResult, CallEnvelope, DeltaChunk, DeltaKind, EmbedEnvelope, EmbedResult, Event,
+    AnswerResult, Auth, CallEnvelope, DeltaChunk, DeltaKind, EmbedEnvelope, EmbedResult, Event,
     ImageEnvelope, ImageResult, Severity, Status, TranscriptionEnvelope, TranscriptionResult,
     TypedError,
 };
@@ -380,25 +380,10 @@ pub async fn handle_call(req: Request<Incoming>, state: Arc<GateState>) -> Respo
         }
     }
 
-    // AuthPolicy: if the caller didn't supply `auth` inline, ask the
-    // configured policy to resolve one (typically from a provider →
-    // key map pushed by a supervisor). Session subprocesses still
-    // receive the resolved auth on the serialized envelope.
-    if envelope.auth.is_none() {
-        match state.auth.resolve(&envelope).await {
-            Ok(resolved) => envelope.auth = Some(resolved),
-            Err(e) => {
-                metrics::policy_error("AUTH_UNAVAILABLE");
-                return typed_error_response(
-                    StatusCode::UNAUTHORIZED,
-                    Severity::Error,
-                    "auth unavailable",
-                    &e.to_string(),
-                    "AUTH_UNAVAILABLE",
-                    false,
-                );
-            }
-        }
+    if let Err(refused) =
+        resolve_auth(&state, &envelope.auth_id, &envelope.model, &mut envelope.auth).await
+    {
+        return refused;
     }
 
     let spec = match enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await {
@@ -439,13 +424,45 @@ impl Denied {
     }
 }
 
+/// AuthPolicy, on every route: when the caller supplied no `auth`
+/// inline, the configured policy resolves one (typically from a
+/// provider → key map pushed by a supervisor). Session subprocesses
+/// still receive the resolved auth on the serialized envelope.
+async fn resolve_auth(
+    state: &GateState,
+    auth_id: &str,
+    model: &str,
+    auth: &mut Option<Auth>,
+) -> Result<(), Response<Body>> {
+    if auth.is_some() {
+        return Ok(());
+    }
+    match state.auth.resolve(auth_id, model).await {
+        Ok(resolved) => {
+            *auth = Some(resolved);
+            Ok(())
+        }
+        Err(e) => {
+            metrics::policy_error("AUTH_UNAVAILABLE");
+            Err(typed_error_response(
+                StatusCode::UNAUTHORIZED,
+                Severity::Error,
+                "auth unavailable",
+                &e.to_string(),
+                "AUTH_UNAVAILABLE",
+                false,
+            ))
+        }
+    }
+}
+
 /// Quota policy, then cooldown, then the rate buckets — the sequence
 /// every route runs before anything reaches the pool. `pending_inputs`
 /// is the embed batch size, 0 on routes that carry no inputs.
 ///
-/// Auth and route policy are deliberately not here: both hooks are
-/// typed on `CallEnvelope`, so extending them to the one-shot routes is
-/// a hook-API change with its own decision, not a lift.
+/// Route policy is deliberately not here: its hook is typed on
+/// `CallEnvelope`, so extending it to the one-shot routes is a hook-API
+/// change with its own decision, not a lift.
 async fn enforce_policy(
     state: &GateState,
     auth_id: &str,
@@ -935,7 +952,7 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
         }
     };
 
-    let envelope: ImageEnvelope = match serde_json::from_slice::<ImageEnvelope>(&body) {
+    let mut envelope: ImageEnvelope = match serde_json::from_slice::<ImageEnvelope>(&body) {
         Ok(e) => {
             if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
                 return typed_error_response(
@@ -963,6 +980,12 @@ pub async fn handle_image(req: Request<Incoming>, state: Arc<GateState>) -> Resp
             );
         }
     };
+
+    if let Err(refused) =
+        resolve_auth(&state, &envelope.auth_id, &envelope.model, &mut envelope.auth).await
+    {
+        return refused;
+    }
 
     if let Err(denied) =
         enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await
@@ -1005,7 +1028,7 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
         }
     };
 
-    let envelope: TranscriptionEnvelope = match serde_json::from_slice::<TranscriptionEnvelope>(&body) {
+    let mut envelope: TranscriptionEnvelope = match serde_json::from_slice::<TranscriptionEnvelope>(&body) {
         Ok(e) => {
             if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
                 return typed_error_response(
@@ -1033,6 +1056,12 @@ pub async fn handle_transcription(req: Request<Incoming>, state: Arc<GateState>)
             );
         }
     };
+
+    if let Err(refused) =
+        resolve_auth(&state, &envelope.auth_id, &envelope.model, &mut envelope.auth).await
+    {
+        return refused;
+    }
 
     if let Err(denied) =
         enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await
@@ -1075,7 +1104,7 @@ pub async fn handle_embed(req: Request<Incoming>, state: Arc<GateState>) -> Resp
         }
     };
 
-    let envelope: EmbedEnvelope = match serde_json::from_slice::<EmbedEnvelope>(&body) {
+    let mut envelope: EmbedEnvelope = match serde_json::from_slice::<EmbedEnvelope>(&body) {
         Ok(e) => {
             if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
                 return typed_error_response(
@@ -1103,6 +1132,12 @@ pub async fn handle_embed(req: Request<Incoming>, state: Arc<GateState>) -> Resp
             );
         }
     };
+
+    if let Err(refused) =
+        resolve_auth(&state, &envelope.auth_id, &envelope.model, &mut envelope.auth).await
+    {
+        return refused;
+    }
 
     if let Err(denied) =
         enforce_policy(&state, &envelope.auth_id, &envelope.model, u32::try_from(envelope.input.len()).unwrap_or(u32::MAX)).await

@@ -140,6 +140,16 @@ export async function * run (envelope, {
     return
   }
 
+  if (envelope.outputEffort) {
+    const effortErr = effortError(key, envelope.outputEffort, spec)
+    if (effortErr) {
+      log.warn({ provider, effort: envelope.outputEffort }, '[mohdel:answer] unsupported output effort')
+      endSpanError(span, new Error(effortErr.error.message))
+      yield effortErr
+      return
+    }
+  }
+
   if (envelope.speed) {
     const speedErr = speedError(key, envelope.speed, spec, provider, adapter)
     if (speedErr) {
@@ -337,27 +347,38 @@ export function normalizeModelId (envelope, resolveSpec) {
     return { envelope: next, key: base, spec: baseSpec }
   }
 
-  if (!baseSpec.thinkingEffortLevels) {
-    return {
-      ...unresolved,
-      error: errorEvent(
-        `Model '${base}' does not support output effort (no thinkingEffortLevels). Cannot use ':${effort}' suffix.`,
-        'SESSION_INVALID_OUTPUT_EFFORT'
-      )
-    }
-  }
-  if (effort !== 'none' && !baseSpec.thinkingEffortLevels[effort]) {
-    return {
-      ...unresolved,
-      error: errorEvent(
-        `Model '${base}' does not support output effort level '${effort}'. Available: ${Object.keys(baseSpec.thinkingEffortLevels).join(', ')}`,
-        'SESSION_INVALID_OUTPUT_EFFORT'
-      )
-    }
-  }
+  const effortErr = effortError(base, effort, baseSpec)
+  if (effortErr) return { ...unresolved, error: effortErr }
 
   next.outputEffort = effort
   return { envelope: next, key: base, spec: baseSpec }
+}
+
+/**
+ * An effort level is valid only when the entry's `thinkingEffortLevels`
+ * declares it — `none` included, since some models cannot turn
+ * thinking off.
+ *
+ * @param {string} key
+ * @param {string} effort
+ * @param {any} spec
+ * @returns {import('#core/events.js').ErrorEvent | undefined}
+ */
+export function effortError (key, effort, spec) {
+  const levels = spec.thinkingEffortLevels
+  if (!levels) {
+    return errorEvent(
+      `Model '${key}' does not support output effort (no thinkingEffortLevels). Cannot use effort '${effort}'.`,
+      'SESSION_INVALID_OUTPUT_EFFORT'
+    )
+  }
+  if (!Object.hasOwn(levels, effort)) {
+    return errorEvent(
+      `Model '${key}' does not support output effort level '${effort}'. Available: ${Object.keys(levels).join(', ')}`,
+      'SESSION_INVALID_OUTPUT_EFFORT'
+    )
+  }
+  return undefined
 }
 
 /**

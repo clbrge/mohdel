@@ -20,6 +20,7 @@ import { fireworks } from './fireworks.js'
 import { gemini } from './gemini.js'
 import { groq } from './groq.js'
 import { local } from './local.js'
+import { meta } from './meta.js'
 import { mistral } from './mistral.js'
 import { novita } from './novita.js'
 import { openai } from './openai.js'
@@ -38,6 +39,7 @@ export const adapters = Object.freeze({
   gemini,
   groq,
   local,
+  meta,
   mistral,
   novita,
   openai,

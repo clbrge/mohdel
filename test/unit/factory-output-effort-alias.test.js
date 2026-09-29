@@ -52,10 +52,16 @@ describe('factory `:effort` alias', () => {
     expect(proxy).toBeDefined()
   })
 
-  test('accepts `:none` even when spec has thinkingEffortLevels', async () => {
-    const m = await libraryFactory()
+  test('accepts `:none` when the spec declares it', async () => {
+    const m = await libraryFactory({ levels: { none: 0, low: 100 } })
     const proxy = m.use('anthropic/claude-opus-4:none')
     expect(proxy).toBeDefined()
+  })
+
+  test('rejects `:none` when the spec does not declare it', async () => {
+    const m = await libraryFactory()
+    expect(() => m.use('anthropic/claude-opus-4:none'))
+      .toThrow(/does not support output effort level 'none'/)
   })
 
   test('rejects an unsupported level with spec-aware "Available:" error', async () => {

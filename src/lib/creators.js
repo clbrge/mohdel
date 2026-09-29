@@ -36,7 +36,7 @@ const creators = {
     description: 'Kuaishou\'s KwaiPilot team builds KAT-Coder, a MoE coding model with strong agentic and multi-step reasoning for software engineering tasks.'
   },
   meta: {
-    prefixes: ['llama', 'code-llama'],
+    prefixes: ['llama', 'code-llama', 'muse'],
     label: 'Meta',
     logo: 'meta.svg',
     description: 'Meta stewards the Llama ecosystem with open, widely adoptable models for chat, coding, and research.'

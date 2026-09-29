@@ -79,6 +79,13 @@ const PROVIDER_INFO = {
     hint: 'Create an API key at novita.ai → Dashboard → API Key',
     free: false
   },
+  meta: {
+    label: 'Meta Model API',
+    description: 'Muse Spark — reasoning, long context, image, video and PDF input.',
+    url: 'https://dev.meta.ai/',
+    hint: 'Create an API key in the Meta Model API console at dev.meta.ai',
+    free: false
+  },
   xiaomi: {
     label: 'Xiaomi MiMo',
     description: 'MiMo — vision and text models.',

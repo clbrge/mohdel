@@ -86,6 +86,18 @@ const providers = {
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
   },
+  meta: {
+    sdk: 'openai',
+    apiKeyEnv: 'META_API_SK',
+    baseURL: 'https://api.meta.ai/v1',
+    createConfiguration: apiKey => ({ apiKey }),
+    references: {
+      pricing: 'https://dev.meta.ai/docs/pricing-rate-limits',
+      models: 'https://dev.meta.ai/docs/models',
+      rateLimits: 'https://dev.meta.ai/docs/pricing-rate-limits'
+    },
+    outputCapStrategy: 'accept'
+  },
   cohere: {
     sdk: 'cohere',
     api: 'embeddings',

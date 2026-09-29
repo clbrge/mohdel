@@ -153,6 +153,7 @@ describe('factory bridge — runAnswer', () => {
   })
 
   test('envelope carries flat answer options (outputBudget, outputType, identifier, tools, traceparent)', async () => {
+    setCatalog({ 'echo/m': { thinkingEffortLevels: { low: 100 } } })
     let captured
     const capturing = async function * (env) {
       captured = env

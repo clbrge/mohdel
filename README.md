@@ -1,6 +1,6 @@
 # Mohdel
 
-Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 13 providers or local inference; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
+Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 14 providers or local inference; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
 
 ```bash
 npm install -g mohdel
@@ -20,7 +20,7 @@ curate novita` writes complete, priced entries on its own, and setup counts the
 models that cost nothing and offers to add all of them in one keystroke. A
 working catalog without a pricing page or a brief.
 
-Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, OpenRouter, Novita. Node 22+, ES modules.
+Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, Meta Model API, OpenRouter, Novita. Node 22+, ES modules.
 
 Mohdel runs the inference layer of production stacks, among them [docAnalyzer](https://docanalyzer.ai), a document analysis and chat platform serving hundreds of thousands of users.
 
@@ -422,6 +422,7 @@ OPENROUTER_API_SK=sk-or-...
 NOVITA_API_SK=...
 QWEN_API_SK=sk-...
 XIAOMI_API_SK=...
+META_API_SK=...
 COHERE_API_SK=...
 MOHDEL_LOCAL_API_SK=...
 ```
@@ -461,6 +462,7 @@ What each provider supports through mohdel's unified interface:
 | Mistral | Yes | Yes | Yes | No | No | `tool_choice: "any"` = required |
 | Qwen Cloud | Yes | Yes | No | No | Yes (`enable_thinking` + `thinking_budget`) | Alibaba DashScope intl; hybrid models think by default — effort `none` sends explicit off |
 | Xiaomi | Yes | Yes | Yes | No | Auto | MiMo; shared chat-completions path, `reasoning_content` captured |
+| Meta | Yes | Yes | Yes | No | Yes (`reasoning.effort`) | OpenAI Responses API over `api.meta.ai/v1`, sent with `store: false`; Muse Spark reasoning cannot be turned off |
 | OpenRouter | Yes | Yes | Yes | No | Varies | Meta-provider; `providerOptions.openrouter` for routing prefs |
 | Local | Yes | Yes | Yes | No | No | Any OpenAI-compatible server; endpoint is the catalog entry's `baseURL` |
 | Cohere | n/a | n/a | n/a | n/a | n/a | Embeddings only: no chat models reach mohdel through it |

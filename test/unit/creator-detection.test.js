@@ -15,6 +15,7 @@ describe('creatorFromModelId', () => {
     expect(creatorFromModelId('gpt-oss-120b')).toBe('openai')
     expect(creatorFromModelId('whisper-large-v3-turbo')).toBe('openai')
     expect(creatorFromModelId('llama-4-scout-17b')).toBe('meta')
+    expect(creatorFromModelId('muse-spark-1.3')).toBe('meta')
   })
 
   test('a router-style namespace wins over the rest of the id', () => {

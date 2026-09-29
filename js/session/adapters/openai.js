@@ -360,6 +360,9 @@ function buildRequest (envelope, input, instructions) {
 
   if (envelope.speed) request.service_tier = envelope.speed
 
+  // Meta's Responses API stores every prompt and response unless told not to.
+  if (provider === 'meta') request.store = false
+
   return request
 }
 

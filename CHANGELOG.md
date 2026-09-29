@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.2.0] — Feat: Meta Model API provider, declared effort levels only / Chore: bump dependencies
+
+### Added
+
+- Meta Model API provider (`meta/*`): OpenAI Responses API against
+  `api.meta.ai/v1`, key via `META_API_SK`, requests sent with
+  `store: false`. Effort is sent as `reasoning.effort`. Muse model ids
+  resolve to creator `meta`.
+
+### Changed
+
+- An output effort is accepted only when the entry's `thinkingEffortLevels`
+  declares it; `none` is no longer accepted on every model.
+- An explicit `outputEffort` on the envelope is validated like the `:effort`
+  suffix, and fails with `SESSION_INVALID_OUTPUT_EFFORT`.
+- `@anthropic-ai/sdk` `^0.128.0` → `^0.129.0`
+- `chalk` `^6.0.0` → `^6.0.1`
+
+### Fixed
+
+- OCaml client: `lib/mohdel.ml` passes `dune build @fmt` again.
+
 ## [3.1.0] — Feat: a dispatch boundary for one-shot calls
 
 ### Added

@@ -20,6 +20,7 @@ export const ADAPTER_NAMES = Object.freeze([
   'gemini',
   'groq',
   'local',
+  'meta',
   'mistral',
   'novita',
   'openai',

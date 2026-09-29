@@ -24,5 +24,6 @@ export const SPECS = {
   novita: { defaultModel: 'zai-org/glm-5.3-flash', streams: true },
   qwen: { defaultModel: 'qwen3.6-flash', streams: true, truncateBudget: 16 },
   xiaomi: { defaultModel: 'mimo-v2.5', streams: true },
+  meta: { defaultModel: 'muse-spark-1.3-contributor', streams: true },
   local: { defaultModel: 'llama3.1:8b', streams: true }
 }

@@ -82,14 +82,44 @@ describe('session/run `:effort` alias on the wire', () => {
     expect(seen.envelope.outputEffort).toBe('minimal')
   })
 
-  test('accepts `:none` when spec has thinkingEffortLevels', async () => {
+  test('accepts `:none` when the spec declares it', async () => {
     const { adapter, seen } = capturingAdapter()
     await collect(run(envelope({ model: 'anthropic/claude-opus-4:none' }), {
       resolveAdapter: () => adapter,
-      resolveSpec: specs()
+      resolveSpec: specs({ levels: { none: 0, low: 100 } })
     }))
     expect(seen.envelope.model).toBe('anthropic/claude-opus-4')
     expect(seen.envelope.outputEffort).toBe('none')
+  })
+
+  test('rejects `:none` when the spec does not declare it', async () => {
+    const events = await collect(run(envelope({ model: 'anthropic/claude-opus-4:none' }), {
+      resolveSpec: specs()
+    }))
+    expect(events).toHaveLength(1)
+    expect(events[0].error.type).toBe('SESSION_INVALID_OUTPUT_EFFORT')
+    expect(events[0].error.message).toMatch(/does not support output effort level 'none'/)
+  })
+
+  test('rejects an explicit `outputEffort` the spec does not declare', async () => {
+    const { adapter } = capturingAdapter()
+    const events = await collect(run(envelope({ model: 'anthropic/claude-opus-4', outputEffort: 'none' }), {
+      resolveAdapter: () => adapter,
+      resolveSpec: specs()
+    }))
+    expect(events).toHaveLength(1)
+    expect(events[0].error.type).toBe('SESSION_INVALID_OUTPUT_EFFORT')
+  })
+
+  test('rejects an explicit `outputEffort` on a model without levels', async () => {
+    const { adapter } = capturingAdapter()
+    const events = await collect(run(envelope({ model: 'anthropic/claude-no-thinking', outputEffort: 'low' }), {
+      resolveAdapter: () => adapter,
+      resolveSpec: specs()
+    }))
+    expect(events).toHaveLength(1)
+    expect(events[0].error.type).toBe('SESSION_INVALID_OUTPUT_EFFORT')
+    expect(events[0].error.message).toMatch(/no thinkingEffortLevels/)
   })
 
   test('rejects an unsupported level with spec-aware error', async () => {

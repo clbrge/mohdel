@@ -11,6 +11,7 @@ import { fireworks } from '../../js/session/adapters/fireworks.js'
 import { qwen } from '../../js/session/adapters/qwen.js'
 import { xai } from '../../js/session/adapters/xai.js'
 import { local } from '../../js/session/adapters/local.js'
+import { meta } from '../../js/session/adapters/meta.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
 
 /** @returns {import('#core/envelope.js').CallEnvelope} */
@@ -647,6 +648,64 @@ describe('xai adapter', () => {
     await collect(xai(envelope('xai', 'grok-thinker', { outputEffort: 'none', outputBudget: 100 }), { client }))
     expect(captured.req.reasoning).toEqual({ effort: 'none' })
     expect(captured.req.max_output_tokens).toBe(100)
+  })
+})
+
+// ---------- Meta ----------
+
+describe('meta adapter', () => {
+  function capturingResponses (events) {
+    const captured = {}
+    const client = {
+      responses: {
+        stream: (req) => {
+          captured.req = req
+          return { async * [Symbol.asyncIterator] () { yield * events } }
+        }
+      }
+    }
+    return { client, captured }
+  }
+
+  test('delegates to the Responses API and never asks Meta to store the exchange', async () => {
+    const { client, captured } = capturingResponses([
+      { type: 'response.output_text.delta', delta: 'hello' },
+      {
+        type: 'response.completed',
+        response: {
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            input_tokens_details: { cached_tokens: 4 },
+            output_tokens_details: { reasoning_tokens: 3 }
+          }
+        }
+      }
+    ])
+    const events = await collect(meta(envelope('meta', 'muse-spark-1.3'), { client }))
+    expect(captured.req.model).toBe('muse-spark-1.3')
+    expect(captured.req.store).toBe(false)
+    const { result } = events.at(-1)
+    expect(result.output).toBe('hello')
+    expect(result.inputTokens).toBe(6)
+    expect(result.cacheReadInputTokens).toBe(4)
+    expect(result.outputTokens).toBe(2)
+    expect(result.thinkingTokens).toBe(3)
+  })
+
+  test('outputEffort goes out as reasoning.effort with headroom added', async () => {
+    setCatalog({ 'meta/muse-spark-1.3': { thinkingEffortLevels: { low: 1000, max: 8000 } } })
+    const { client, captured } = capturingResponses([{ type: 'response.completed', response: { usage: {} } }])
+    await collect(meta(envelope('meta', 'muse-spark-1.3', { outputEffort: 'max', outputBudget: 100 }), { client }))
+    expect(captured.req.reasoning).toEqual({ effort: 'max' })
+    expect(captured.req.max_output_tokens).toBe(8100)
+  })
+
+  test('identifier uses the user field', async () => {
+    const { client, captured } = capturingResponses([{ type: 'response.completed', response: { usage: {} } }])
+    await collect(meta(envelope('meta', 'muse-spark-1.3', { identifier: 'u1' }), { client }))
+    expect(captured.req.user).toBe('u1')
+    expect(captured.req.safety_identifier).toBeUndefined()
   })
 })
 

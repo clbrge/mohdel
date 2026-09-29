@@ -93,8 +93,8 @@ type stream = {
   mutable closed : bool;
 }
 
-(** Closes the socket. Closing before the terminal event abandons the
-    call: the gate aborts it and its usage is lost. *)
+(** Closes the socket. Closing before the terminal event abandons the call: the
+    gate aborts it and its usage is lost. *)
 let close s =
   s.eof <- true;
   s.queue <- [];

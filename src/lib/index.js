@@ -402,7 +402,7 @@ const mohdel = async ({ logger, verbosity: verbosityOpt, onSuccess, onFailure, c
             if (!modelSpec.thinkingEffortLevels) {
               throw new Error(`Model '${resolvedModelId}' does not support output effort (no thinkingEffortLevels). Cannot use ':${aliasOutputEffort}' suffix.`)
             }
-            if (aliasOutputEffort !== 'none' && !modelSpec.thinkingEffortLevels[aliasOutputEffort]) {
+            if (!Object.hasOwn(modelSpec.thinkingEffortLevels, aliasOutputEffort)) {
               throw new Error(`Model '${resolvedModelId}' does not support output effort level '${aliasOutputEffort}'. Available: ${Object.keys(modelSpec.thinkingEffortLevels).join(', ')}`)
             }
           }

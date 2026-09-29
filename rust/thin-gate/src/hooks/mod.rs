@@ -8,11 +8,13 @@
 pub mod auth;
 pub mod cache;
 pub mod config;
+pub mod local_auth;
 pub mod quota;
 pub mod route;
 
 pub use auth::{AuthError, AuthPolicy, RequireInlineAuth};
 pub use cache::{CacheKey, CachePolicy, CachedResponse};
 pub use config::{ConfigError, ConfigSource, PlatformConfig, ProviderConfig, SessionSpec, SocketsConfig};
+pub use local_auth::LocalAuth;
 pub use quota::{QuotaError, QuotaPolicy, QuotaSpec};
 pub use route::{RouteDecision, RouteError, RoutePolicy};

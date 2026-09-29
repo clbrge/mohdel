@@ -88,6 +88,27 @@ Env overrides:
 
 Without a session-bin configured, the data plane returns a synthetic event sequence (demo mode — useful for health-checking the HTTP layer without Node).
 
+### Provider keys when you embed the gate
+
+The standalone gate requires each call to carry its key (`RequireInlineAuth`).
+A program that embeds the `mohdel-thin-gate` crate on the operator's own
+machine can resolve keys the way `mo` does instead:
+
+```rust
+use std::sync::Arc;
+use mohdel_thin_gate::prelude::*;
+
+let auth: Arc<dyn AuthPolicy> = Arc::new(LocalAuth::new()?);
+```
+
+`LocalAuth` reads a provider's key from the process environment, then from
+`~/.config/mohdel/environment` (the path `mo` uses on each platform), under the
+same variable names (`META_API_SK`, …). A variable already in the environment
+wins, even when empty. The file is read once, when the policy is built. A
+missing file means no keys, and one that exists but can't be read fails right
+there. `LocalAuth::from_file(path)` reads another file. A missing key fails the
+call with `AUTH_UNAVAILABLE`, naming the variable and both places it looked.
+
 ## Calling from JavaScript
 
 ```js

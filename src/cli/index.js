@@ -40,7 +40,7 @@ if (command === '-h' || command === '--help') {
   const { default: providerDefs } = await import('../lib/providers.js')
   const keyRows = Object.keys(PROVIDER_INFO)
     .map(name => [providerDefs[name].apiKeyEnv, `${PROVIDER_INFO[name].label} API key`])
-    .concat([['MOHDEL_LOCAL_API_SK', 'Bearer token for a local server, if it wants one']])
+    .concat([[providerDefs.local.optionalApiKeyEnv, 'Bearer token for a local server, if it wants one']])
   const keyWidth = Math.max(...keyRows.map(([k]) => k.length))
   const keys = keyRows.map(([k, d]) => `  ${k.padEnd(keyWidth + 2)}${d}`).join('\n')
   console.log(`mohdel — self-hosted LLM gateway and SDK for Node

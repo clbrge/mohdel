@@ -7,12 +7,12 @@ import { reviewCandidates } from '../../src/lib/catalog-review.js'
 const catalog = {
   $schema: './curated.schema.json',
   _comment: 'not a model',
-  'anthropic/claude-sonnet-5-5': { model: 'claude-sonnet-5-5', provider: 'anthropic', creator: 'anthropic', label: 'Claude Sonnet 5.5', inputFormat: ['text'], tags: ['daAuto'] },
+  'anthropic/claude-sonnet-5-5': { model: 'claude-sonnet-5-5', provider: 'anthropic', creator: 'anthropic', label: 'Claude Sonnet 5.5', inputFormat: ['text'], tags: ['chat'] },
   'anthropic/claude-sonnet-5': { deprecated: 'anthropic/claude-sonnet-5-5' },
   'anthropic/claude-sonnet-4': { deprecated: 'anthropic/claude-sonnet-5' },
-  'meta/muse-spark-1.3': { model: 'muse-spark-1.3', provider: 'meta', creator: 'meta', label: 'Muse Spark 1.3', inputFormat: ['text'], tags: ['daExpert'] },
+  'meta/muse-spark-1.3': { model: 'muse-spark-1.3', provider: 'meta', creator: 'meta', label: 'Muse Spark 1.3', inputFormat: ['text'], tags: ['reasoning'] },
   'meta/muse-spark-1.3-contributor': { model: 'muse-spark-1.3-contributor', provider: 'meta', creator: 'meta', label: 'Muse Spark 1.3 Contributor', inputFormat: ['text'] },
-  'openai/gpt-6-luna': { model: 'gpt-6-luna', provider: 'openai', creator: 'openai', label: 'GPT-6 Luna', inputFormat: ['text'], tags: ['daAuto', 'daDefault'] }
+  'openai/gpt-6-luna': { model: 'gpt-6-luna', provider: 'openai', creator: 'openai', label: 'GPT-6 Luna', inputFormat: ['text'], tags: ['chat', 'default'] }
 }
 
 beforeEach(() => {
@@ -47,7 +47,7 @@ describe('mo model export — selection', () => {
   })
 
   test('--provider and --tag are a union with the ids', () => {
-    const { entries } = selectEntries(catalog, { ids: ['anthropic/claude-sonnet-5-5'], providers: ['meta'], tags: ['daDefault'] })
+    const { entries } = selectEntries(catalog, { ids: ['anthropic/claude-sonnet-5-5'], providers: ['meta'], tags: ['default'] })
     expect(Object.keys(entries)).toEqual([
       'anthropic/claude-sonnet-5-5',
       'meta/muse-spark-1.3',

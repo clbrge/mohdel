@@ -7,7 +7,8 @@
 //! threading them through every envelope.
 //!
 //! Embedders that don't need this can use the default `RequireInlineAuth`
-//! policy, which errors if the envelope has no `auth`.
+//! policy, which errors if the envelope has no `auth`. One running on the
+//! operator's machine can use `LocalAuth`, which finds keys where `mo` does.
 
 use async_trait::async_trait;
 use thiserror::Error;

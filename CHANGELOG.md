@@ -4,6 +4,24 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.4.0] — Feat: `LocalAuth`, provider keys where `mo` finds them
+
+### Added
+
+- thin-gate: `LocalAuth`, an `AuthPolicy` for embedders on the operator's machine.
+  It resolves a provider's key from the process environment, then from
+  `~/.config/mohdel/environment` (the per-platform path `mo` uses), under the
+  variable names of `providers.js`. A variable already in the environment wins
+  even when empty, as with `process.loadEnvFile`. The file is read once, at
+  `LocalAuth::new()` / `LocalAuth::from_file(path)`: a missing file is no keys,
+  and an unreadable one is refused there. A missing key is `ProviderNotConfigured`,
+  naming the variable and both places looked. Exported from `hooks` and the prelude.
+  The standalone gate keeps `RequireInlineAuth`.
+- `providers.js`: `local` declares its optional key as `optionalApiKeyEnv`
+  (`MOHDEL_LOCAL_API_SK`).
+- `test/conformance/env-file.env`: one environment file parsed by Node's
+  `util.parseEnv` and by `LocalAuth`, held to the same expected result.
+
 ## [3.3.0] — Feat: `mo model export` / Docs: examples on Claude Sonnet 5.5 and Opus 5.5
 
 ### Added

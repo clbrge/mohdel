@@ -1,3 +1,5 @@
+const LOCAL_API_KEY_ENV = 'MOHDEL_LOCAL_API_SK'
+
 // `contextSemantics` and `outputCapStrategy` are published facts about a
 // provider, not switches: mohdel caps `outputBudget` to the model's
 // `outputTokenLimit` whatever they say. They exist so an embedder building its
@@ -82,7 +84,8 @@ const providers = {
     sdk: 'openai',
     api: 'chatCompletions',
     catalog: false,
-    resolveConfiguration: () => ({ apiKey: process.env.MOHDEL_LOCAL_API_SK || '' }),
+    optionalApiKeyEnv: LOCAL_API_KEY_ENV,
+    resolveConfiguration: () => ({ apiKey: process.env[LOCAL_API_KEY_ENV] || '' }),
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
   },

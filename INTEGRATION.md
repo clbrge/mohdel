@@ -327,14 +327,14 @@ See [LOGGING.md](LOGGING.md) for log-level semantics, prefix conventions, and OT
 
 ```js
 const gpt = mo.use('openai/gpt-5-mini')
-const claude = mo.use('anthropic/claude-sonnet-4-6')
+const claude = mo.use('anthropic/claude-sonnet-5-5')
 ```
 
 Alias resolution supports:
-- Full ID: `'anthropic/claude-sonnet-4-6'`
-- Model name (when unique across providers): `'gpt-5-mini'`
-- Base name: `'claude-sonnet-4'` (strips date suffix, if unambiguous)
-- Provider-qualified base: `'anthropic/claude-sonnet-4'`
+- Full ID: `'anthropic/claude-sonnet-5-5'`
+- Model name (when unique across providers): `'claude-sonnet-5-5'`
+- Base name: `'gpt-5-mini'` for an entry keyed `openai/gpt-5-mini-2025-08-07` (strips date suffix, if unambiguous)
+- Provider-qualified base: `'openai/gpt-5-mini'`
 - Explicit `aliases` from the curated entry
 
 Throws on missing / ambiguous.
@@ -344,10 +344,10 @@ Throws on missing / ambiguous.
 Lock thinking effort at resolution time:
 
 ```js
-const m = mo.use('claude-opus-4-7:low')  // model = claude-opus-4-7, effort = low
+const m = mo.use('claude-sonnet-5-5:low')  // model = claude-sonnet-5-5, effort = low
 ```
 
-Valid levels: `none`, `low`, `medium`, `high`. Call-time `outputEffort` still wins if you pass it.
+Valid levels are the keys of the entry's `thinkingEffortLevels` — `none` only where the entry declares it. Call-time `outputEffort` still wins if you pass it.
 
 ### `@speed` suffix
 

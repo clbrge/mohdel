@@ -67,7 +67,7 @@ interface CallEnvelope {
   model:        string             // full mohdel id `"<provider>/<bare>"`,
                                    // with optional `:<effort>` and
                                    // `@<speed>` suffixes, in that order
-                                   // (e.g. `"anthropic/claude-opus-4:max@fast"`).
+                                   // (e.g. `"anthropic/claude-opus-5-5:max@fast"`).
                                    // Same shape as `mo model list`.
                                    // The gate
                                    // splits the provider prefix server-

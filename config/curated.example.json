@@ -17,18 +17,18 @@
     "tags": ["fast", "chat"]
   },
 
-  "anthropic/claude-sonnet-4-6": {
+  "anthropic/claude-sonnet-5-5": {
     "_comment_b": "Full-featured entry. Adds cache pricing (provider-side prompt caching), thinking effort levels (mohdel translates 'low'/'medium'/'high'/etc. to the provider's native budget), default thinking effort, and a leaderboard tuple. The leaderboard is [intelligence, speed, latency] — used by 'mo rank'.",
-    "model": "claude-sonnet-4-6",
+    "model": "claude-sonnet-5-5",
     "creator": "anthropic",
     "provider": "anthropic",
     "sdk": "anthropic",
-    "label": "Claude Sonnet 4.6",
+    "label": "Claude Sonnet 5.5",
     "inputFormat": ["text", "image"],
-    "inputPrice": 3,
-    "outputPrice": 15,
-    "cacheWritePrice": 3.75,
-    "cacheReadPrice": 0.30,
+    "inputPrice": 2,
+    "outputPrice": 10,
+    "cacheWritePrice": 2.5,
+    "cacheReadPrice": 0.20,
     "contextTokenLimit": 1000000,
     "outputTokenLimit": 128000,
     "defaultThinkingEffort": "medium",
@@ -44,7 +44,7 @@
 
   "anthropic/claude-3-7-sonnet": {
     "_comment_c": "Deprecated stub: a one-field entry that redirects callers to the replacement. 'mo' will refuse to use this id and point at the target. Stubs do NOT need any other fields.",
-    "deprecated": "anthropic/claude-sonnet-4-6"
+    "deprecated": "anthropic/claude-sonnet-5-5"
   },
 
   "novita/flux-2-dev": {

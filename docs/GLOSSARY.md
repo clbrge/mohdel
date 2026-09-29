@@ -30,7 +30,7 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **Catalog** — `~/.config/mohdel/curated.json`. The local source of truth for which models exist and what mohdel knows about each one. See [CATALOG.md](CATALOG.md).
 
-**Catalog key** — the top-level string of a catalog entry, in the form `<provider>/<model>` (e.g. `anthropic/claude-sonnet-4-6`). Mohdel routes calls by this key.
+**Catalog key** — the top-level string of a catalog entry, in the form `<provider>/<model>` (e.g. `anthropic/claude-sonnet-5-5`). Mohdel routes calls by this key.
 
 **`provider`** — the routing key. Picks which adapter handles the call. Independent of who trained the model.
 
@@ -44,7 +44,7 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **Leaderboard** — the `[intelligence, speed, latency]` triple on an entry. Drives `mo rank`. Source the numbers however you like (published benchmarks, your own evals). The `speed` axis here is *measured* throughput and is not selectable — for the lane you buy, see *Speed lane*.
 
-**Alias** — alternative id that resolves to the same entry. Useful for accepting common short names (`opus` → `anthropic/claude-opus-4-7`).
+**Alias** — alternative id that resolves to the same entry. Useful for accepting common short names (`opus` → `anthropic/claude-opus-5-5`).
 
 **Coding agent** — the agent you already run in your terminal (Claude Code, Codex CLI, Gemini CLI, opencode, Cursor Agent, Aider). Mohdel ships none; it writes a brief and hands it over. Prices, context limits and cache rates are on docs pages rather than in any provider API, which is why a web-capable agent fills them in.
 

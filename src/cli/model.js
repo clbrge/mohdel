@@ -42,6 +42,7 @@ Usage:
   model instructions [provider]         Print a brief for your coding agent
   model check [--entry <file|->]        Validate catalog or candidate entries
   model apply <file|->                  Write reviewed entries to the catalog
+  model export <id…>                    Print entries for another host's apply
   model backup list|restore|diff        Catalog backups: prev, daily, weekly
   model rank [options]                  Rank models by benchmark performance
   model bench <model> [options]         Benchmark a model with live inference
@@ -374,6 +375,12 @@ config/curated.example.json for ready-to-copy entries.`)
   if (action === 'apply') {
     const { runApply } = await import('./entry.js')
     await runApply(rawArgs.slice(1))
+    return
+  }
+
+  if (action === 'export') {
+    const { runExport } = await import('./export.js')
+    await runExport(rawArgs.slice(1))
     return
   }
 

@@ -24,7 +24,7 @@ Options:
   --json                Output as JSON (single model only)
 
 Examples:
-  mo bench anthropic/claude-sonnet-4-6
+  mo bench anthropic/claude-sonnet-5-5
   mo bench --tag fast --effort low
   mo bench openai/gpt-5 --budget 8000 --save results.json`)
     process.exit(0)

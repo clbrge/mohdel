@@ -35,7 +35,7 @@ Every entry is one of:
 
 ```json
 "anthropic/claude-3-7-sonnet": {
-  "deprecated": "anthropic/claude-sonnet-4-6"
+  "deprecated": "anthropic/claude-sonnet-5-5"
 }
 ```
 

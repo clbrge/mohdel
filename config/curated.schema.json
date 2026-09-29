@@ -33,7 +33,7 @@
       "properties": {
         "deprecated": {
           "type": "string",
-          "description": "Replacement model id (e.g. 'anthropic/claude-sonnet-4-6')."
+          "description": "Replacement model id (e.g. 'anthropic/claude-sonnet-5-5')."
         }
       }
     },

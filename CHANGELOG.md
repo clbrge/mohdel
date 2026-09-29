@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.3.0] — Feat: `mo model export` / Docs: examples on Claude Sonnet 5.5 and Opus 5.5
+
+### Added
+
+- `mo model export <id…> [--provider <p>] [--tag <t>] [--with-redirects]` prints
+  catalog entries as `curated.json` holds them, in the shape `mo model apply`
+  reads. An id that resolves to nothing fails the command with no output.
+- `mo model apply -` refusing to write on a pipe points at
+  `mo model check --entry -` for the preview.
+
+### Changed
+
+- Examples in the README, docs, CLI help, schema and
+  `config/curated.example.json` use `anthropic/claude-sonnet-5-5` and
+  `anthropic/claude-opus-5-5`.
+
+### Fixed
+
+- INTEGRATION.md: the base-name alias example uses an id the rule matches
+  (`gpt-5-mini` for `gpt-5-mini-2025-08-07`); the `:effort` suffix lists the
+  entry's declared levels.
+
 ## [3.2.0] — Feat: Meta Model API provider, declared effort levels only / Chore: bump dependencies
 
 ### Added

@@ -9,7 +9,7 @@ const NOUNS = ['model', 'provider', 'creator', 'tag', 'ratelimit', 'ask', 'trans
 
 const VERBS = {
   model: ['list', 'search', 'stats', 'show', 'get', 'set', 'rm', 'add', 'instructions',
-    'check', 'apply', 'rank', 'bench', 'curate', 'backup'],
+    'check', 'apply', 'export', 'rank', 'bench', 'curate', 'backup'],
   provider: ['list', 'show', 'models', 'setup', 'rm'],
   creator: ['list', 'show'],
   tag: ['list', 'show', 'add', 'rm'],
@@ -24,6 +24,7 @@ const ARGUMENT = {
   'model set': ['model', 'field'],
   'model rm': ['model', 'field'],
   'model bench': ['model'],
+  'model export': ['model'],
   'model curate': ['provider'],
   'model instructions': ['provider'],
   'provider list': ['provider'],

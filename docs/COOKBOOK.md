@@ -50,7 +50,7 @@ console.error(`Cost: $${result.cost.toFixed(4)} (${result.inputTokens} in, ${res
 **Shell:**
 
 ```bash
-mo ask anthropic/claude-sonnet-4-6 --stream "write a short story about a lighthouse"
+mo ask anthropic/claude-sonnet-5-5 --stream "write a short story about a lighthouse"
 ```
 
 **JS** — pass a `realtimeHandler` to write deltas as they arrive:
@@ -59,7 +59,7 @@ mo ask anthropic/claude-sonnet-4-6 --stream "write a short story about a lightho
 import mohdel from 'mohdel'
 
 const mo = await mohdel()
-const result = await mo.use('anthropic/claude-sonnet-4-6').answer(
+const result = await mo.use('anthropic/claude-sonnet-5-5').answer(
   'Write a short story about a lighthouse.',
   {
     realtimeHandler: (delta) => process.stdout.write(delta),
@@ -109,7 +109,7 @@ Mohdel exposes the inference primitive — *you* run the tool loop. A minimal on
 import mohdel from 'mohdel'
 
 const mo = await mohdel()
-const model = mo.use('anthropic/claude-sonnet-4-6')
+const model = mo.use('anthropic/claude-sonnet-5-5')
 
 const tools = [{
   name: 'get_weather',
@@ -168,7 +168,7 @@ import { resolve } from 'path'
 
 const mo = await mohdel()
 
-const result = await mo.use('anthropic/claude-sonnet-4-6').answer(
+const result = await mo.use('anthropic/claude-sonnet-5-5').answer(
   'Describe this chart in one sentence.',
   {
     images: [{

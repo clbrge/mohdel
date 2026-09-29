@@ -139,6 +139,7 @@ Write an entry with your coding agent: mo model instructions <provider>`)
   if (!nothingToDo && !args.includes('--yes')) {
     if (!process.stdout.isTTY || path === '-') {
       console.error(`\n${err('Not written')} — no terminal to confirm on. Re-run in a terminal, or pass --yes.`)
+      if (path === '-') console.error(`${meta('Preview without writing:')} mo model check --entry -`)
       process.exit(1)
     }
     const { confirm, isCancel } = await import('@clack/prompts')

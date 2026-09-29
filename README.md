@@ -27,7 +27,7 @@ Mohdel runs the inference layer of production stacks, among them [docAnalyzer](h
 ## Why mohdel
 
 - **Real numbers on every call.** Token counts and per-call USD cost computed from your own pricing catalog (`curated.json`) — not estimates, not provider-specific shapes. Bill tenants, alert on spend, reconcile invoices. Your own catalog means your negotiated rates and your own tags, and it is not a spreadsheet you maintain: `mo model instructions` hands the provider's docs page to your coding agent, which drafts the entries for you to review. See [docs/CATALOG.md](docs/CATALOG.md).
-- **One interface across providers.** Same `answer()` call, same event stream, same `{ status, output, inputTokens, outputTokens, cost }` result. Switching from `anthropic/claude-sonnet-4-6` to `openai/gpt-5.4-mini` is one string change — adapter differences stay inside mohdel.
+- **One interface across providers.** Same `answer()` call, same event stream, same `{ status, output, inputTokens, outputTokens, cost }` result. Switching from `anthropic/claude-sonnet-5-5` to `openai/gpt-5.4-mini` is one string change — adapter differences stay inside mohdel.
 - **Self-hosted, no vendor in the path.** API keys live in `~/.config/mohdel/`. Mohdel calls provider APIs directly; nothing routes through a third party, nothing marks up your tokens, no extra hop of availability risk.
 - **Nothing to compromise.** No network listener, no credential store, no tool execution. Mohdel runs a model call and returns the result; it cannot read a file, run a command, or hand back a key. See [Attack surface](#attack-surface).
 - **Observability without instrumentation.** OpenTelemetry spans, trace-linked logs, and OTLP metrics over one endpoint. Set `OTEL_EXPORTER_OTLP_ENDPOINT`; everything else is wired.
@@ -100,7 +100,7 @@ Model IDs always use the `<provider>/<model>` format:
 
 ```
 openai/gpt-5.6-luna
-anthropic/claude-sonnet-4-6
+anthropic/claude-sonnet-5-5
 openai/gpt-5.4-mini
 groq/llama-4-scout-17b-16e-instruct
 ```
@@ -157,16 +157,16 @@ See [ARCHITECTURE.md §Design principles](ARCHITECTURE.md#design-principles) for
 
 ```bash
 # One-shot inference — pipeable
-mo ask anthropic/claude-sonnet-4-6 "explain monads"
+mo ask anthropic/claude-sonnet-5-5 "explain monads"
 cat article.txt | mo ask openai/gpt-5.4 "summarize in 3 bullets"
 echo "hello" | mo ask openai/gpt-5.6-luna --json | jq .cost
 mo ask openai/gpt-5.6-luna -q "…" 2>err.log   # stderr carries failures only
 
 # Streaming
-mo ask anthropic/claude-sonnet-4-6 --stream "write a haiku about recursion"
+mo ask anthropic/claude-sonnet-5-5 --stream "write a haiku about recursion"
 
 # With thinking effort
-mo ask anthropic/claude-opus-4-6 --effort high "prove P != NP"
+mo ask anthropic/claude-opus-5-5 --effort high "prove P != NP"
 
 # On a faster service lane, when the model sells one
 mo ask openai/gpt-5.6-luna@fast "triage this alert"
@@ -179,7 +179,7 @@ mo transcribe mistral/voxtral-mini-transcribe interview.wav --language fr
 mo ls                                  # list all curated models
 mo ls --sort price                     # sorted by input price
 mo search sonnet                       # filter by name/label
-mo show anthropic/claude-sonnet-4-6    # model details
+mo show anthropic/claude-sonnet-5-5    # model details
 mo stats                               # catalog summary
 mo providers                           # providers with key status & rate limits
 
@@ -201,12 +201,16 @@ mo model instructions anthropic        # brief: fields, doc links, review comman
 mo model check --entry mohdel-candidate.json  # validate + diff, no write
 mo model apply mohdel-candidate.json          # write, after showing the diff
 
+# Copy entries to another host
+mo model export meta/muse-spark-1.3 | ssh host mo model check --entry -     # preview there
+mo model export meta/muse-spark-1.3 | ssh host mo model apply - --yes       # write; remote backup is the undo
+
 # Rate limits
 mo rl show anthropic                   # provider or model limits
-mo rl set anthropic/claude-sonnet-4-6 60 100000
+mo rl set anthropic/claude-sonnet-5-5 60 100000
 
 # Benchmark with live inference
-mo bench anthropic/claude-sonnet-4-6   # single model
+mo bench anthropic/claude-sonnet-5-5   # single model
 mo bench --tag fast --effort low       # suite by tag
 ```
 
@@ -262,6 +266,16 @@ including any field the candidate would remove — before writing. Entries carry
 `source` and `sourcedAt` so a price can be traced back to the page it came
 from. See [docs/CATALOG.md](docs/CATALOG.md#editing-with-a-coding-agent).
 
+### Copying entries to another host
+
+`mo model export <id…>` prints entries exactly as `curated.json` holds them, in the
+shape `mo model apply` reads. `--provider <p>` and `--tag <t>` select in bulk, and
+`--with-redirects` adds the deprecated stubs that point at what you export. Pipe it
+to the other host: `mo model check --entry -` there previews the diff, and
+`mo model apply - --yes` writes it. A pipe has no terminal to confirm on, so the
+remote backup (`mo model backup restore prev`) is the undo. Keys, provider-level
+limits and `catalog.local.json` stay per host.
+
 ## Library Usage
 
 Two integration paths, same adapters underneath: start with the in-process **factory**; graduate to the cross-process **client** when you want gateway-grade isolation.
@@ -272,7 +286,7 @@ Two integration paths, same adapters underneath: start with the in-process **fac
 import mohdel from 'mohdel'
 
 const mo = await mohdel()
-const result = await mo.use('anthropic/claude-sonnet-4-6').answer('Hello')
+const result = await mo.use('anthropic/claude-sonnet-5-5').answer('Hello')
 console.log(result.output, result.cost)
 ```
 

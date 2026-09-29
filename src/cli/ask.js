@@ -82,7 +82,7 @@ Output:
 
 Examples:
   mo ask openai/gpt-5.6-luna "why is the sky blue"
-  cat article.txt | mo ask anthropic/claude-sonnet-4-6 "summarize this"
+  cat article.txt | mo ask anthropic/claude-sonnet-5-5 "summarize this"
   mo ask openai/gpt-5.4 --effort high "explain monads" --json | jq .cost`)
     process.exit(0)
   }

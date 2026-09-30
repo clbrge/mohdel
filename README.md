@@ -152,8 +152,9 @@ reading them. Mohdel is built so neither is present.
   starts a temporary HTTP callback listener on `127.0.0.1` with PKCE and state validation.
 - **Session credentials come from the caller.** The provider credential rides
   on each envelope and goes to the SDK. Optional ChatGPT sign-in saves OAuth
-  credentials in the caller's user-data directory; gate workers do not load
-  that store or select a local account.
+  credentials in the caller's user-data directory. The standalone gate and its
+  sessions never read that store. Only an embedder that opts into `ChatGptAuth`
+  reads it, through mohdel's helper.
 - **The session subprocess starts from an empty environment.** It is given
   back only what the runtime reads — `PATH`, proxy and TLS settings, mohdel's
   own dials, `OTEL_*`. Every `*_API_SK`, cloud credential and database URL the

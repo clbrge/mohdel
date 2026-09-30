@@ -4,6 +4,30 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.6.0] — Feat: `ChatGptAuth`, the host's ChatGPT account behind an embedded gate
+
+### Added
+
+- thin-gate: `ChatGptAuth`, an `AuthPolicy` giving `chatgpt/` a fresh access
+  token for the host's signed-in account and every other provider to
+  `LocalAuth`. The token comes from `node <mohdel/chatgpt/bin> access`, is
+  cached until its `refreshAt`, one helper run at a time; a run is killed at
+  70 s. Exported from `hooks` and the prelude.
+- `mohdel/chatgpt/bin`: `access [--account <id>]` prints
+  `{"accessToken", "refreshAt"}` on stdout, or the error on stderr with exit 1.
+- `access()` returns `refreshAt`, the time its token stops being handed out.
+
+### Changed
+
+- The `chatgpt/` adapter fetches an account's model list once per access token
+  instead of before every call.
+
+### Fixed
+
+- A corrupt ChatGPT credential store fails with its path instead of a parse
+  error quoting its content.
+- ARCHITECTURE.md lists `AuthPolicy` among the hooks and `auth` in `GateState`.
+
 ## [3.5.0] — Feat: `chatgpt/` provider on an eligible ChatGPT plan / Chore: bump dependencies
 
 ### Added

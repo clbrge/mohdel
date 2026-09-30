@@ -50,15 +50,17 @@ for await (const event of call(envelope, { socketPath: '/path/to/gate.sock' })) 
 The standard catalog requirement applies on both paths. `chatgpt.models()`
 returns model IDs and labels; populate capability/limit fields only from
 verified model metadata. The adapter checks the chosen model against the
-account's current `/v1/models` response before inference, so an old catalog
-cannot authorize another account's models. It always uses the public Responses
+account's `/v1/models` response, fetched once per access token, so an old
+catalog cannot authorize another account's models. It always uses the public Responses
 endpoint with `stream: true`, `store: false`; it never falls back to `openai/`.
 
-Gate workers consume only the inline token and do not read local saved accounts.
-`LocalAuth` resolves API-key environment variables, so it does not perform OAuth:
-use the helper above or an embedder-owned `AuthPolicy` that supplies fresh tokens.
-This keeps account selection and refresh under the caller's control on both
-paths; no wire fields or gate quota rules change.
+The standalone gate and its sessions never read the saved ChatGPT accounts;
+they use only the token on the envelope. `LocalAuth` resolves API-key
+environment variables, so it does not perform OAuth. An embedder of the gate on
+the operator's machine can opt into `ChatGptAuth` (see *Provider keys when you
+embed the gate*), whose helper reads the saved accounts; otherwise use the
+helper above or an embedder-owned `AuthPolicy` that supplies fresh tokens. No
+wire fields or gate quota rules change.
 
 `cost` is zero for ChatGPT calls, including aborts, even if the catalog contains
 API prices. It is an API-USD accounting field, not a measurement of plan credits.
@@ -160,6 +162,29 @@ wins, even when empty. The file is read once, when the policy is built. A
 missing file means no keys, and one that exists but can't be read fails right
 there. `LocalAuth::from_file(path)` reads another file. A missing key fails the
 call with `AUTH_UNAVAILABLE`, naming the variable and both places it looked.
+
+`ChatGptAuth` adds `chatgpt/` from the account `mo chatgpt login` signed in,
+and hands every other provider to the `LocalAuth` it wraps:
+
+```rust
+let auth: Arc<dyn AuthPolicy> = Arc::new(ChatGptAuth::new(
+    LocalAuth::new()?,
+    "node".into(),
+    helper,  // the resolved path of `mohdel/chatgpt/bin`
+    None,    // the account `mo chatgpt select` made active; Some(id) pins one
+));
+```
+
+The token comes from mohdel's own helper, `node <helper> access`, which
+refreshes it under the credential store's lock, so gates in several processes
+share one account safely. The policy caches the token until the helper's
+`refreshAt` (about once an hour today) and runs one helper at a time. The
+helper gets the session's environment plus `XDG_*`, `APPDATA`, `LOCALAPPDATA`
+and `USERPROFILE`, which locate the store. A helper failure fails the call
+with `AUTH_UNAVAILABLE` and the helper's message, such as `run mo chatgpt
+login`; a helper that does not answer within 70 s is killed. A helper killed
+while holding the store's lock leaves `accounts.lock` behind; remove it once
+no helper is running.
 
 ## Calling from JavaScript
 

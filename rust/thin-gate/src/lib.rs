@@ -32,8 +32,8 @@ pub use session_pool::{PoolError, PooledSession, SessionPool};
 pub mod prelude {
     pub use crate::enforcer::Enforcer;
     pub use crate::hooks::{
-        AuthError, AuthPolicy, CachePolicy, ConfigSource, LocalAuth, QuotaError, QuotaPolicy,
-        QuotaSpec, RequireInlineAuth, RouteDecision, RouteError, RoutePolicy,
+        AuthError, AuthPolicy, CachePolicy, ChatGptAuth, ConfigSource, LocalAuth, QuotaError,
+        QuotaPolicy, QuotaSpec, RequireInlineAuth, RouteDecision, RouteError, RoutePolicy,
     };
     pub use crate::protocol::{
         catalog_key, provider_of, split_model_id, AnswerResult, Auth, CallEnvelope,

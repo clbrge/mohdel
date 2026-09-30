@@ -11,6 +11,7 @@ const PERMISSION = 'chatgpt.tokens.use.direct'
 const SCOPE = `openid profile email offline_access resource.invoke ${PERMISSION}`
 const jwks = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`))
 const random = () => randomBytes(32).toString('base64url')
+const REFRESH_MARGIN = 30000
 export const usageURL = 'https://chatgpt.com/settings/usage'
 
 async function jsonRequest (fetcher, url, options = {}) {
@@ -92,18 +93,21 @@ export function createChatGPT (options = {}) {
     await save(store)
   })
 
-  /** @param {string} [id] @returns {Promise<{accessToken: string, accountId: string}>} */
+  /**
+   * `refreshAt` is when this token stops being handed out; a caller may reuse it until then.
+   * @param {string} [id] @returns {Promise<{accessToken: string, accountId: string, refreshAt: number}>}
+   */
   const access = async (id) => withStore(directory, async (store, save) => {
     const account = store.accounts[id ?? store.active]
     if (!account?.access_token) throw new Error('ChatGPT is not connected; run mo chatgpt login')
     if (!account.scopes?.includes(PERMISSION)) throw new Error('ChatGPT plan usage is not enabled; run mo chatgpt login and grant plan usage')
-    if (account.expires_at <= Date.now() + 30000) {
+    if (account.expires_at <= Date.now() + REFRESH_MARGIN) {
       const tokens = await tokenRequest({ grant_type: 'refresh_token', client_id: account.client_id, refresh_token: account.refresh_token })
       Object.assign(account, credentials(tokens, account))
       await save(store)
       if (!account.scopes.includes(PERMISSION)) throw new Error('ChatGPT plan usage permission was removed; reconnect with mo chatgpt login')
     }
-    return { accessToken: account.access_token, accountId: account.client_id }
+    return { accessToken: account.access_token, accountId: account.client_id, refreshAt: account.expires_at - REFRESH_MARGIN }
   })
 
   /** @param {string} [id] @returns {Promise<Array<{id: string, model: string, label: string}>>} */

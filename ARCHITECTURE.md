@@ -100,12 +100,13 @@ If you're embedding the crate or depending on internals, track `main`. If you're
 
 ## Hook surface (Rust trait objects)
 
-Thin-gate is a multiplexer with four extension points:
+Thin-gate is a multiplexer with five extension points:
 
 - **`RoutePolicy`** — `resolve(envelope) -> (provider, model_id, session_pool?)`. Default (`FileRoutePolicy`) passes through unchanged. Custom deployments rewrite aliases, enforce model allowlists, or route to provider-specific pools.
 - **`QuotaPolicy`** — `policy_for(auth_id) -> QuotaSpec { rpm, tpm, inpm, cooldown_threshold, cooldown_duration_ms }`. Default (`FileQuotaPolicy`) returns generous static values. Wrappers plug in per-user / per-plan quotas from their own storage.
 - **`ConfigSource`** — `load() -> PlatformConfig` + optional `watch()` stream. Default (`TomlConfigSource`) reads `~/.config/mohdel/thin-gate.toml` (or `MOHDEL_THIN_GATE_CONFIG`). PlatformConfig carries socket paths, session spec (command + args + pool size), provider registry, and default timeouts.
 - **`CachePolicy`** — optional content cache. No-op default; here for future prompt/response caching.
+- **`AuthPolicy`** — `resolve(auth_id, model) -> Auth`, called only when the envelope has no `auth`. Default (`RequireInlineAuth`) refuses, so the standalone binary reads no credential from disk. Embedders on the operator's machine can use `LocalAuth` (mohdel's environment file, read in the gate process) or `ChatGptAuth` (the ChatGPT credential store, read by a helper child the policy runs). Either way the key reaches the session on the envelope.
 
 A custom wrapper implements one or more and passes the bundled `GateState` into `serve_data_with_state(path, state)`. Shape:
 
@@ -114,6 +115,7 @@ pub struct GateState {
     pub pool: Option<SessionPool>,
     pub route: Arc<dyn RoutePolicy>,
     pub quota: Arc<dyn QuotaPolicy>,
+    pub auth: Arc<dyn AuthPolicy>,
     pub enforcer: Arc<Enforcer>,
 }
 ```
@@ -275,7 +277,10 @@ See `js/session/adapters/_output_cap.js`.
 only what the runtime reads. The session takes its provider key from each
 envelope, so it has no reason to see any other secret the host holds — and a
 subprocess that cannot read the container's credentials cannot leak them,
-whatever a model is persuaded to emit.
+whatever a model is persuaded to emit. It reads no credential file either —
+neither mohdel's environment file nor the ChatGPT credential store. A
+credential the host holds is resolved by the gate's `AuthPolicy` and arrives
+on the envelope.
 
 This is defence in depth rather than a fix for a known path: nothing in the
 session executes, so injected content has no mechanism for reading an

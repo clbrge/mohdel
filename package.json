@@ -46,6 +46,10 @@
       "types": "./js/chatgpt/index.d.ts",
       "default": "./js/chatgpt/index.js"
     },
+    "./chatgpt/bin": {
+      "types": "./js/chatgpt/bin.d.ts",
+      "default": "./js/chatgpt/bin.js"
+    },
     ".": {
       "types": "./src/lib/index.d.ts",
       "default": "./src/lib/index.js"

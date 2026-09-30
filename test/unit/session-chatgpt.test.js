@@ -3,7 +3,8 @@ import { chatgpt } from '../../js/session/adapters/chatgpt.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
 import { run } from '../../js/session/run.js'
 
-const envelope = () => ({ callId: 'c1', authId: 'a1', auth: { key: 'oauth-token-secret' }, model: 'chatgpt/account-model', prompt: 'Hello' })
+let tokens = 0
+const envelope = (key = `oauth-token-secret-${++tokens}`) => ({ callId: 'c1', authId: 'a1', auth: { key }, model: 'chatgpt/account-model', prompt: 'Hello' })
 const collect = async iter => { const events = []; for await (const event of iter) events.push(event); return events }
 const modelFetch = vi.fn(async () => Response.json({ models: [{ slug: 'account-model', visibility: 'list' }] }))
 const client = events => ({ responses: { stream: vi.fn(async function * () { yield * events }) } })
@@ -17,9 +18,10 @@ beforeEach(() => {
 describe('ChatGPT Responses adapter', () => {
   test('forces nonstored streaming, preserves token counts, and does not bill API prices', async () => {
     const sdk = client([{ type: 'response.output_text.delta', delta: 'Hello' }, completed])
-    const events = await collect(chatgpt(envelope(), { fetch: modelFetch, client: sdk }))
+    const call = envelope()
+    const events = await collect(chatgpt(call, { fetch: modelFetch, client: sdk }))
     expect(sdk.responses.stream.mock.calls[0][0]).toMatchObject({ model: 'account-model', stream: true, store: false })
-    expect(modelFetch.mock.calls[0][1].headers.Authorization).toBe('Bearer oauth-token-secret')
+    expect(modelFetch.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${call.auth.key}`)
     expect(events.at(-1).result).toMatchObject({ output: 'Hello', inputTokens: 10, outputTokens: 3, cost: 0 })
   })
 
@@ -28,6 +30,23 @@ describe('ChatGPT Responses adapter', () => {
     const events = await collect(chatgpt(envelope(), { fetch: async () => Response.json({ models: [] }), client: sdk }))
     expect(events.at(-1).type).toBe('error')
     expect(sdk.responses.stream).not.toHaveBeenCalled()
+  })
+
+  test('discovers once per token', async () => {
+    const call = envelope()
+    await collect(chatgpt(call, { fetch: modelFetch, client: client([completed]) }))
+    await collect(chatgpt(call, { fetch: modelFetch, client: client([completed]) }))
+    expect(modelFetch).toHaveBeenCalledTimes(1)
+    await collect(chatgpt(envelope(), { fetch: modelFetch, client: client([completed]) }))
+    expect(modelFetch).toHaveBeenCalledTimes(2)
+  })
+
+  test('a failed discovery is not remembered', async () => {
+    const call = envelope()
+    await collect(chatgpt(call, { fetch: async () => new Response('', { status: 500 }) }))
+    const events = await collect(chatgpt(call, { fetch: modelFetch, client: client([completed]) }))
+    expect(modelFetch).toHaveBeenCalledTimes(1)
+    expect(events.at(-1).type).toBe('done')
   })
 
   test.each([

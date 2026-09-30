@@ -41,7 +41,8 @@ describe('ChatGPT OAuth', () => {
     expect(result.planUsage).toBe(true)
     expect((await stat(join(directory, 'accounts.json'))).mode & 0o777).toBe(0o600)
     expect(JSON.stringify(await auth.accounts())).not.toContain('secret')
-    expect(await auth.access()).toEqual({ accessToken: 'access-secret', accountId: 'oaiapp_test' })
+    const { expires_at: expiresAt } = (await readStore(directory)).accounts.oaiapp_test
+    expect(await auth.access()).toEqual({ accessToken: 'access-secret', accountId: 'oaiapp_test', refreshAt: expiresAt - 30000 })
   })
 
   test('ignores a mismatched state before accepting the valid callback', async () => {
@@ -108,6 +109,7 @@ describe('ChatGPT OAuth', () => {
     const b = createChatGPT({ directory, fetch: fetcher })
     const results = await Promise.all([a.access(), b.access()])
     expect(results.map(r => r.accessToken)).toEqual(['new-access', 'new-access'])
+    expect(results[0].refreshAt).toBeGreaterThan(Date.now())
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(fetcher.mock.calls[0][1].body.get('grant_type')).toBe('refresh_token')
     expect((await readStore(directory)).accounts.oaiapp_test.refresh_token).toBe('new-refresh')

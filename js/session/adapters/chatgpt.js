@@ -7,6 +7,19 @@ import { getSpec } from './_catalog.js'
 import { discoverModels } from '../../chatgpt/models.js'
 import { abortedDone } from './_aborted.js'
 
+// A token belongs to one account, so its model list only changes with the token.
+const discovered = new Map()
+const DISCOVERED_TOKENS = 8
+
+async function accountModels (key, deps) {
+  const cached = discovered.get(key)
+  if (cached) return cached
+  const models = await discoverModels(key, deps)
+  discovered.set(key, models)
+  if (discovered.size > DISCOVERED_TOKENS) discovered.delete(discovered.keys().next().value)
+  return models
+}
+
 /**
  * Uses only the caller's OAuth access token, including behind the gate.
  * Session subprocesses never read the host's saved ChatGPT account.
@@ -18,7 +31,7 @@ export async function * chatgpt (envelope, deps = {}) {
   const start = String(process.hrtime.bigint())
   const model = getSpec(catalogKey(envelope.model))?.model ?? bareOf(catalogKey(envelope.model))
   try {
-    const models = await discoverModels(key, deps)
+    const models = await accountModels(key, deps)
     if (!models.some(m => m.slug === model)) {
       yield { type: 'error', error: { type: 'INVALID_REQUEST', severity: 'error', message: 'This model is not available to the selected ChatGPT account.', retryable: false } }
       return

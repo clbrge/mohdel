@@ -61,7 +61,10 @@ impl LocalAuth {
         Self::with_env(path, process_env)
     }
 
-    fn with_env(path: &Path, env: fn(&str) -> Option<String>) -> Result<Self, AuthError> {
+    pub(crate) fn with_env(
+        path: &Path,
+        env: fn(&str) -> Option<String>,
+    ) -> Result<Self, AuthError> {
         let vars = match std::fs::read_to_string(path) {
             Ok(content) => parse_env_file(&content),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => HashMap::new(),

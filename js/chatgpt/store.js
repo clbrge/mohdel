@@ -7,11 +7,19 @@ import envPaths from 'env-paths'
 export const defaultDirectory = () => join(envPaths('mohdel', { suffix: null }).data, 'chatgpt')
 
 export async function readStore (directory) {
+  const path = join(directory, 'accounts.json')
+  let text
   try {
-    return JSON.parse(await readFile(join(directory, 'accounts.json'), 'utf8'))
+    text = await readFile(path, 'utf8')
   } catch (err) {
     if (err.code === 'ENOENT') return { host: `urn:uuid:${randomUUID()}`, active: null, accounts: {} }
     throw err
+  }
+  try {
+    return JSON.parse(text)
+  } catch {
+    // V8's parse error quotes the input, which here holds tokens.
+    throw new Error(`ChatGPT credentials are not valid JSON: ${path}`)
   }
 }
 

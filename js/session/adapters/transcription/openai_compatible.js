@@ -23,7 +23,7 @@ import { basename } from 'node:path'
 import { getSpec } from '../_catalog.js'
 import { classifyProviderError, fromHttpStatus, typedError } from '../_errors.js'
 import { dataUriPayload, isTrustedMedia, mediaScheme, readLocalMedia } from '../_media.js'
-import { computeTranscriptionCost } from '../_pricing.js'
+import { transcriptionCostFor } from '../_pricing.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 
 /**
@@ -67,7 +67,7 @@ export function createTranscriptionAdapter ({ baseURL, responseFormat }) {
     const body = await res.json()
     const durationSeconds = extractDuration(body)
     const tokens = extractTokens(body)
-    const cost = computeTranscriptionCost(spec, { durationSeconds, ...tokens })
+    const cost = transcriptionCostFor(envelope, spec, { durationSeconds, ...tokens })
 
     const end = String(process.hrtime.bigint())
     return {

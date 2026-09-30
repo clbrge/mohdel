@@ -64,6 +64,12 @@ wire fields or gate quota rules change.
 
 `cost` is zero for ChatGPT calls, including aborts, even if the catalog contains
 API prices. It is an API-USD accounting field, not a measurement of plan credits.
+`billingOf(modelId)` from `mohdel/providers` says how a model's calls are paid
+for, without loading an SDK or the session: `{ kind: 'metered' }`,
+`{ kind: 'plan', label, usage }` (a subscription allowance, managed at `usage`),
+or `{ kind: 'capacity', label }` (hardware run at a flat rate, as with `local/`).
+`cost` is 0 for `plan` and `capacity`; a `plan` can still draw on purchased
+credits, so do not present it as free. An unknown provider throws.
 Token usage remains available. Link users to https://chatgpt.com/settings/usage
 for allowance and credit management. The flow is for eligible open-source or
 personal local use; commercial/private-app eligibility is separate.

@@ -10,6 +10,16 @@
  */
 
 import { setCatalog, specFor } from './_catalog.js'
+import { providerOf } from '#core/model-id.js'
+import providers from '../../../src/lib/providers.js'
+
+// `plan` and `capacity` calls have no per-call API invoice, so `cost`, which is
+// API USD, is 0 whatever the catalog prices. `fake` and `echo` are adapters,
+// not providers: they carry no declaration and price from the catalog.
+function unmetered (model) {
+  const def = providers[providerOf(model)]
+  return def !== undefined && def.billing.kind !== 'metered'
+}
 
 /**
  * Pure cost computation from spec + usage.
@@ -112,9 +122,28 @@ function resolveTier (price, tokens) {
  * @returns {number}
  */
 export function costFor (envelope, usage) {
-  // Plan usage has no per-call API invoice; it still consumes the plan allowance.
-  if (envelope.model.startsWith('chatgpt/')) return 0
+  if (unmetered(envelope.model)) return 0
   return computeCost(specFor(envelope), usage)
+}
+
+/**
+ * @param {{model: string}} envelope
+ * @param {any} spec
+ * @param {{durationSeconds?: number | null, inputTokens?: number, outputTokens?: number}} usage
+ * @returns {number}
+ */
+export function transcriptionCostFor (envelope, spec, usage) {
+  return unmetered(envelope.model) ? 0 : computeTranscriptionCost(spec, usage)
+}
+
+/**
+ * @param {{model: string}} envelope
+ * @param {any} spec
+ * @param {{inputTokens?: number}} usage
+ * @returns {number}
+ */
+export function embeddingCostFor (envelope, spec, usage) {
+  return unmetered(envelope.model) ? 0 : computeEmbeddingCost(spec, usage)
 }
 
 /**

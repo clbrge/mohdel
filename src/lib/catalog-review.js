@@ -73,6 +73,9 @@ export const reviewEntry = (key, spec, catalog, { strict = false, local = null }
   if (spec.provider && spec.provider !== keyProvider) {
     errors.push(`${key}: spec.provider '${spec.provider}' doesn't match key prefix '${keyProvider}'`)
   }
+  if (providerConfig?.billing.kind === 'capacity' && Object.keys(spec).some(k => k.endsWith('Price'))) {
+    warnings.push(`${key}: prices are never charged — ${providerConfig.billing.label} calls report cost 0`)
+  }
   if (providerConfig && spec.sdk && spec.sdk !== providerConfig.sdk) {
     errors.push(`${key}: spec.sdk '${spec.sdk}' doesn't match provider sdk '${providerConfig.sdk}'`)
   }

@@ -4,6 +4,7 @@ import { hostname } from 'node:os'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { defaultDirectory, readStore, withStore } from './store.js'
 import { discoverModels, visibleModels } from './models.js'
+import providers from '../../src/lib/providers.js'
 
 const ISSUER = 'https://auth.openai.com'
 const RESOURCE = 'https://api.openai.com/v1'
@@ -15,7 +16,7 @@ const random = () => randomBytes(32).toString('base64url')
 const REFRESH_MARGIN = 30000
 // Every registration made before names were stored was sent this hint.
 const UNNAMED_REGISTRATION = 'Mohdel'
-export const usageURL = 'https://chatgpt.com/settings/usage'
+export const usageURL = providers.chatgpt.billing.usage
 
 async function jsonRequest (fetcher, url, options = {}) {
   let response

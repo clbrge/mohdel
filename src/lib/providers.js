@@ -1,3 +1,5 @@
+import { providerOf } from '#core/model-id.js'
+
 const LOCAL_API_KEY_ENV = 'MOHDEL_LOCAL_API_SK'
 
 // `contextSemantics` and `outputCapStrategy` are published facts about a
@@ -6,8 +8,13 @@ const LOCAL_API_KEY_ENV = 'MOHDEL_LOCAL_API_SK'
 // own provider requests does not have to rediscover the behaviour one 400 at a
 // time. Entries may override `outputCapStrategy` per model. See
 // ARCHITECTURE.md > "The output budget is capped to the model's ceiling".
+// `billing` is how a provider's calls are paid for. `metered`: API money,
+// reported as `cost`. `plan`: a share of a subscription allowance, seen at
+// `usage`. `capacity`: hardware run or rented at a flat rate. `cost` is 0 for
+// the last two.
 const providers = {
   anthropic: {
+    billing: { kind: 'metered' },
     sdk: 'anthropic',
     apiKeyEnv: 'ANTHROPIC_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
@@ -20,6 +27,7 @@ const providers = {
     outputCapStrategy: 'error'
   },
   cerebras: {
+    billing: { kind: 'metered' },
     sdk: 'cerebras',
     apiKeyEnv: 'CEREBRAS_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
@@ -32,6 +40,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   chatgpt: {
+    billing: { kind: 'plan', label: 'ChatGPT plan', usage: 'https://chatgpt.com/settings/usage' },
     sdk: 'openai',
     catalogClient: 'chatgpt',
     refreshConfiguration: true,
@@ -47,6 +56,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   deepseek: {
+    billing: { kind: 'metered' },
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'DEEPSEEK_API_SK',
@@ -61,6 +71,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   fireworks: {
+    billing: { kind: 'metered' },
     sdk: 'fireworks',
     apiKeyEnv: 'FIREWORKS_API_SK',
     baseURL: 'https://api.fireworks.ai/inference/v1',
@@ -74,6 +85,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   gemini: {
+    billing: { kind: 'metered' },
     sdk: 'gemini',
     apiKeyEnv: 'GEMINI_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
@@ -86,6 +98,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   groq: {
+    billing: { kind: 'metered' },
     sdk: 'groq',
     apiKeyEnv: 'GROQ_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
@@ -96,6 +109,7 @@ const providers = {
     }
   },
   local: {
+    billing: { kind: 'capacity', label: 'local server' },
     sdk: 'openai',
     api: 'chatCompletions',
     catalog: false,
@@ -105,6 +119,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   meta: {
+    billing: { kind: 'metered' },
     sdk: 'openai',
     apiKeyEnv: 'META_API_SK',
     baseURL: 'https://api.meta.ai/v1',
@@ -117,6 +132,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   cohere: {
+    billing: { kind: 'metered' },
     sdk: 'cohere',
     api: 'embeddings',
     apiKeyEnv: 'COHERE_API_SK',
@@ -129,6 +145,7 @@ const providers = {
     }
   },
   mistral: {
+    billing: { kind: 'metered' },
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'MISTRAL_API_SK',
@@ -141,6 +158,7 @@ const providers = {
     }
   },
   novita: {
+    billing: { kind: 'metered' },
     sdk: 'openai',
     api: 'chatCompletions',
     imageHandler: 'novita',
@@ -157,6 +175,7 @@ const providers = {
     outputCapStrategy: 'error'
   },
   openai: {
+    billing: { kind: 'metered' },
     sdk: 'openai',
     apiKeyEnv: 'OPENAI_API_SK',
     createConfiguration: apiKey => ({ apiKey }),
@@ -169,6 +188,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   openrouter: {
+    billing: { kind: 'metered' },
     sdk: 'openrouter',
     apiKeyEnv: 'OPENROUTER_API_SK',
     baseURL: 'https://openrouter.ai/api/v1',
@@ -184,6 +204,7 @@ const providers = {
     }
   },
   qwen: {
+    billing: { kind: 'metered' },
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'QWEN_API_SK',
@@ -198,6 +219,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   xai: {
+    billing: { kind: 'metered' },
     sdk: 'openai',
     apiKeyEnv: 'XAI_API_SK',
     baseURL: 'https://api.x.ai/v1',
@@ -211,6 +233,7 @@ const providers = {
     outputCapStrategy: 'accept'
   },
   xiaomi: {
+    billing: { kind: 'metered' },
     sdk: 'openai',
     api: 'chatCompletions',
     apiKeyEnv: 'XIAOMI_API_SK',
@@ -222,5 +245,17 @@ const providers = {
 }
 
 Object.freeze(providers)
+
+/**
+ * How calls to `modelId`'s provider are paid for.
+ * @param {string} modelId
+ * @returns {{kind: 'metered' | 'plan' | 'capacity', label?: string, usage?: string}}
+ */
+export function billingOf (modelId) {
+  const provider = providerOf(modelId)
+  const def = providers[provider]
+  if (!def) throw new Error(`Unknown provider '${provider}' in model id '${modelId}'`)
+  return { ...def.billing }
+}
 
 export default providers

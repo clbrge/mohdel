@@ -731,11 +731,11 @@ Alibaba's Qwen. Routing follows the provider — see "mo provider --help".`)
 
 // The provider API returns ids, never prices — curated entries land unpriced.
 function printCurateNext (providerName) {
-  if (providerName === 'chatgpt') {
-    console.log('ChatGPT plan models are ready. Use mo ask chatgpt/<model-slug> "your prompt". Plan usage is not API billing.')
+  const def = providerDefs[providerName]
+  if (def.billing.kind !== 'metered') {
+    console.log(`${providerName} models are ready. Use mo ask ${providerName}/<model-id> "your prompt". Calls are not metered: they draw on your ${def.billing.label}.`)
     return
   }
-  const def = providerDefs[providerName]
   if (def?.pricesFromApi) {
     console.log(`\n${meta(`${providerName} publishes prices in its model list — the entries are complete.`)}`)
     console.log(`${meta('Check them:')} mo ls  ${meta('│')}  mo check`)
@@ -779,6 +779,9 @@ const SINGLE_DIMENSION_PRICES = [
 ]
 
 function formatPrice (info) {
+  // An entry naming an unknown provider is `mo check`'s to report; it lists with its prices.
+  const billing = providerDefs[info.provider]?.billing
+  if (billing && billing.kind !== 'metered') return meta(`not metered · ${billing.label}`)
   const inp = resolvePrice(info.inputPrice)
   const out = resolvePrice(info.outputPrice)
   if (inp || out) return price(`$${inp}`) + meta('/') + price(`$${out}`)

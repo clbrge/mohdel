@@ -1,5 +1,6 @@
 import mohdel, { silent } from '../lib/index.js'
 import { getConfig, loadDefaultEnv } from '../lib/common.js'
+import providerDefs, { billingOf } from '../lib/providers.js'
 
 const noop = () => {}
 
@@ -47,8 +48,10 @@ export const hintsForError = (err, modelId) => {
     else hints.push('→ run:  mo                          # interactive provider/key setup')
   }
 
-  if (provider === 'chatgpt' && /RATE_LIMIT|QUOTA_EXHAUSTED|429|usage limit/i.test(`${err?.type || ''} ${both}`)) {
-    hints.push('→ manage ChatGPT plan usage: https://chatgpt.com/settings/usage')
+  // The id is what the user typed, so its provider may not exist.
+  const usage = providerDefs[provider]?.billing.usage
+  if (usage && /RATE_LIMIT|QUOTA_EXHAUSTED|429|usage limit/i.test(`${err?.type || ''} ${both}`)) {
+    hints.push(`→ manage ${providerDefs[provider].billing.label} usage: ${usage}`)
   }
 
   if (/deprecated/i.test(both) && /replacement/i.test(both)) {
@@ -223,7 +226,8 @@ Examples:
     if (tokens.inputTokens) summary.push(`${tokens.inputTokens} in`)
     if (tokens.outputTokens) summary.push(`${tokens.outputTokens} out`)
     if (tokens.thinkingTokens) summary.push(`${tokens.thinkingTokens} think`)
-    if (model.id.startsWith('chatgpt/')) summary.push('Using ChatGPT plan — manage usage: https://chatgpt.com/settings/usage')
+    const billing = billingOf(model.id)
+    if (billing.kind !== 'metered') summary.push(`not metered · ${billing.label}${billing.usage ? ` — manage usage: ${billing.usage}` : ''}`)
     else if (tokens.cost != null) summary.push(`$${tokens.cost.toFixed(4)}`)
     if (tokens.speed) {
       const served = tokens.servedSpeed

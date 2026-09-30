@@ -13,7 +13,7 @@
 
 import { getSpec } from '../_catalog.js'
 import { classifyProviderError, fromHttpStatus, typedError } from '../_errors.js'
-import { computeEmbeddingCost } from '../_pricing.js'
+import { embeddingCostFor } from '../_pricing.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 import { checkBatch, checkDimensions, resolveInputType, widthOf } from './_shared.js'
 
@@ -86,7 +86,7 @@ export async function geminiEmbedding (envelope, deps = {}) {
     dimensions: widthOf(vectors),
     inputType: taskType,
     inputTokens,
-    cost: computeEmbeddingCost(spec, { inputTokens }),
+    cost: embeddingCostFor(envelope, spec, { inputTokens }),
     timestamps: { start, first: end, end }
   }
 }

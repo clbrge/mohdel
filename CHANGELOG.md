@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `billingOf(modelId)` from `mohdel/providers` returns how a model's calls are
+  paid for: `{ kind: 'metered' | 'plan' | 'capacity', label?, usage? }`. Every
+  provider declares `billing`; an unknown provider throws.
+
+### Changed
+
+- `cost` is 0 for `plan` (`chatgpt/`) and `capacity` (`local/`) providers, read
+  from the declaration. A priced `local/` entry, chat, embedding or
+  transcription, now reports 0.
+- `mo ls` and the `mo ask` summary show `not metered · <label>` in place of
+  prices for `chatgpt/` and `local/` models.
+- `mo model check` warns when a `local/` entry carries prices.
+
 ## [3.6.1] — Feat: named ChatGPT registrations / Feat: `mo --version`
 
 ### Added

@@ -33,14 +33,15 @@ function modelsFor (baseURL, prices) {
 }
 
 describe('factory `models` / `configurations` overrides', () => {
-  test('`models` alone replaces the catalog: wire name and prices come from the entry', async () => {
+  test('`models` alone replaces the catalog: wire name and prices come from the entry; `local/` is not metered', async () => {
     await withServer(async (baseURL, seen) => {
       const mo = await mohdel({ models: modelsFor(baseURL, { inputPrice: 2_000_000, outputPrice: 3_000_000 }), logger })
+      expect(mo.use('local/lib-model').info()).toMatchObject({ inputPrice: 2_000_000, outputPrice: 3_000_000 })
       const result = await mo.use('local/lib-model').answer('hi')
       expect(seen.request.model).toBe('lib-tag:1b')
       expect(result.status).toBe('completed')
       expect(result.output).toBe('ok')
-      expect(result.cost).toBe(5)
+      expect(result.cost).toBe(0)
     })
   })
 

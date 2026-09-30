@@ -9,6 +9,7 @@
  * Aliases: ls → model list, rl → ratelimit
  */
 
+import { createRequire } from 'node:module'
 import { detectAssistants, launchLines } from '../lib/assistants.js'
 import { getConfig } from '../lib/common.js'
 import { ALIASES } from './aliases.js'
@@ -31,6 +32,11 @@ if (command === '__complete') {
 if (command === 'completion') {
   const { runCompletionScript } = await import('./complete.js')
   runCompletionScript(args)
+  process.exit(0)
+}
+
+if (command === '--version') {
+  console.log(createRequire(import.meta.url)('../../package.json').version)
   process.exit(0)
 }
 
@@ -92,6 +98,7 @@ Commands:
   default [model]                         Set the model "mo ask" uses by default
   doctor                                  Check that your install is wired up
   completion bash                         Shell completion — source <(mo completion bash)
+  --version                               Print the installed mohdel version
 
 Catalog work with a coding agent:
   Prices, context limits and cache rates are in no provider API — they live on

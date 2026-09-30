@@ -1,6 +1,6 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm, stat } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { tmpdir, hostname } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { createChatGPT } from '../../js/chatgpt/index.js'
@@ -18,6 +18,7 @@ async function connect (options = {}) {
   const auth = createChatGPT({ directory, fetch: fetcher, verifyIdentity })
   const result = await auth.login({
     accountId: options.accountId,
+    name: options.name,
     authorize: async value => {
       authorization = new URL(value)
       const callback = new URL(authorization.searchParams.get('redirect_uri'))
@@ -33,6 +34,8 @@ describe('ChatGPT OAuth', () => {
     const { auth, result, authorization, fetcher, verifyIdentity } = await connect()
     expect(authorization.searchParams.get('client_id')).toBe('dynamic_agent_client')
     expect(authorization.searchParams.get('scope')).toContain('chatgpt.tokens.use.direct')
+    expect(authorization.searchParams.get('agent_name_hint')).toBe(`Mohdel (${hostname()})`)
+    expect(result.name).toBe(`Mohdel (${hostname()})`)
     const exchange = fetcher.mock.calls[0][1].body
     expect(exchange.get('client_id')).toBe('oaiapp_test')
     expect(exchange.get('redirect_uri')).toBe(authorization.searchParams.get('redirect_uri'))
@@ -133,9 +136,33 @@ describe('ChatGPT OAuth', () => {
   test('sign-out clears tokens even if remote revocation is unavailable', async () => {
     await connect()
     const auth = createChatGPT({ directory, fetch: async () => { throw new Error('offline') } })
-    expect(await auth.logout()).toEqual({ revoked: false })
+    expect(await auth.logout()).toEqual({ revoked: false, name: `Mohdel (${hostname()})` })
     await expect(auth.access()).rejects.toThrow('not connected')
     const store = await readStore(directory)
-    expect(store.accounts.oaiapp_test).toEqual({ client_id: 'oaiapp_test', subject: 'subject', email: 'user@example.test' })
+    expect(store.accounts.oaiapp_test).toEqual({ client_id: 'oaiapp_test', name: `Mohdel (${hostname()})`, subject: 'subject', email: 'user@example.test' })
+  })
+
+  test('a new registration keeps its name through reauthorization', async () => {
+    const first = await connect({ name: 'Work laptop' })
+    expect(first.authorization.searchParams.get('agent_name_hint')).toBe('Work laptop')
+    await connect({ accountId: 'oaiapp_test' })
+    expect((await createChatGPT({ directory }).accounts())[0].name).toBe('Work laptop')
+  })
+
+  test('an existing registration cannot be renamed', async () => {
+    await connect()
+    const authorize = vi.fn()
+    const auth = createChatGPT({ directory, fetch: vi.fn() })
+    await expect(auth.login({ accountId: 'oaiapp_test', name: 'Other', authorize })).rejects.toThrow('keeps the name')
+    await expect(auth.login({ name: ' ', authorize })).rejects.toThrow('must not be empty')
+    expect(authorize).not.toHaveBeenCalled()
+  })
+
+  test('a registration stored without a name is the one sent as Mohdel', async () => {
+    await withStore(directory, async (store, save) => {
+      store.accounts.oaiapp_old = { client_id: 'oaiapp_old' }
+      await save(store)
+    })
+    expect((await createChatGPT({ directory }).accounts())[0].name).toBe('Mohdel')
   })
 })

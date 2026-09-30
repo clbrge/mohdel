@@ -42,7 +42,10 @@ Use `mo chatgpt list`, `select <account-id>`, `login --new`, and
 data directory (`~/.local/share/mohdel/chatgpt/` on Linux), with owner-only
 files and serialized token refresh. They are separate from the catalog.
 `mo chatgpt login <account-id>` reuses a saved registration after sign-out
-or a failed code exchange. If a crashed process leaves `accounts.lock`,
+or a failed code exchange. ChatGPT lists each registration by name: a new one
+is `Mohdel (<hostname>)`, or the label from `mo chatgpt login --name <label>`
+if you'd rather not send the hostname. The name is fixed when the registration
+is made, and `mo chatgpt list` shows it next to the account id. If a crashed process leaves `accounts.lock`,
 confirm its recorded PID has exited before removing that lock.
 
 This OpenAI flow is intended for open-source and personal local tools;

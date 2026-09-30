@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.6.1] — Feat: named ChatGPT registrations / Feat: `mo --version`
+
+### Added
+
+- `mo chatgpt login --name <label>` starts a new registration under that name;
+  `createChatGPT().login({ name })` in the library. `mo chatgpt list`,
+  `accounts()` and `logout()` report each registration's name.
+- `mo --version` prints the installed version.
+
+### Changed
+
+- A new ChatGPT registration is named `Mohdel (<hostname>)` instead of `Mohdel`,
+  so registrations from two machines differ. The hostname is sent to OpenAI.
+  Existing registrations keep their name.
+
 ## [3.6.0] — Feat: `ChatGptAuth`, the host's ChatGPT account behind an embedded gate
 
 ### Added

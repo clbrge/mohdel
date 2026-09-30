@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { createServer } from 'node:http'
+import { hostname } from 'node:os'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { defaultDirectory, readStore, withStore } from './store.js'
 import { discoverModels, visibleModels } from './models.js'
@@ -12,6 +13,8 @@ const SCOPE = `openid profile email offline_access resource.invoke ${PERMISSION}
 const jwks = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`))
 const random = () => randomBytes(32).toString('base64url')
 const REFRESH_MARGIN = 30000
+// Every registration made before names were stored was sent this hint.
+const UNNAMED_REGISTRATION = 'Mohdel'
 export const usageURL = 'https://chatgpt.com/settings/usage'
 
 async function jsonRequest (fetcher, url, options = {}) {
@@ -61,6 +64,7 @@ function credentials (tokens, previous = {}) {
 
 const summary = (id, account, active) => ({
   id,
+  name: account.name ?? UNNAMED_REGISTRATION,
   email: account.email ?? null,
   active: id === active,
   connected: !!account.access_token,
@@ -116,7 +120,7 @@ export function createChatGPT (options = {}) {
     return visibleModels(await discoverModels(accessToken, { fetch: fetcher }))
   }
 
-  /** @param {string} [id] @returns {Promise<{revoked: boolean}>} */
+  /** @param {string} [id] @returns {Promise<{revoked: boolean, name: string}>} */
   const logout = async (id) => withStore(directory, async (store, save) => {
     id ??= store.active
     const account = store.accounts[id]
@@ -141,16 +145,25 @@ export function createChatGPT (options = {}) {
     for (const key of ['access_token', 'refresh_token', 'id_token', 'expires_at', 'scopes']) delete account[key]
     if (store.active === id) store.active = null
     await save(store)
-    return { revoked }
+    return { revoked, name: account.name ?? UNNAMED_REGISTRATION }
   })
 
-  /** @param {{ authorize: (url: string) => any, accountId?: string, timeoutMs?: number }} settings */
-  const login = async ({ authorize, accountId, timeoutMs = 300000 }) => {
+  /**
+   * `name` labels a new registration on the ChatGPT side (default `Mohdel (<hostname>)`);
+   * an existing registration keeps the name it was created with.
+   * @param {{ authorize: (url: string) => any, accountId?: string, name?: string, timeoutMs?: number }} settings
+   */
+  const login = async ({ authorize, accountId, name, timeoutMs = 300000 }) => {
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) throw new Error('ChatGPT registration name must not be empty')
     const initial = await withStore(directory, async (store, save) => {
       if (accountId && !store.accounts[accountId]) throw new Error('Unknown ChatGPT account')
+      if (name !== undefined && store.accounts[accountId]) {
+        throw new Error('A ChatGPT registration keeps the name it was created with; start a new registration to use another name')
+      }
       await save(store)
       return { host: store.host, account: store.accounts[accountId] }
     })
+    const label = name ?? `Mohdel (${hostname()})`
     const state = random()
     const nonce = random()
     const verifier = random()
@@ -193,7 +206,7 @@ export function createChatGPT (options = {}) {
       code_challenge_method: 'S256',
       code_challenge: createHash('sha256').update(verifier).digest('base64url')
     }).toString()
-    if (!initial.account) url.searchParams.set('agent_name_hint', 'Mohdel')
+    if (!initial.account) url.searchParams.set('agent_name_hint', label)
     if (initial.account?.id_token) url.searchParams.set('id_token_hint', initial.account.id_token)
     const timer = setTimeout(() => fail(new Error('ChatGPT sign-in timed out')), timeoutMs)
     try {
@@ -205,7 +218,7 @@ export function createChatGPT (options = {}) {
       }
       // Keep the issued ID even if code exchange fails; it must not be registered again.
       await withStore(directory, async (store, save) => {
-        store.accounts[clientId] ??= { client_id: clientId }
+        store.accounts[clientId] ??= { client_id: clientId, name: label }
         await save(store)
       })
       const tokens = await tokenRequest({ grant_type: 'authorization_code', client_id: clientId, code: params.get('code'), code_verifier: verifier, redirect_uri: redirect })
@@ -213,7 +226,7 @@ export function createChatGPT (options = {}) {
       return await withStore(directory, async (store, save) => {
         const previous = store.accounts[clientId]
         if (previous.subject && previous.subject !== identity.sub) throw new Error('ChatGPT returned a different account identity')
-        const account = { ...credentials(tokens), client_id: clientId, subject: identity.sub, email: identity.email ?? null }
+        const account = { ...credentials(tokens), client_id: clientId, name: previous.name, subject: identity.sub, email: identity.email ?? null }
         store.accounts[clientId] = account
         store.active = clientId
         await save(store)

@@ -431,7 +431,7 @@ Requires an API key for the chosen provider — run 'mo' to configure one.`)
     const { providerApi, providersWithKeys, processModels } = await import('../lib/select.js')
     const withKeys = providersWithKeys()
 
-    if (!withKeys.length) {
+    if (!withKeys.length && !arg1) {
       console.error(err('No providers with API keys configured. Run "mo" to set up.'))
       process.exit(1)
     }
@@ -731,6 +731,10 @@ Alibaba's Qwen. Routing follows the provider — see "mo provider --help".`)
 
 // The provider API returns ids, never prices — curated entries land unpriced.
 function printCurateNext (providerName) {
+  if (providerName === 'chatgpt') {
+    console.log('ChatGPT plan models are ready. Use mo ask chatgpt/<model-slug> "your prompt". Plan usage is not API billing.')
+    return
+  }
   const def = providerDefs[providerName]
   if (def?.pricesFromApi) {
     console.log(`\n${meta(`${providerName} publishes prices in its model list — the entries are complete.`)}`)

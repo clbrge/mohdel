@@ -587,7 +587,11 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
             // factory-owned trackers are threaded in so
             // `setProviderRateLimit` / factory-scoped cooldown settings
             // remain the source of truth for this factory instance.
-            const { configuration: defaultConfiguration } = await getRuntime()
+            const defaultConfiguration = providers[modelSpec.provider].refreshConfiguration
+              ? externalConfigurations?.[modelSpec.provider] ?? (sdkOptions.configuration
+                ? undefined
+                : await resolveProviderConfiguration(providers[modelSpec.provider], modelSpec.provider))
+              : (await getRuntime()).configuration
             const effectiveConfiguration = sdkOptions.configuration || defaultConfiguration
             delete sdkOptions.configuration
 

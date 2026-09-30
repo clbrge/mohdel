@@ -18,6 +18,58 @@ For CLI + installation see [README.md](README.md). For design rationale see [ARC
 
 Both paths drive the same session adapters with the same wire types and the same event stream. The factory is literally "the client path minus the IPC hop" — switching later is a configuration change, not a rewrite.
 
+## ChatGPT plan access
+
+Sign in with `mo chatgpt login`, then discover models with `mo chatgpt models`
+and add the ones you want with `mo model curate chatgpt`. The factory resolves
+the selected account's OAuth credential before each `chatgpt/` answer,
+refreshing near expiry. Per-call `configuration: { apiKey: accessToken }` and
+factory `configurations.chatgpt` overrides are supported; their owner handles
+renewal. The SDK's `apiKey` field carries the OAuth bearer token here.
+
+For the gate, resolve credentials in the caller before each request:
+
+```js
+import { createChatGPT } from 'mohdel/chatgpt'
+import { call } from 'mohdel/client'
+
+const chatgpt = createChatGPT()
+const { accessToken } = await chatgpt.access() // or access(savedAccountId)
+// Use an ID returned by chatgpt.models(), also present in the gate's catalog.
+const envelope = {
+  callId: 'chatgpt-1', authId: 'local',
+  auth: { key: accessToken },
+  model: 'chatgpt/<discovered-model-slug>', prompt: 'Hello'
+}
+for await (const event of call(envelope, { socketPath: '/path/to/gate.sock' })) {
+  if (event.type === 'delta' && event.delta.type === 'message') process.stdout.write(event.delta.delta)
+  if (event.type === 'error') throw new Error(event.error.message)
+}
+```
+
+The standard catalog requirement applies on both paths. `chatgpt.models()`
+returns model IDs and labels; populate capability/limit fields only from
+verified model metadata. The adapter checks the chosen model against the
+account's current `/v1/models` response before inference, so an old catalog
+cannot authorize another account's models. It always uses the public Responses
+endpoint with `stream: true`, `store: false`; it never falls back to `openai/`.
+
+Gate workers consume only the inline token and do not read local saved accounts.
+`LocalAuth` resolves API-key environment variables, so it does not perform OAuth:
+use the helper above or an embedder-owned `AuthPolicy` that supplies fresh tokens.
+This keeps account selection and refresh under the caller's control on both
+paths; no wire fields or gate quota rules change.
+
+`cost` is zero for ChatGPT calls, including aborts, even if the catalog contains
+API prices. It is an API-USD accounting field, not a measurement of plan credits.
+Token usage remains available. Link users to https://chatgpt.com/settings/usage
+for allowance and credit management. The flow is for eligible open-source or
+personal local use; commercial/private-app eligibility is separate.
+
+Offline tests cover authentication and request handling. To exercise a signed-in
+account explicitly (consumes its allowance), run
+`MOHDEL_LIVE_CHATGPT=1 npx vitest run test/live/chatgpt.live.test.js`.
+
 ---
 
 # Client (cross-process) — primary production integration

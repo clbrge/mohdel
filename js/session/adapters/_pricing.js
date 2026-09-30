@@ -112,6 +112,8 @@ function resolveTier (price, tokens) {
  * @returns {number}
  */
 export function costFor (envelope, usage) {
+  // Plan usage has no per-call API invoice; it still consumes the plan allowance.
+  if (envelope.model.startsWith('chatgpt/')) return 0
   return computeCost(specFor(envelope), usage)
 }
 

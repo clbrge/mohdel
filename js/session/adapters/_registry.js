@@ -13,6 +13,7 @@
 export const ADAPTER_NAMES = Object.freeze([
   'anthropic',
   'cerebras',
+  'chatgpt',
   'deepseek',
   'echo',
   'fake',

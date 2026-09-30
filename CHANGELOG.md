@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `chatgpt/` provider for eligible ChatGPT plan access through OAuth and the
+  public streaming Responses API. Account model discovery, nonstored requests,
+  and token usage work through the shared library/gate adapter; API cost is zero.
+- `mo chatgpt login|list|select|logout|models|usage` and `mohdel/chatgpt` helpers.
+  PKCE sign-in validates identity, keeps account registrations separate, stores
+  credentials under the user-data directory, and serializes rotating refreshes.
+  Gate callers supply a fresh access token using the existing auth field.
+
 ## [3.4.0] — Feat: `LocalAuth`, provider keys where `mo` finds them
 
 ### Added

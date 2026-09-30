@@ -21,6 +21,10 @@ loadDefaultEnv()
 // One provider's catalog client, for callers that don't need all of them.
 export const providerApi = async (name) => {
   const config = providers[name]
+  if (config?.catalogClient === 'chatgpt') {
+    const { default: API } = await import('./catalog/chatgpt.js')
+    return API()
+  }
   if (!config || config.catalog === false || !config.apiKeyEnv) return null
   const apiKey = getAPIKey(config.apiKeyEnv)
   if (!apiKey) return null

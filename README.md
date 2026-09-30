@@ -1,6 +1,6 @@
 # Mohdel
 
-Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 14 providers or local inference; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
+Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 15 providers or local inference; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
 
 ```bash
 npm install -g mohdel
@@ -20,7 +20,35 @@ curate novita` writes complete, priced entries on its own, and setup counts the
 models that cost nothing and offers to add all of them in one keystroke. A
 working catalog without a pricing page or a brief.
 
-Providers: Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, Meta Model API, OpenRouter, Novita. Node 22+, ES modules.
+Providers: Anthropic, OpenAI, ChatGPT, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, Meta Model API, OpenRouter, Novita. Node 22+, ES modules.
+
+### Using a ChatGPT subscription
+
+```bash
+mo chatgpt login              # open the printed URL in your browser
+mo chatgpt models             # account-specific models, discovered from OpenAI
+mo model curate chatgpt       # choose models to add to the local catalog
+mo ask chatgpt/<model-slug> "Hello"
+```
+
+`chatgpt/` uses OAuth and an eligible ChatGPT plan. It always streams through
+the public Responses API with `store: false`. `openai/` continues using API
+billing. Token counts are reported for both; ChatGPT's `cost: 0` means no
+per-call API charge is calculated, not unlimited or free plan usage. Manage
+allowance and credits with `mo chatgpt usage`.
+
+Use `mo chatgpt list`, `select <account-id>`, `login --new`, and
+`logout [account-id]` to manage accounts. Credentials live in Mohdel's user
+data directory (`~/.local/share/mohdel/chatgpt/` on Linux), with owner-only
+files and serialized token refresh. They are separate from the catalog.
+`mo chatgpt login <account-id>` reuses a saved registration after sign-out
+or a failed code exchange. If a crashed process leaves `accounts.lock`,
+confirm its recorded PID has exited before removing that lock.
+
+This OpenAI flow is intended for open-source and personal local tools;
+paid or remotely hosted offerings require OpenAI's private-app acceptance.
+See [OpenAI's guide](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt)
+and [library/gate integration](INTEGRATION.md#chatgpt-plan-access).
 
 Mohdel runs the inference layer of production stacks, among them [docAnalyzer](https://docanalyzer.ai), a document analysis and chat platform serving hundreds of thousands of users.
 
@@ -29,7 +57,7 @@ Mohdel runs the inference layer of production stacks, among them [docAnalyzer](h
 - **Real numbers on every call.** Token counts and per-call USD cost computed from your own pricing catalog (`curated.json`) — not estimates, not provider-specific shapes. Bill tenants, alert on spend, reconcile invoices. Your own catalog means your negotiated rates and your own tags, and it is not a spreadsheet you maintain: `mo model instructions` hands the provider's docs page to your coding agent, which drafts the entries for you to review. See [docs/CATALOG.md](docs/CATALOG.md).
 - **One interface across providers.** Same `answer()` call, same event stream, same `{ status, output, inputTokens, outputTokens, cost }` result. Switching from `anthropic/claude-sonnet-5-5` to `openai/gpt-5.4-mini` is one string change — adapter differences stay inside mohdel.
 - **Self-hosted, no vendor in the path.** API keys live in `~/.config/mohdel/`. Mohdel calls provider APIs directly; nothing routes through a third party, nothing marks up your tokens, no extra hop of availability risk.
-- **Nothing to compromise.** No network listener, no credential store, no tool execution. Mohdel runs a model call and returns the result; it cannot read a file, run a command, or hand back a key. See [Attack surface](#attack-surface).
+- **Inference without tool execution.** Mohdel returns model output and tool calls for your harness to handle. Optional ChatGPT sign-in uses a temporary loopback listener and a protected local credential store. See [Attack surface](#attack-surface).
 - **Observability without instrumentation.** OpenTelemetry spans, trace-linked logs, and OTLP metrics over one endpoint. Set `OTEL_EXPORTER_OTLP_ENDPOINT`; everything else is wired.
 - **Fully typed.** Declarations are generated from the source's own JSDoc and ship with the package — `CallEnvelope`, `Event`, `AnswerResult` and `MohdelError` are the frozen wire contract, typed as such. No `@types` package, no separate TypeScript build to keep in sync.
 - **Two integration paths, same API.** In-process factory for CLI tools, scripts, single-process services. Optional `thin-gate` subprocess for fault isolation, cross-process quota, and any-language HTTP callers — no code change to switch.
@@ -118,12 +146,14 @@ reading them. Mohdel is built so neither is present.
   prompt-injected response cannot make mohdel read a file, run a shell, or make
   a call of its own. Tool execution belongs to the caller, in the caller's
   process.
-- **No network listener.** `thin-gate` binds **unix sockets**, not TCP, for
+- **Gate listeners use unix sockets.** `thin-gate` binds **unix sockets**, not TCP, for
   both its data and admin planes, and chmods them `0600` — the default umask
-  would otherwise leave them world-connectable. There is no port to reach.
-- **No credential store.** The provider key rides on each call envelope and
-  goes straight to the SDK client. Mohdel never accumulates a pool of tenant
-  keys, because it never holds one.
+  would otherwise leave them world-connectable. ChatGPT sign-in separately
+  starts a temporary HTTP callback listener on `127.0.0.1` with PKCE and state validation.
+- **Session credentials come from the caller.** The provider credential rides
+  on each envelope and goes to the SDK. Optional ChatGPT sign-in saves OAuth
+  credentials in the caller's user-data directory; gate workers do not load
+  that store or select a local account.
 - **The session subprocess starts from an empty environment.** It is given
   back only what the runtime reads — `PATH`, proxy and TLS settings, mohdel's
   own dials, `OTEL_*`. Every `*_API_SK`, cloud credential and database URL the
@@ -467,6 +497,7 @@ What each provider supports through mohdel's unified interface:
 |----------|-----------|-------|--------|-------|----------|-------|
 | Anthropic | Yes | Yes | Yes | No | Yes (adaptive / budget) | `identifier` → `metadata.user_id` |
 | OpenAI | Yes | Yes | Yes | No | Yes (o-series) | GPT-5 verbosity via `outputStyle` |
+| ChatGPT | Yes | Yes | Yes | No | Per model catalog | OAuth; uses an eligible ChatGPT plan; `mo chatgpt --help` |
 | Gemini | Yes | Yes | Yes | Yes | Yes (`thinkingLevel` / `thinkingBudget`) | Auto-uploads large videos; content-hashed cache |
 | Cerebras | Yes | Yes | Yes | No | Yes (`reasoning_effort` or zai `disable_reasoning`) | Shared chat-completions path |
 | Groq | Yes | Yes | Yes | No | No | Shared chat-completions path |

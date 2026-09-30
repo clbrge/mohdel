@@ -60,7 +60,8 @@ describe('the live-suite specs', () => {
 
   it('cover every adapter that can be smoke-tested', () => {
     const adapters = readdirSync(adapterDir)
-      .filter(f => f.endsWith('.js') && !f.startsWith('_') && !['index.js', 'echo.js', 'fake.js'].includes(f))
+      // ChatGPT discovers models per OAuth account; its dedicated suite has no fixed model.
+      .filter(f => f.endsWith('.js') && !f.startsWith('_') && !['index.js', 'echo.js', 'fake.js', 'chatgpt.js'].includes(f))
       .map(f => f.slice(0, -3))
     expect(adapters.filter(a => !declared.has(a))).toEqual([])
   })

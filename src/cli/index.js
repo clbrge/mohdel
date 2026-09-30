@@ -49,6 +49,7 @@ Run a model, see what the call cost, and curate the catalog those prices
 come from. Your keys, your infra, no SaaS in the path.
 
 Commands:
+  chatgpt login|list|select|logout|models  Connect and use your ChatGPT plan
   model list [--sort price|context|name]  List all curated models                 (mo ls, mo models)
   model search <term>                     Filter models by name/label             (mo search)
   model stats                             Catalog summary                         (mo stats)
@@ -136,7 +137,10 @@ const alias = ALIASES[command]
 const resolved = alias ? alias.noun : command
 const resolvedArgs = alias ? [...alias.inject, ...args] : args
 
-if (resolved === 'default') {
+if (resolved === 'chatgpt') {
+  const { runChatGPT } = await import('./chatgpt.js')
+  await runChatGPT(resolvedArgs)
+} else if (resolved === 'default') {
   const { runDefault } = await import('./default.js')
   await runDefault(resolvedArgs)
 } else if (resolved === 'doctor') {

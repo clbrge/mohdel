@@ -6,7 +6,7 @@
     "name": "Christophe Le Bars",
     "email": "clb@toort.net"
   },
-  "description": "Self-hosted LLM gateway and SDK for Node — a LiteLLM-style unified API for 14 providers (Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, DeepSeek, OpenRouter, …) with per-call USD cost tracking, streaming, tool calls, vision, speech-to-text, and built-in OpenTelemetry. Run in-process, or behind the process-isolated thin-gate for fault containment.",
+  "description": "Self-hosted LLM gateway and SDK for Node — a LiteLLM-style unified API for 15 providers (Anthropic, OpenAI, Gemini, Mistral, Groq, xAI, DeepSeek, OpenRouter, …) with per-call USD cost tracking, streaming, tool calls, vision, speech-to-text, and built-in OpenTelemetry. Run in-process, or behind the process-isolated thin-gate for fault containment.",
   "type": "module",
   "keywords": [
     "llm",
@@ -42,6 +42,10 @@
   },
   "main": "src/lib/index.js",
   "exports": {
+    "./chatgpt": {
+      "types": "./js/chatgpt/index.d.ts",
+      "default": "./js/chatgpt/index.js"
+    },
     ".": {
       "types": "./src/lib/index.d.ts",
       "default": "./src/lib/index.js"
@@ -146,6 +150,7 @@
     "@opentelemetry/api": "^1.9.1",
     "env-paths": "^4.0.0",
     "groq-sdk": "^1.6.0",
+    "jose": "^6.2.12",
     "openai": "^7.23.0",
     "undici": "^7.29.0"
   },

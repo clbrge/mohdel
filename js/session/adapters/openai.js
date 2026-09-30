@@ -70,7 +70,7 @@ export async function * openai (envelope, deps = {}) {
   }
 
   const { instructions, input } = splitPrompt(envelope.prompt, imageParts, {
-    toolResultImages: providerOf(envelope.model) === 'openai'
+    toolResultImages: ['openai', 'chatgpt'].includes(providerOf(envelope.model))
   })
   if (imageInputs.length) injectImageParts(input, imageInputs)
 
@@ -84,6 +84,7 @@ export async function * openai (envelope, deps = {}) {
   let thinkingTokens = 0
   let cachedInputTokens = 0
   let cacheWriteTokens = 0
+  let terminalResponse = false
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
@@ -136,6 +137,7 @@ export async function * openai (envelope, deps = {}) {
           break
 
         case 'response.completed':
+          terminalResponse = true
           servedTier = event.response?.service_tier ?? servedTier
           if (event.response?.usage) {
             inputTokens = event.response.usage.input_tokens ?? 0
@@ -150,6 +152,7 @@ export async function * openai (envelope, deps = {}) {
           break
 
         case 'response.incomplete':
+          terminalResponse = true
           servedTier = event.response?.service_tier ?? servedTier
           status = STATUS_INCOMPLETE
           if (event.response?.incomplete_details?.reason === 'max_output_tokens') {
@@ -161,6 +164,13 @@ export async function * openai (envelope, deps = {}) {
             thinkingTokens = event.response.usage.output_tokens_details?.reasoning_tokens ?? 0
             cachedInputTokens = event.response.usage.input_tokens_details?.cached_tokens ?? 0
             cacheWriteTokens = event.response.usage.input_tokens_details?.cache_write_tokens ?? 0
+          }
+          break
+
+        case 'response.failed':
+          if (providerOf(envelope.model) === 'chatgpt') {
+            yield { type: 'error', error: classifyProviderError(new Error('ChatGPT response failed'), envelope.auth?.key, { provider: 'chatgpt' }) }
+            return
           }
           break
 
@@ -184,6 +194,10 @@ export async function * openai (envelope, deps = {}) {
   }
 
   const end = String(process.hrtime.bigint())
+  if (providerOf(envelope.model) === 'chatgpt' && !terminalResponse) {
+    yield { type: 'error', error: classifyProviderError(new Error('ChatGPT stream ended before completion'), envelope.auth?.key, { provider: 'chatgpt' }) }
+    return
+  }
   // OpenAI Responses reports `output_tokens` INCLUDING reasoning
   // tokens. The `AnswerResult` contract separates them into
   // `outputTokens` (message-only) and `thinkingTokens`, so subtract
@@ -350,7 +364,7 @@ function buildRequest (envelope, input, instructions) {
   // Per-user identifier — openai uses `safety_identifier`; other
   // Responses-API providers (xai) use the legacy `user` field.
   if (envelope.identifier) {
-    if (provider === 'openai') {
+    if (provider === 'openai' || provider === 'chatgpt') {
       request.safety_identifier = envelope.identifier
       request.prompt_cache_key = envelope.identifier
     } else {
@@ -362,6 +376,10 @@ function buildRequest (envelope, input, instructions) {
 
   // Meta's Responses API stores every prompt and response unless told not to.
   if (provider === 'meta') request.store = false
+  if (provider === 'chatgpt') {
+    request.store = false
+    request.stream = true
+  }
 
   return request
 }

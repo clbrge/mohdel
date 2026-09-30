@@ -31,6 +31,21 @@ const providers = {
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
   },
+  chatgpt: {
+    sdk: 'openai',
+    catalogClient: 'chatgpt',
+    refreshConfiguration: true,
+    resolveConfiguration: async () => {
+      const { createChatGPT } = await import('../../js/chatgpt/index.js')
+      const { accessToken } = await createChatGPT().access()
+      return { apiKey: accessToken }
+    },
+    references: {
+      models: 'https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference'
+    },
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
+  },
   deepseek: {
     sdk: 'openai',
     api: 'chatCompletions',

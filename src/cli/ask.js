@@ -42,8 +42,13 @@ export const hintsForError = (err, modelId) => {
   }
 
   if (/API key not found/i.test(both) || /AUTH_INVALID/i.test(err?.type || '') || /401|unauthorized|invalid api key/i.test(both)) {
-    if (provider) hints.push(`→ run:  mo setup ${provider}`)
+    if (provider === 'chatgpt') hints.push('→ run:  mo chatgpt login')
+    else if (provider) hints.push(`→ run:  mo setup ${provider}`)
     else hints.push('→ run:  mo                          # interactive provider/key setup')
+  }
+
+  if (provider === 'chatgpt' && /RATE_LIMIT|QUOTA_EXHAUSTED|429|usage limit/i.test(`${err?.type || ''} ${both}`)) {
+    hints.push('→ manage ChatGPT plan usage: https://chatgpt.com/settings/usage')
   }
 
   if (/deprecated/i.test(both) && /replacement/i.test(both)) {
@@ -218,7 +223,8 @@ Examples:
     if (tokens.inputTokens) summary.push(`${tokens.inputTokens} in`)
     if (tokens.outputTokens) summary.push(`${tokens.outputTokens} out`)
     if (tokens.thinkingTokens) summary.push(`${tokens.thinkingTokens} think`)
-    if (tokens.cost != null) summary.push(`$${tokens.cost.toFixed(4)}`)
+    if (model.id.startsWith('chatgpt/')) summary.push('Using ChatGPT plan — manage usage: https://chatgpt.com/settings/usage')
+    else if (tokens.cost != null) summary.push(`$${tokens.cost.toFixed(4)}`)
     if (tokens.speed) {
       const served = tokens.servedSpeed
       summary.push(served === tokens.speed

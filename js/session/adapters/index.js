@@ -13,6 +13,7 @@
 
 import { anthropic } from './anthropic.js'
 import { cerebras } from './cerebras.js'
+import { chatgpt } from './chatgpt.js'
 import { deepseek } from './deepseek.js'
 import { echo } from './echo.js'
 import { fake } from './fake.js'
@@ -32,6 +33,7 @@ import { xiaomi } from './xiaomi.js'
 export const adapters = Object.freeze({
   anthropic,
   cerebras,
+  chatgpt,
   deepseek,
   echo,
   fake,

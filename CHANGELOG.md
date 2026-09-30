@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [3.5.0] — Feat: `chatgpt/` provider on an eligible ChatGPT plan / Chore: bump dependencies
 
 ### Added
 
@@ -15,6 +15,12 @@ All notable changes to this project are documented here. Format follows
   PKCE sign-in validates identity, keeps account registrations separate, stores
   credentials under the user-data directory, and serializes rotating refreshes.
   Gate callers supply a fresh access token using the existing auth field.
+- `jose` `^6.2.12` dependency, for ChatGPT ID-token verification.
+
+### Changed
+
+- `mo model curate chatgpt` runs when no provider has an API key configured.
+- `openai` `^7.23.0` → `^7.25.0`
 
 ## [3.4.0] — Feat: `LocalAuth`, provider keys where `mo` finds them
 

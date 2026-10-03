@@ -2,7 +2,10 @@ mod common;
 
 use futures::StreamExt;
 use mohdel_client::Client;
-use mohdel_protocol::{AbortRequest, EmbedEnvelope, Event, ImageEnvelope, MediaRef, Status, TranscriptionEnvelope};
+use mohdel_protocol::{
+    AbortRequest, EmbedEnvelope, EvaluateEnvelope, EvaluationAnswer, Event, ImageEnvelope, MediaRef, Status,
+    TranscriptionEnvelope,
+};
 
 #[tokio::test]
 async fn call_streams_events_and_sends_the_envelope() {
@@ -198,6 +201,38 @@ async fn embed_rejection_is_the_gate_typed_error() {
     };
     let error = client.embed(&envelope).await.unwrap_err();
     assert_eq!(error.kind.as_deref(), Some("SESSION_UNKNOWN_PROVIDER"));
+}
+
+#[tokio::test]
+async fn evaluate_sends_the_envelope_and_returns_the_result() {
+    let body = r#"{"status":"completed","answers":{"urgent":{"type":"binary","probability":0.95},"team":{"type":"choice","choice":"billing","probabilities":{"technical":0.12,"billing":0.88},"confidence":0.81}},"upstreamModel":"jev-1.13.0","inputTokens":300,"outputTokens":20,"cost":0.0000126,"timestamps":{"start":"1","first":"3","end":"3"}}"#;
+    let (client, transport) = common::client(common::json_response(body), 64);
+    let envelope: EvaluateEnvelope = serde_json::from_value(serde_json::json!({
+        "callId": "v-1",
+        "authId": "u-1",
+        "model": "typesafe/jev-1.13.0",
+        "state": { "subject": "Payouts", "body": "Failing for 3 days" },
+        "questions": {
+            "urgent": { "type": "binary", "instructions": "Urgent?" },
+            "team": { "type": "choice", "instructions": "Which team?", "criteria": { "technical": null, "billing": null } }
+        }
+    }))
+    .unwrap();
+    let result = client.evaluate(&envelope).await.unwrap();
+    assert_eq!(result.upstream_model, "jev-1.13.0");
+    match &result.answers["team"] {
+        EvaluationAnswer::Choice { choice, confidence, .. } => {
+            assert_eq!(choice, "billing");
+            assert_eq!(*confidence, Some(0.81));
+        }
+        other => panic!("expected a choice answer, got {other:?}"),
+    }
+
+    let text = String::from_utf8(transport.requests.lock().unwrap()[0].1.clone()).unwrap();
+    assert!(text.starts_with("POST /v1/evaluate HTTP/1.1\r\n"));
+    let sent = text.split("\r\n\r\n").nth(1).unwrap();
+    assert!(sent.find("\"subject\"").unwrap() < sent.find("\"body\"").unwrap());
+    assert!(sent.find("\"technical\"").unwrap() < sent.find("\"billing\"").unwrap());
 }
 
 #[tokio::test]

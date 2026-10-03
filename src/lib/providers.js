@@ -144,6 +144,20 @@ const providers = {
       rateLimits: 'https://docs.cohere.com/docs/rate-limits'
     }
   },
+  typesafe: {
+    billing: { kind: 'metered' },
+    sdk: 'typesafe',
+    api: 'evaluation',
+    catalog: false,
+    apiKeyEnv: 'TYPESAFE_API_SK',
+    baseURL: 'https://api.typesafe.ai/v1',
+    createConfiguration: apiKey => ({ apiKey }),
+    references: {
+      pricing: 'https://docs.typesafe.ai/models',
+      models: 'https://docs.typesafe.ai/models',
+      rateLimits: 'https://docs.typesafe.ai/models'
+    }
+  },
   mistral: {
     billing: { kind: 'metered' },
     sdk: 'openai',

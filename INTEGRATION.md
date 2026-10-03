@@ -993,6 +993,64 @@ const result = await callEmbedding(envelope, { socketPath })
 
 `POST /v1/embed` on the gate, one JSON response, same result shape.
 
+## Evaluation
+
+```js
+const judge = mo.use('typesafe/jev-1.13.0')
+const result = await judge.evaluate(
+  { subject: 'Payouts', body: 'Help! My payouts have been failing for 3 days.' },
+  {
+    urgent: { type: 'binary', instructions: 'Does `body` convey urgency?' },
+    team: {
+      type: 'choice',
+      instructions: 'Which team should handle `body`?',
+      criteria: { billing: 'Payments, refunds', technical: 'Bugs, outages', other: null }
+    },
+    anger: {
+      type: 'score',
+      instructions: 'How frustrated is the customer?',
+      criteria: ['Calm', 'Frustrated', 'Very angry']
+    }
+  }
+)
+
+result.answers.urgent   // { type: 'binary', probability: 0.95 }
+result.answers.team     // { type: 'choice', choice: 'billing', probabilities: {...}, confidence: 0.81 }
+result.answers.anger    // { type: 'score', score: 1.05, probabilities: [0, 0.95, 0.05], confidence: 0.92 }
+result.upstreamModel    // the provider's id for the version that answered
+result.cost             // USD — inputPrice / outputPrice × tokens
+```
+
+Separate from `.answer()`: one `state` (text, or JSON the questions refer to by
+field name), any number of questions evaluated against it in one call, and one
+typed answer per question instead of generated text.
+
+| Type | `criteria` | Answer |
+|------|------------|--------|
+| `binary` | optional `{ yes, no }` | `probability` of yes |
+| `choice` | option → description or `null`, two or more | `choice`, `probabilities` per option, `confidence?` |
+| `score` | level descriptions, lowest first, two or more | `score` (level `i` is worth `i`), `probabilities` per level, `confidence?` |
+
+`instructions` and every description may be a string, an object or an array.
+Malformed questions fail before dispatch with `EVALUATE_INPUT_INVALID`; an
+entry's `evaluationTypes` limits which types it accepts. Question types and
+answer fields are mohdel's own; adapters translate them for each provider.
+
+`confidence` is the provider's certainty measure, distinct from the top
+probability, and absent from providers that do not report one.
+
+Providers: `typesafe`.
+
+### Cross-process
+
+```js
+import { callEvaluation } from 'mohdel/client'
+
+const result = await callEvaluation(envelope, { socketPath })
+```
+
+`POST /v1/evaluate` on the gate, one JSON response, same result shape.
+
 ## Rate limiting
 
 Limits are per-account, so they live in user config:

@@ -51,7 +51,7 @@ use crate::hooks::{AuthPolicy, QuotaPolicy, QuotaSpec, RequireInlineAuth, RouteP
 use crate::metrics;
 use crate::protocol::{
     AbortRequest, AnswerResult, Auth, CallEnvelope, DeltaChunk, DeltaKind, EmbedEnvelope,
-    EmbedResult, Event, ImageEnvelope, ImageResult, Severity, Status, TranscriptionEnvelope,
+    EmbedResult, EvaluateEnvelope, EvaluateResult, Event, ImageEnvelope, ImageResult, Severity, Status, TranscriptionEnvelope,
     TranscriptionResult, TypedError, GATE_HEADER,
 };
 use crate::session_pool::{write_abort, AcquireError, CallAbort, PooledSession, SessionPool};
@@ -252,6 +252,8 @@ async fn handle_data(req: Request<Incoming>, state: Arc<GateState>) -> Response<
         handle_transcription(req, state).await
     } else if method == Method::POST && path == "/v1/embed" {
         handle_embed(req, state).await
+    } else if method == Method::POST && path == "/v1/evaluate" {
+        handle_evaluate(req, state).await
     } else if method == Method::POST && path == "/v1/abort" {
         handle_abort(req, state).await
     } else {
@@ -1269,8 +1271,80 @@ pub async fn dispatch_embed(
     dispatch_embed_via_pool(pool, envelope).await
 }
 
+/// HTTP handler for `POST /v1/evaluate`. See `handle_call` for the
+/// composition use case; [`dispatch_evaluate`] splits it at dispatch.
+pub async fn handle_evaluate(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    match dispatch_evaluate(req, state).await {
+        Ok(exchange) => exchange.await,
+        Err(refused) => refused,
+    }
+}
+
+/// `POST /v1/evaluate` up to dispatch; same contract as [`dispatch_embed`].
+pub async fn dispatch_evaluate(
+    req: Request<Incoming>,
+    state: Arc<GateState>,
+) -> Result<Exchange, Response<Body>> {
+    let body = match read_body(req, MAX_CALL_BODY_BYTES).await {
+        Ok(b) => b,
+        Err(refused) => return Err(refused),
+    };
+
+    let mut envelope: EvaluateEnvelope = match serde_json::from_slice::<EvaluateEnvelope>(&body) {
+        Ok(e) => {
+            if let Err(reason) = crate::protocol::validate_ids(&e.call_id, &e.auth_id, &e.model) {
+                return Err(typed_error_response(
+                    StatusCode::BAD_REQUEST,
+                    Severity::Error,
+                    "invalid envelope",
+                    &reason,
+                    "PROTOCOL_INVALID_ENVELOPE",
+                    false,
+                ));
+            }
+            e
+        }
+        Err(e) => {
+            return Err(typed_error_response(
+                StatusCode::BAD_REQUEST,
+                Severity::Error,
+                "invalid envelope",
+                &format!("{e}"),
+                "PROTOCOL_INVALID_ENVELOPE",
+                false,
+            ));
+        }
+    };
+
+    if let Err(refused) =
+        resolve_auth(&state, &envelope.auth_id, &envelope.model, &mut envelope.auth).await
+    {
+        return Err(refused);
+    }
+
+    if let Err(denied) = enforce_policy(&state, &envelope.auth_id, &envelope.model, 0).await {
+        return Err(denied.into_oneshot());
+    }
+
+    let pool = match &state.pool {
+        Some(p) => p.clone(),
+        None => {
+            return Err(typed_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                Severity::Error,
+                "evaluate path requires a session pool",
+                "no pool configured",
+                "SESSION_POOL_UNAVAILABLE",
+                false,
+            ));
+        }
+    };
+
+    dispatch_evaluate_via_pool(pool, envelope).await
+}
+
 /// Wire form sent to the session over stdin: the path's envelope plus
-/// an `op` tag ("image" / "transcription" / "embed") so the driver can dispatch
+/// an `op` tag ("image" / "transcription" / "embed" / "evaluate") so the driver can dispatch
 /// to the matching one-shot runner. Internal protocol — not exposed
 /// over HTTP.
 #[derive(Serialize)]
@@ -1301,6 +1375,14 @@ enum TranscriptionSessionLine {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum EmbedSessionLine {
     EmbedDone { result: EmbedResult },
+    Error { error: TypedError },
+}
+
+/// Single line returned by the session on the evaluate path.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum EvaluateSessionLine {
+    EvaluateDone { result: EvaluateResult },
     Error { error: TypedError },
 }
 
@@ -1338,6 +1420,19 @@ async fn dispatch_embed_via_pool(
     dispatch_oneshot::<EmbedSessionLine>(&pool, &tagged, "embed", |outcome| match outcome {
         Ok(EmbedSessionLine::EmbedDone { result }) => oneshot_ok_response(&result),
         Ok(EmbedSessionLine::Error { error }) => oneshot_error_response(&error),
+        Err(error) => exchange_error_response(&error),
+    })
+    .await
+}
+
+async fn dispatch_evaluate_via_pool(
+    pool: SessionPool,
+    envelope: EvaluateEnvelope,
+) -> Result<Exchange, Response<Body>> {
+    let tagged = OneShotDriverEnvelope { op: "evaluate", inner: &envelope };
+    dispatch_oneshot::<EvaluateSessionLine>(&pool, &tagged, "evaluate", |outcome| match outcome {
+        Ok(EvaluateSessionLine::EvaluateDone { result }) => oneshot_ok_response(&result),
+        Ok(EvaluateSessionLine::Error { error }) => oneshot_error_response(&error),
         Err(error) => exchange_error_response(&error),
     })
     .await

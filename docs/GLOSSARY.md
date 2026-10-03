@@ -80,6 +80,8 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **`AnswerResult`** — the terminal shape returned in a `done` event: `{ status, output, inputTokens, outputTokens, thinkingTokens, cost, timestamps, warning?, toolCalls? }`.
 
+**`EvaluateEnvelope`** / **`EvaluateResult`** — the `evaluate()` request and result: one `state`, a map of `binary` / `choice` / `score` questions, one typed answer per question under the same id. See [`js/core/evaluation.js`](../js/core/evaluation.js).
+
 **`cost`** — single USD number for the call, computed from the entry's pricing fields. Returns `0` if the entry has no `inputPrice` / `outputPrice`.
 
 ---

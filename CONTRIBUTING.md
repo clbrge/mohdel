@@ -311,10 +311,10 @@ Before calling a change done, walk the four seams:
    `QuotaPolicy` for what a given `auth_id` allows — but a dimension that
    exists in one and not the other is drift, not design.
 2. **Routes.** Every handler in `server.rs` — `/v1/call`, `/v1/embed`,
-   `/v1/image`, `/v1/transcription` — runs the same pre-dispatch sequence:
-   auth, quota policy, cooldown, rate check, `record_request`. A route that
-   dispatches without it is an unguarded door into the pool, whatever the
-   session does afterwards.
+   `/v1/evaluate`, `/v1/image`, `/v1/transcription` — runs the same
+   pre-dispatch sequence: auth, quota policy, cooldown, rate check,
+   `record_request`. A route that dispatches without it is an unguarded door
+   into the pool, whatever the session does afterwards.
 3. **Wire.** See *Adding a wire-protocol field* below; a field that only one
    side understands is the same class of bug.
 4. **Docs.** `INTEGRATION.md` describes what a caller observes. Where the paths

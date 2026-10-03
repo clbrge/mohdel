@@ -18,9 +18,9 @@ pub mod tracing;
 
 pub use enforcer::Enforcer;
 pub use server::{
-    bind, dispatch_embed, dispatch_image, dispatch_transcription, handle_abort, handle_call,
-    handle_embed, handle_image, handle_transcription, health_handler, not_found_response,
-    remove_stale_socket, serve_admin, serve_data, serve_data_with_state, typed_error_response,
+    bind, dispatch_embed, dispatch_evaluate, dispatch_image, dispatch_transcription, handle_abort,
+    handle_call, handle_embed, handle_evaluate, handle_image, handle_transcription, health_handler,
+    not_found_response, remove_stale_socket, serve_admin, serve_data, serve_data_with_state, typed_error_response,
     Body, CatalogSource, Exchange, GateState, ServeError, SessionConfig,
 };
 pub use session_pool::{PoolError, PooledSession, SessionPool};
@@ -37,13 +37,14 @@ pub mod prelude {
     };
     pub use crate::protocol::{
         catalog_key, provider_of, split_model_id, AnswerResult, Auth, CallEnvelope,
-        AbortRequest, EmbedEnvelope, EmbedResult, Event, ImageEnvelope, ImageResult, Severity,
-        Status, TypedError,
+        AbortRequest, EmbedEnvelope, EmbedResult, EvaluateEnvelope, EvaluateResult,
+        EvaluationAnswer, EvaluationQuestion, Event, ImageEnvelope, ImageResult, Severity, Status,
+        TypedError,
     };
     pub use crate::server::{
-        bind, dispatch_embed, dispatch_image, dispatch_transcription, handle_abort, handle_call,
-        handle_embed, handle_image, handle_transcription, health_handler, not_found_response,
-        serve_data_with_state, typed_error_response, Body, Exchange, GateState, ServeError,
+        bind, dispatch_embed, dispatch_evaluate, dispatch_image, dispatch_transcription,
+        handle_abort, handle_call, handle_embed, handle_evaluate, handle_image,
+        handle_transcription, health_handler, not_found_response, serve_data_with_state, typed_error_response, Body, Exchange, GateState, ServeError,
         SessionConfig,
     };
     pub use crate::session_pool::{PooledSession, SessionPool};

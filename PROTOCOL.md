@@ -478,7 +478,7 @@ stdin/stdout framing.
 - **Sockets:** data plane (`--data`) serves calls; admin plane
   (`--admin`) serves health. Owner-only permissions; no TCP listener.
 - **Requests:** `POST /v1/call`, `POST /v1/image`,
-  `POST /v1/transcription`, `POST /v1/embed` with
+  `POST /v1/transcription`, `POST /v1/embed`, `POST /v1/evaluate` with
   `Content-Type: application/json` and the envelope (§3.1) as the
   body; `POST /v1/abort` with `{ callId, authId, gate }`; `GET /v1/health`
   on the admin plane. One request per
@@ -492,10 +492,11 @@ stdin/stdout framing.
   under a `200` (e.g. `SESSION_UNKNOWN_MODEL`). A gate with a session
   pool names itself in a `mohdel-gate` header: an opaque token an
   abort of this call must carry.
-- **`/v1/image`, `/v1/transcription`, `/v1/embed`, `/v1/health` responses:**
-  `200 OK`, `Content-Type: application/json`, `Content-Length` set;
-  the body is an `ImageResult`, a `TranscriptionResult`, an
-  `EmbedResult`, or `{ status, version, uptime_ms }`.
+- **`/v1/image`, `/v1/transcription`, `/v1/embed`, `/v1/evaluate`,
+  `/v1/health` responses:** `200 OK`, `Content-Type: application/json`,
+  `Content-Length` set; the body is an `ImageResult`, a
+  `TranscriptionResult`, an `EmbedResult`, an `EvaluateResult`, or
+  `{ status, version, uptime_ms }`.
 - **Rejections before dispatch:** a non-200 status with a `TypedError`
   (§4.4) JSON body — `400` (`PROTOCOL_INVALID_ENVELOPE`), `401`,
   `413`, `503` (`SESSION_POOL_BUSY`), `500`. A body that does not

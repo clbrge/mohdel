@@ -65,6 +65,7 @@ const fieldDefs = {
   maxInputTokens: { type: 'number' },
   inputTypes: { type: 'object' },
   defaultInputType: { type: 'string' },
+  evaluationTypes: { type: 'array', itemType: 'string' },
   deprecated: { type: 'string' },
   suspended: { type: 'string' },
   rpmLimit: { type: 'number' },

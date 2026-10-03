@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use mohdel_thin_gate::protocol::{
-    CallEnvelope, EmbedEnvelope, EmbedResult, Event, ImageEnvelope, ImageResult, TranscriptionEnvelope, TranscriptionResult,
+    CallEnvelope, EmbedEnvelope, EmbedResult, EvaluateEnvelope, EvaluateResult, Event, ImageEnvelope, ImageResult, TranscriptionEnvelope, TranscriptionResult,
 };
 use serde_json::Value;
 
@@ -233,6 +233,62 @@ fn embed_envelopes_and_results_round_trip_losslessly() {
             panic!("unexpected fixture name '{}' in embeddings.json", name);
         }
     }
+}
+
+#[test]
+fn evaluate_envelopes_and_results_round_trip_losslessly() {
+    let map = load_map("evaluations.json");
+    assert!(!map.is_empty(), "expected at least one evaluation fixture");
+
+    for (name, raw) in map {
+        if name.starts_with("envelope-") {
+            let parsed: EvaluateEnvelope = serde_json::from_value(raw.clone())
+                .unwrap_or_else(|e| panic!("parse evaluate envelope {}: {}", name, e));
+            let reserialized: Value = serde_json::to_value(&parsed).unwrap();
+            assert_eq!(
+                normalize(reserialized),
+                normalize(raw.clone()),
+                "evaluate envelope '{}' not preserved",
+                name
+            );
+        } else if name.starts_with("result-") {
+            let parsed: EvaluateResult = serde_json::from_value(raw.clone())
+                .unwrap_or_else(|e| panic!("parse evaluate result {}: {}", name, e));
+            let reserialized: Value = serde_json::to_value(&parsed).unwrap();
+            assert_eq!(
+                normalize(reserialized),
+                normalize(raw.clone()),
+                "evaluate result '{}' not preserved",
+                name
+            );
+        } else {
+            panic!("unexpected fixture name '{}' in evaluations.json", name);
+        }
+    }
+}
+
+#[test]
+fn evaluate_envelope_keeps_caller_key_order() {
+    let map = load_map("evaluations.json");
+    let raw = map["envelope-full"].clone();
+    let parsed: EvaluateEnvelope = serde_json::from_value(raw).unwrap();
+    let out = serde_json::to_string(&parsed).unwrap();
+    let at = |needle: &str| out.find(needle).unwrap_or_else(|| panic!("{needle} missing"));
+    assert!(at("\"is_urgent\"") < at("\"department\""));
+    assert!(at("\"department\"") < at("\"frustration\""));
+    assert!(at("\"technical\"") < at("\"billing\""));
+    assert!(at("\"subject\"") < at("\"body\""));
+    assert!(at("\"question\"") < at("\"escalation\""));
+}
+
+#[test]
+fn evaluate_question_rejects_unknown_field() {
+    let raw = serde_json::json!({
+        "callId": "v", "authId": "a", "model": "typesafe/m", "state": "s",
+        "questions": { "q": { "type": "binary", "instructions": "i", "weight": 2 } }
+    });
+    let result: Result<EvaluateEnvelope, _> = serde_json::from_value(raw);
+    assert!(result.is_err(), "unknown question field must be rejected");
 }
 
 #[test]

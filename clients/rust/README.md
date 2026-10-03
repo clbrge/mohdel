@@ -2,8 +2,9 @@
 
 Talks to a running [mohdel](../../README.md) thin-gate over its unix socket:
 chat completions with streaming, tool calls and vision, image generation,
-speech to text, embeddings, per-call USD cost. Async (tokio). The wire types
-are the gate's own, from the `mohdel-protocol` crate.
+speech to text, embeddings, typed-question evaluation, per-call USD cost.
+Async (tokio). The wire types are the gate's own, from the `mohdel-protocol`
+crate.
 
 ## Install
 
@@ -51,6 +52,7 @@ let result = client.collect(&envelope).await?;
 client.image(&image_envelope).await?;          // ImageResult
 client.transcription(&audio_envelope).await?;  // TranscriptionResult
 client.embed(&embed_envelope).await?;          // EmbedResult, one vector per input
+client.evaluate(&evaluate_envelope).await?;    // EvaluateResult, one answer per question
 client.health().await?;                        // Health { status, version, uptime_ms }
 ```
 

@@ -28,6 +28,7 @@ const KEY_ENV: &[(&str, &str)] = &[
     ("openai", "OPENAI_API_SK"),
     ("openrouter", "OPENROUTER_API_SK"),
     ("qwen", "QWEN_API_SK"),
+    ("typesafe", "TYPESAFE_API_SK"),
     ("xai", "XAI_API_SK"),
     ("xiaomi", "XIAOMI_API_SK"),
 ];

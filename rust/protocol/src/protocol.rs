@@ -6,8 +6,9 @@
 
 use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::secret::SecretString;
 
@@ -608,6 +609,92 @@ pub struct EmbedResult {
 #[serde(rename_all = "snake_case")]
 pub enum EmbedStatus {
     Completed,
+}
+
+// ---------- EvaluateEnvelope / EvaluateResult (one-shot) ----------
+//
+// Mirrors `js/core/evaluation.js`. `POST /v1/evaluate`, `op: "evaluate"`
+// driver-stdin tag. Maps are `IndexMap` and `Value` objects keep their key
+// order, so the session receives the caller's order on both paths.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EvaluateEnvelope {
+    pub call_id: String,
+    pub auth_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<Auth>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traceparent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baggage: Option<String>,
+
+    pub model: String,
+    pub state: Value,
+    pub questions: IndexMap<String, EvaluationQuestion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum EvaluationQuestion {
+    Binary {
+        instructions: Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        criteria: Option<BinaryCriteria>,
+    },
+    Choice {
+        instructions: Value,
+        criteria: Map<String, Value>,
+    },
+    Score {
+        instructions: Value,
+        criteria: Vec<Value>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BinaryCriteria {
+    pub yes: Value,
+    pub no: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EvaluateResult {
+    pub status: EvaluateStatus,
+    pub answers: IndexMap<String, EvaluationAnswer>,
+    pub upstream_model: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cost: f64,
+    pub timestamps: Timestamps,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvaluateStatus {
+    Completed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum EvaluationAnswer {
+    Binary {
+        probability: f64,
+    },
+    Choice {
+        choice: String,
+        probabilities: IndexMap<String, f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        confidence: Option<f64>,
+    },
+    Score {
+        score: f64,
+        probabilities: Vec<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        confidence: Option<f64>,
+    },
 }
 
 // ---------- AbortRequest (gate HTTP only) ----------

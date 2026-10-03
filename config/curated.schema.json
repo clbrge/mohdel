@@ -87,10 +87,11 @@
           "enum": [
             "model",
             "image",
-            "transcription"
+            "transcription",
+            "evaluation"
           ],
           "default": "model",
-          "description": "'model' for chat/completion, 'image' for image generation, 'transcription' for speech-to-text."
+          "description": "'model' for chat/completion, 'image' for image generation, 'transcription' for speech-to-text, 'evaluation' for typed-question answering (evaluate())."
         },
         "label": {
           "type": "string",
@@ -549,6 +550,11 @@
         "defaultInputType": {
           "type": "string",
           "description": "Symbolic role sent when the caller names none. Required for providers that make the parameter mandatory (Cohere v3+)."
+        },
+        "evaluationTypes": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["binary", "choice", "score"] },
+          "description": "Question types an evaluation model answers. A question of another type fails before dispatch. Without it, every type is sent and the provider decides."
         },
         "rpmLimit": {
           "type": "integer",

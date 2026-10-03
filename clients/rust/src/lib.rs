@@ -46,8 +46,9 @@ use tokio::net::UnixStream;
 pub use mohdel_protocol as protocol;
 pub use coalesce::{coalesce, BufferOpts};
 use mohdel_protocol::{
-    AbortRequest, AnswerResult, CallEnvelope, EmbedEnvelope, EmbedResult, Event, ImageEnvelope,
-    ImageResult, Severity, TranscriptionEnvelope, TranscriptionResult, TypedError, GATE_HEADER,
+    AbortRequest, AnswerResult, CallEnvelope, EmbedEnvelope, EmbedResult, EvaluateEnvelope,
+    EvaluateResult, Event, ImageEnvelope, ImageResult, Severity, TranscriptionEnvelope,
+    TranscriptionResult, TypedError, GATE_HEADER,
 };
 
 use wire::{Body, Framer, Head, WireError};
@@ -239,6 +240,20 @@ impl Client {
         })?;
         self.fetch_json(&self.socket, "POST", wire::EMBED_PATH, Some(&body), "thin-gate returned a malformed EmbedResult")
             .await
+    }
+
+    pub async fn evaluate(&self, envelope: &EvaluateEnvelope) -> Result<EvaluateResult, TypedError> {
+        let body = serde_json::to_vec(envelope).map_err(|e| {
+            typed("PROTOCOL_INVALID_ENVELOPE", "envelope does not serialize", Some(e.to_string()), false)
+        })?;
+        self.fetch_json(
+            &self.socket,
+            "POST",
+            wire::EVALUATE_PATH,
+            Some(&body),
+            "thin-gate returned a malformed EvaluateResult",
+        )
+        .await
     }
 
     /// Aborts the call named by `request`, from [`Call::abort_request`].

@@ -4,6 +4,33 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.8.0] — Feat: `evaluate()`, typed questions answered with probabilities
+
+### Added
+
+- `mo.use(model).evaluate(state, questions)` asks `binary`, `choice` and
+  `score` questions about one `state` and returns one answer per question:
+  `probability` of yes, or `probabilities` with `choice` / `score` and an
+  optional `confidence`. Result: `answers`, `upstreamModel`, `inputTokens`,
+  `outputTokens`, `cost`.
+- `typesafe` provider (`TYPESAFE_API_SK`), evaluation only. `answer()` on it
+  fails with `PROVIDER_TEXT_NOT_SUPPORTED`.
+- Gate route `POST /v1/evaluate`, `dispatch_evaluate` / `handle_evaluate`;
+  `callEvaluation` from `mohdel/client`; `evaluate()` on the Rust client.
+- Catalog `type: "evaluation"` and `evaluationTypes`, the question types an
+  entry answers; another type fails with `EVALUATE_QUESTION_TYPE_UNSUPPORTED`.
+
+### Changed
+
+- The gate keeps JSON object key order when it relays an envelope, so tool
+  `parameters` schemas reach the provider in the caller's order.
+
+### Fixed
+
+- An HTTP error from an embedding provider (`openai`, `gemini`, `cohere`,
+  `local`) no longer puts the caller's API key in `TypedError.detail`; a key
+  echoed in the provider's response body is masked.
+
 ## [3.7.0] — Feat: `billingOf`, how a provider's calls are paid for
 
 ### Added

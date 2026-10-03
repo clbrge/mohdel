@@ -460,6 +460,27 @@ For speech-to-text models, set `type: "transcription"` and price per audio **min
 
 `transcriptionPrice` is USD per audio minute, applied to the duration the provider reports. Exception: OpenAI's `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` report token usage instead of duration — give those entries `inputPrice` / `outputPrice` (USD per 1M tokens) and omit `transcriptionPrice`. Supported providers: `groq`, `mistral`, `openai` (all the same OpenAI-compatible `/audio/transcriptions` endpoint).
 
+## Evaluation entries
+
+For models that answer typed questions (`evaluate()`), set `type: "evaluation"` and price per million tokens:
+
+```json
+"typesafe/jev-1.13.0": {
+  "model": "jev-1.13.0",
+  "creator": "typesafe",
+  "provider": "typesafe",
+  "label": "Jev 1.13",
+  "inputFormat": ["text"],
+  "type": "evaluation",
+  "evaluationTypes": ["binary", "choice", "score"],
+  "contextTokenLimit": 64000,
+  "inputPrice": 0.042,
+  "outputPrice": 0
+}
+```
+
+`evaluationTypes` lists the question types the model answers; a question of another type fails before dispatch. Prefer a versioned `model` over a moving alias: answers, and thresholds tuned on them, belong to one version. Supported providers: `typesafe`.
+
 ## Custom fields
 
 Mohdel preserves any field it doesn't recognize. Convention: namespace your own fields with your application or product prefix to avoid future collisions:

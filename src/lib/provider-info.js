@@ -100,6 +100,13 @@ const PROVIDER_INFO = {
     hint: 'Create an API key in the Cohere dashboard under API Keys',
     free: true
   },
+  typesafe: {
+    label: 'TypeSafe',
+    description: 'Calibrated yes/no, choice and score answers about a state. No chat models through mohdel.',
+    url: 'https://console.typesafe.ai/keys',
+    hint: 'Create an API key in the TypeSafe console under Keys',
+    free: false
+  },
   qwen: {
     label: 'Qwen Cloud',
     description: 'Qwen — reasoning, coding, long context. Free quota for new users.',

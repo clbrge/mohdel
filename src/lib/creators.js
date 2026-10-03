@@ -65,6 +65,12 @@ const creators = {
     logo: 'cohere.svg',
     description: 'Cohere builds retrieval-focused models: embeddings and rerankers aimed at enterprise search rather than chat.'
   },
+  typesafe: {
+    prefixes: ['jev'],
+    label: 'TypeSafe',
+    logo: 'typesafe.svg',
+    description: 'TypeSafe trains decision models that answer typed questions with calibrated probabilities instead of generating text.'
+  },
   nomic: {
     prefixes: ['nomic-embed'],
     label: 'Nomic',

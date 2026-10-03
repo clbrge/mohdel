@@ -147,6 +147,16 @@ export function embeddingCostFor (envelope, spec, usage) {
 }
 
 /**
+ * @param {{model: string}} envelope
+ * @param {any} spec
+ * @param {{inputTokens: number, outputTokens: number}} usage
+ * @returns {number}
+ */
+export function evaluationCostFor (envelope, spec, usage) {
+  return unmetered(envelope.model) ? 0 : computeCost(spec, usage)
+}
+
+/**
  * Cost of a transcription call.
  *
  * Providers bill speech-to-text two ways, and the catalog supports both:

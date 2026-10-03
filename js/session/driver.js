@@ -19,6 +19,7 @@ import { run } from './run.js'
 import { runImage } from './run_image.js'
 import { runTranscription } from './run_transcription.js'
 import { runEmbedding } from './run_embedding.js'
+import { runEvaluation } from './run_evaluation.js'
 import { runInfo } from './run_info.js'
 import { setCatalog } from './adapters/_catalog.js'
 
@@ -230,6 +231,14 @@ export async function drive (stdin, stdout) {
         const out = await runEmbedding(embEnv)
         if (out.ok) {
           await writeLine({ type: 'embed_done', result: out.result })
+        } else {
+          await writeLine({ type: 'error', error: out.error })
+        }
+      } else if (envelope.op === 'evaluate') {
+        const { op: _op, ...evEnv } = envelope
+        const out = await runEvaluation(evEnv)
+        if (out.ok) {
+          await writeLine({ type: 'evaluate_done', result: out.result })
         } else {
           await writeLine({ type: 'error', error: out.error })
         }

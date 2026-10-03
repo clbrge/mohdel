@@ -61,7 +61,7 @@ export async function cohereEmbedding (envelope, deps = {}) {
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw fromHttpStatus(res.status, detail, envelope.auth?.key)
+    throw fromHttpStatus(res.status, 'embedding request failed', detail.slice(0, 500), envelope.auth?.key)
   }
 
   const payload = await res.json()

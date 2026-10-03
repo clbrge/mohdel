@@ -7,6 +7,7 @@ import { isEvent } from '#core'
 import { ENVELOPE_FIELDS } from '#core/envelope.js'
 import { IMAGE_ENVELOPE_FIELDS } from '#core/image.js'
 import { TRANSCRIPTION_ENVELOPE_FIELDS } from '#core/transcription.js'
+import { EVALUATE_ENVELOPE_FIELDS } from '#core/evaluation.js'
 
 const here = path.dirname(url.fileURLToPath(import.meta.url))
 const fixturesDir = path.join(here, '..', 'conformance')
@@ -251,6 +252,61 @@ describe('conformance transcriptions (JS side)', () => {
   }
 })
 
+// ---------- Evaluation fixtures ----------
+
+const EVALUATE_ENVELOPE_ALLOWED = new Set(EVALUATE_ENVELOPE_FIELDS)
+const EVALUATION_QUESTION_ALLOWED = new Set(['type', 'instructions', 'criteria'])
+const BINARY_CRITERIA_ALLOWED = new Set(['yes', 'no'])
+const EVALUATE_RESULT_ALLOWED = new Set([
+  'status', 'answers', 'upstreamModel',
+  'inputTokens', 'outputTokens', 'cost', 'timestamps'
+])
+const EVALUATION_ANSWER_ALLOWED = new Set([
+  'type', 'probability', 'choice', 'probabilities', 'confidence', 'score'
+])
+
+describe('conformance evaluations (JS side)', () => {
+  const fixtures = loadFixture('evaluations.json')
+
+  test('fixture file is non-empty and covers envelope + result shapes', () => {
+    const names = Object.keys(fixtures)
+    expect(names.some(n => n.startsWith('envelope-'))).toBe(true)
+    expect(names.some(n => n.startsWith('result-'))).toBe(true)
+  })
+
+  for (const [name, fx] of Object.entries(fixtures)) {
+    if (name.startsWith('envelope-')) {
+      test(`evaluate envelope has required fields: ${name}`, () => {
+        for (const required of ['callId', 'authId', 'auth', 'model', 'state', 'questions']) {
+          expect(fx).toHaveProperty(required)
+        }
+        expect(fx.model).toMatch(/^[^/]+\/.+/)
+      })
+
+      test(`evaluate envelope only contains frozen-type fields: ${name}`, () => {
+        assertOnlyKnownKeys(fx, EVALUATE_ENVELOPE_ALLOWED, 'evaluateEnvelope')
+        assertOnlyKnownKeys(fx.auth, AUTH_ALLOWED, 'auth')
+        for (const q of Object.values(fx.questions)) {
+          assertOnlyKnownKeys(q, EVALUATION_QUESTION_ALLOWED, 'question')
+          if (q.type === 'binary' && q.criteria) assertOnlyKnownKeys(q.criteria, BINARY_CRITERIA_ALLOWED, 'binaryCriteria')
+        }
+      })
+    } else if (name.startsWith('result-')) {
+      test(`evaluate result only contains frozen-type fields: ${name}`, () => {
+        assertOnlyKnownKeys(fx, EVALUATE_RESULT_ALLOWED, 'evaluateResult')
+        assertOnlyKnownKeys(fx.timestamps, TIMESTAMPS_ALLOWED, 'timestamps')
+        for (const a of Object.values(fx.answers)) {
+          assertOnlyKnownKeys(a, EVALUATION_ANSWER_ALLOWED, 'answer')
+        }
+      })
+    }
+
+    test(`round-trips JSON.stringify/parse: ${name}`, () => {
+      expect(JSON.parse(JSON.stringify(fx))).toEqual(fx)
+    })
+  }
+})
+
 // ---------- Tripwire: unknown-field rejection parity with Rust ----------
 //
 // The JS side doesn't have a strict typed parser, but this
@@ -398,7 +454,12 @@ describe('field-name parity: JS allowlists <-> Rust protocol', () => {
     ImageResult: IMAGE_RESULT_ALLOWED,
     ImageData: IMAGE_DATA_ALLOWED,
     TranscriptionEnvelope: TRANSCRIPTION_ENVELOPE_ALLOWED,
-    TranscriptionResult: TRANSCRIPTION_RESULT_ALLOWED
+    TranscriptionResult: TRANSCRIPTION_RESULT_ALLOWED,
+    EvaluateEnvelope: EVALUATE_ENVELOPE_ALLOWED,
+    EvaluationQuestion: EVALUATION_QUESTION_ALLOWED,
+    BinaryCriteria: BINARY_CRITERIA_ALLOWED,
+    EvaluateResult: EVALUATE_RESULT_ALLOWED,
+    EvaluationAnswer: EVALUATION_ANSWER_ALLOWED
   }
 
   for (const [rustType, jsAllowed] of Object.entries(MAP)) {

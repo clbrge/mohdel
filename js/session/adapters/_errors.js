@@ -469,9 +469,11 @@ export function typedError (message, type, retryable, detail) {
  * @param {number} status
  * @param {string} message
  * @param {string} [detail]
+ * @param {string} [key]  masked out of `detail`
  * @returns {Error & {typed: import('#core/errors.js').TypedError}}
  */
-export function fromHttpStatus (status, message, detail) {
+export function fromHttpStatus (status, message, detail, key) {
   const typed = classifyProviderError({ status })
-  return typedError(typed.message, typed.type, typed.retryable, detail ? `${message}: ${detail}` : message)
+  const scrubbed = scrubKey(detail, key)
+  return typedError(typed.message, typed.type, typed.retryable, scrubbed ? `${message}: ${scrubbed}` : message)
 }

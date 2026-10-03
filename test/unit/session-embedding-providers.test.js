@@ -120,3 +120,24 @@ describe('providers without an embeddings endpoint', () => {
     expect(r.error.type).toBe('SESSION_UNKNOWN_PROVIDER')
   })
 })
+
+describe('HTTP errors never carry the API key', () => {
+  const key = 'sk-live-0123456789abcdef'
+  const cases = {
+    'openai/text-embedding-3-small': {},
+    'gemini/gemini-embedding-001': {},
+    'cohere/embed-v4.0': { inputTypes: { document: 'search_document' }, defaultInputType: 'document' }
+  }
+
+  for (const [model, spec] of Object.entries(cases)) {
+    test(model, async () => {
+      globalThis.fetch = vi.fn(async () => ({
+        ok: false, status: 401, text: async () => `{"error":"invalid api key ${key}"}`
+      }))
+      const r = await runEmbedding(envelope(model, ['a'], { auth: { key } }), { spec })
+      expect(r.error.type).toBe('AUTH_INVALID')
+      expect(r.error.detail).toContain('invalid api key')
+      expect(r.error.detail).not.toContain(key)
+    })
+  }
+})

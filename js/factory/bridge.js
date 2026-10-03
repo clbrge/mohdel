@@ -24,6 +24,7 @@ import { run } from '../session/run.js'
 import { runImage } from '../session/run_image.js'
 import { runTranscription } from '../session/run_transcription.js'
 import { runEmbedding } from '../session/run_embedding.js'
+import { runEvaluation } from '../session/run_evaluation.js'
 import { markTrustedMedia } from '../session/adapters/_media.js'
 import { MohdelError, validateIds } from '#core'
 import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
@@ -216,6 +217,44 @@ export async function runAnswerEmbedding ({ provider, model, modelKey, configura
   if (options.dimensions !== undefined) envelope.dimensions = options.dimensions
 
   const out = await runEmbedding(envelope, {
+    ...deps,
+    ...(modelKey ? { modelKey } : {}),
+    ...(spec ? { spec } : {})
+  })
+  if (!out.ok) throw MohdelError.fromJSON(out.error, { provider, model })
+  return out.result
+}
+
+/**
+ * Run an `evaluate()` call through the /session runtime.
+ *
+ * @param {object} args
+ * @param {string} args.provider
+ * @param {string} args.model
+ * @param {string} [args.modelKey]
+ * @param {any} args.configuration
+ * @param {import('#core/evaluation.js').EvaluateEnvelope['state']} args.state
+ * @param {import('#core/evaluation.js').EvaluateEnvelope['questions']} args.questions
+ * @param {any} [args.options]             `callId` / `authId` only.
+ * @param {any} [args.spec]
+ * @param {BridgeDeps} [deps]
+ * @returns {Promise<import('#core/evaluation.js').EvaluateResult>}
+ */
+export async function runAnswerEvaluation ({ provider, model, modelKey, configuration, state, questions, options = {}, spec }, deps = {}) {
+  const callId = options.callId || newCallId()
+  const authId = options.authId || 'local'
+  assertValidIds(callId, authId, `${provider}/${model}`)
+
+  const envelope = {
+    callId,
+    authId,
+    auth: configToAuth(configuration),
+    model: `${provider}/${model}`,
+    state,
+    questions
+  }
+
+  const out = await runEvaluation(envelope, {
     ...deps,
     ...(modelKey ? { modelKey } : {}),
     ...(spec ? { spec } : {})

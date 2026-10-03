@@ -1,0 +1,140 @@
+{
+  "envelope-minimal": {
+    "callId": "v1",
+    "authId": "a1",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "typesafe/jev-1.13.0",
+    "state": "Help! My payouts have been failing for 3 days.",
+    "questions": {
+      "is_urgent": {
+        "type": "binary",
+        "instructions": "Does this convey urgency?"
+      }
+    }
+  },
+  "envelope-full": {
+    "callId": "v2",
+    "authId": "a2",
+    "auth": {
+      "key": "sk-test"
+    },
+    "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01",
+    "baggage": "user=a2",
+    "model": "typesafe/jev-1.13.0",
+    "state": {
+      "subject": "Payouts",
+      "body": "Help! My payouts have been failing for 3 days."
+    },
+    "questions": {
+      "is_urgent": {
+        "type": "binary",
+        "instructions": "Does `body` convey urgency?",
+        "criteria": {
+          "yes": "Explicitly time-sensitive",
+          "no": "No urgency expressed"
+        }
+      },
+      "department": {
+        "type": "choice",
+        "instructions": {
+          "question": "Which team should handle `body`?",
+          "escalation": "Billing wins when billing and technical both apply."
+        },
+        "criteria": {
+          "technical": "Bugs, outages, integrations",
+          "billing": "Payments, invoicing, refunds",
+          "other": null
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": [
+          "Calm",
+          "Frustrated",
+          "Very angry"
+        ]
+      }
+    }
+  },
+  "result-minimal": {
+    "status": "completed",
+    "answers": {
+      "is_urgent": {
+        "type": "binary",
+        "probability": 0.95
+      }
+    },
+    "upstreamModel": "jev-1.13.0",
+    "inputTokens": 296,
+    "outputTokens": 20,
+    "cost": 0.0,
+    "timestamps": {
+      "start": "1000",
+      "first": "1200",
+      "end": "1200"
+    }
+  },
+  "result-all-types-priced": {
+    "status": "completed",
+    "answers": {
+      "is_urgent": {
+        "type": "binary",
+        "probability": 0.95
+      },
+      "department": {
+        "type": "choice",
+        "choice": "billing",
+        "probabilities": {
+          "technical": 0.12,
+          "billing": 0.88,
+          "other": 0.0
+        },
+        "confidence": 0.81
+      },
+      "frustration": {
+        "type": "score",
+        "score": 1.05,
+        "probabilities": [
+          0.0,
+          0.95,
+          0.05
+        ],
+        "confidence": 0.92
+      }
+    },
+    "upstreamModel": "jev-1.13.0",
+    "inputTokens": 1000000,
+    "outputTokens": 54,
+    "cost": 0.042,
+    "timestamps": {
+      "start": "2000",
+      "first": "2400",
+      "end": "2400"
+    }
+  },
+  "result-no-confidence": {
+    "status": "completed",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9,
+          "other": 0.1
+        }
+      }
+    },
+    "upstreamModel": "example-evaluator-1",
+    "inputTokens": 40,
+    "outputTokens": 0,
+    "cost": 0.0,
+    "timestamps": {
+      "start": "3000",
+      "first": "3100",
+      "end": "3100"
+    }
+  }
+}

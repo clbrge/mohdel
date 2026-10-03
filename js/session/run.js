@@ -23,6 +23,7 @@
  */
 
 import { ADAPTER_NAMES, isImageProvider } from './adapters/_registry.js'
+import { EVALUATION_PROVIDERS } from './adapters/evaluation/index.js'
 import { getSpec } from './adapters/_catalog.js'
 import { getProviderLimits } from './adapters/_providers.js'
 import { hasSpeed, mergeSpeed, speedHasOwnQuota, speedNames } from './adapters/_speed.js'
@@ -117,6 +118,13 @@ export async function * run (envelope, {
       log.warn({ provider }, '[mohdel:answer] image-only provider via answer')
       endSpanError(span, new Error(detail))
       yield err
+      return
+    }
+    if (EVALUATION_PROVIDERS.includes(provider)) {
+      const detail = `provider '${provider}' supports evaluation only; use evaluate(...) instead`
+      log.warn({ provider }, '[mohdel:answer] evaluation-only provider via answer')
+      endSpanError(span, new Error(detail))
+      yield errorEvent(detail, 'PROVIDER_TEXT_NOT_SUPPORTED')
       return
     }
     const err = errorEvent(messageOf(e), 'SESSION_UNKNOWN_PROVIDER')

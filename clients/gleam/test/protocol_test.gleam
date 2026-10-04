@@ -166,7 +166,7 @@ pub fn conformance_events_decode_test() {
       helpers.conformance("events.json"),
       decode.dict(decode.string, types.event_decoder()),
     ))
-  dict.size(fixtures) |> should.equal(22)
+  dict.size(fixtures) |> should.equal(23)
   let assert Ok(Done(tool_use)) = dict.get(fixtures, "done-tool_use")
   tool_use.status |> should.equal("tool_use")
   list.length(tool_use.tool_calls) |> should.equal(1)

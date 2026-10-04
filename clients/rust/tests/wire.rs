@@ -149,7 +149,7 @@ fn conformance_events_round_trip() {
     let text = common::conformance("events.json");
     let raw: HashMap<String, serde_json::Value> = serde_json::from_str(&text).unwrap();
     let typed: HashMap<String, Event> = serde_json::from_str(&text).unwrap();
-    assert_eq!(typed.len(), 22);
+    assert_eq!(typed.len(), 23);
     // Optional fields serialize as absent; a fixture may spell them as null.
     fn strip_nulls(value: &mut serde_json::Value) {
         if let serde_json::Value::Object(map) = value {

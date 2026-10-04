@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.9.1] — Fix: client suites match the conformance fixtures
+
+### Fixed
+
+- The Rust, Gleam and OCaml client suites expect the 23 conformance event
+  fixtures, the one carrying `reasoningParts` included.
+
 ## [3.9.0] — Feat: reasoning carried across rounds
 
 ### Added

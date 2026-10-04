@@ -562,7 +562,7 @@ function flattenText (content) {
 /** @param {string | import('#core/envelope.js').MessagePart[]} content */
 function extractReasoning (content) {
   if (typeof content === 'string' || !Array.isArray(content)) return null
-  const parts = content.filter(p => p.type === 'reasoning' && p.text).map(p => p.text)
+  const parts = content.filter(p => p.type === 'reasoning' && p.text && !p.encrypted).map(p => p.text)
   return parts.length ? parts.join('\n') : null
 }
 

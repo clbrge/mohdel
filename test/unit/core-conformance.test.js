@@ -23,7 +23,7 @@ const AUTH_ALLOWED = new Set(['key'])
 const MEDIA_ALLOWED = new Set(['fileUri', 'mimeType'])
 const TOOL_SPEC_ALLOWED = new Set(['name', 'description', 'parameters'])
 const MESSAGE_ALLOWED = new Set(['role', 'content', 'toolCallId', 'toolName', 'toolCalls'])
-const MESSAGE_PART_ALLOWED = new Set(['type', 'text', 'cache', 'fileUri', 'mimeType'])
+const MESSAGE_PART_ALLOWED = new Set(['type', 'text', 'cache', 'fileUri', 'mimeType', 'encrypted', 'id', 'model'])
 
 const EVENT_ALLOWED = new Set(['type', 'delta', 'result', 'error', 'sinceMs'])
 const DELTA_CHUNK_ALLOWED = new Set(['type', 'delta'])
@@ -31,7 +31,7 @@ const ANSWER_RESULT_ALLOWED = new Set([
   'status', 'output', 'inputTokens', 'outputTokens', 'thinkingTokens',
   'cacheWriteInputTokens', 'cacheWrite1hInputTokens', 'cacheReadInputTokens',
   'cost', 'timestamps', 'warning', 'toolCalls', 'maxInterFrameMs', 'reasoning',
-  'speed', 'servedSpeed'
+  'speed', 'servedSpeed', 'reasoningParts'
 ])
 const TIMESTAMPS_ALLOWED = new Set(['start', 'first', 'end'])
 const TOOL_CALL_ALLOWED = new Set(['id', 'name', 'arguments', 'thoughtSignature'])
@@ -151,6 +151,9 @@ describe('conformance events (JS side)', () => {
         assertOnlyKnownKeys(ev.result.timestamps, TIMESTAMPS_ALLOWED, 'timestamps')
         for (const tc of ev.result.toolCalls ?? []) {
           assertOnlyKnownKeys(tc, TOOL_CALL_ALLOWED, 'toolCall')
+        }
+        for (const p of ev.result.reasoningParts ?? []) {
+          assertOnlyKnownKeys(p, MESSAGE_PART_ALLOWED, 'reasoningPart')
         }
       } else if (ev.type === 'error') {
         assertOnlyKnownKeys(ev.error, TYPED_ERROR_ALLOWED, 'error')

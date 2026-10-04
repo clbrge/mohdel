@@ -70,7 +70,8 @@ export async function * openai (envelope, deps = {}) {
   }
 
   const { instructions, input } = splitPrompt(envelope.prompt, imageParts, {
-    toolResultImages: ['openai', 'chatgpt'].includes(providerOf(envelope.model))
+    toolResultImages: ['openai', 'chatgpt'].includes(providerOf(envelope.model)),
+    model: envelope.model
   })
   if (imageInputs.length) injectImageParts(input, imageInputs)
 
@@ -94,6 +95,8 @@ export async function * openai (envelope, deps = {}) {
   // Tool-call accumulation: itemId → {call_id, name, arguments}
   /** @type {Map<string, {call_id: string, name: string, arguments: string}>} */
   const toolItems = new Map()
+  /** @type {import('#core/envelope.js').MessagePart[]} */
+  const reasoningParts = []
 
   try {
     const stream = await client.responses.stream(request, { signal })
@@ -118,6 +121,18 @@ export async function * openai (envelope, deps = {}) {
               call_id: event.item.call_id ?? event.item.id,
               name: event.item.name ?? '',
               arguments: ''
+            })
+          }
+          break
+
+        case 'response.output_item.done':
+          if (event.item?.type === 'reasoning' && event.item.encrypted_content) {
+            reasoningParts.push({
+              type: 'reasoning',
+              text: (event.item.summary ?? []).map(s => s.text).join('\n'),
+              id: event.item.id,
+              encrypted: event.item.encrypted_content,
+              model: envelope.model
             })
           }
           break
@@ -240,6 +255,7 @@ export async function * openai (envelope, deps = {}) {
     }
   }
   if (warning) done.result.warning = warning
+  if (reasoningParts.length) done.result.reasoningParts = reasoningParts
   if (toolItems.size > 0) {
     done.result.toolCalls = fromOpenAIToolCalls(Array.from(toolItems.values()))
   }
@@ -346,6 +362,7 @@ function buildRequest (envelope, input, instructions) {
         request.max_output_tokens += headroom
       }
       request.reasoning = { effort }
+      if (effort !== 'none') request.include = ['reasoning.encrypted_content']
     }
   }
 
@@ -392,7 +409,7 @@ function buildRequest (envelope, input, instructions) {
  *
  * @param {string | import('#core/envelope.js').Message[]} prompt
  * @param {Map<object, import('./_images.js').LoadedImage>} imageParts
- * @param {{toolResultImages: boolean}} opts
+ * @param {{toolResultImages: boolean, model: string}} opts
  */
 function splitPrompt (prompt, imageParts, opts) {
   if (typeof prompt === 'string') {
@@ -410,6 +427,18 @@ function splitPrompt (prompt, imageParts, opts) {
   }
   for (const m of prompt) {
     if (m.role !== 'tool') flushHoisted()
+    if (m.role === 'assistant' && Array.isArray(m.content)) {
+      for (const p of m.content) {
+        if (p.type === 'reasoning' && p.encrypted && p.model === opts.model) {
+          input.push({
+            type: 'reasoning',
+            id: p.id,
+            summary: p.text ? [{ type: 'summary_text', text: p.text }] : [],
+            encrypted_content: p.encrypted
+          })
+        }
+      }
+    }
     if (m.role === 'system') {
       systemParts.push(flattenText(m.content))
     } else if (m.role === 'tool') {

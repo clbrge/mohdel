@@ -403,5 +403,49 @@
         ]
       }
     ]
+  },
+  "assistant-encrypted-reasoning": {
+    "callId": "c-er",
+    "authId": "a-er",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "meta/muse-spark-1.3",
+    "prompt": [
+      {
+        "role": "user",
+        "content": "what is the weather in paris?"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "reasoning",
+            "text": "",
+            "encrypted": "gAAAAB-opaque",
+            "id": "rs_1",
+            "model": "meta/muse-spark-1.3"
+          },
+          {
+            "type": "text",
+            "text": "Checking."
+          }
+        ],
+        "toolCalls": [
+          {
+            "id": "call_1",
+            "name": "get_weather",
+            "arguments": {
+              "city": "paris"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "{\"temp\":21}",
+        "toolCallId": "call_1"
+      }
+    ]
   }
 }

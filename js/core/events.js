@@ -101,6 +101,10 @@
  *   `'insufficientOutputBudget' | 'aborted' | ...` additive union.
  * @property {ToolCall[]} [toolCalls]
  *   Present when `status === 'tool_use'`.
+ * @property {import('./envelope.js').MessagePart[]} [reasoningParts]
+ *   Reasoning parts carrying `encrypted`, from a provider that returns its
+ *   reasoning to be replayed. A multi-turn caller puts them at the head
+ *   of the assistant message it records for this result.
  * @property {number} [maxInterFrameMs]
  *   Longest gap (ms) between adapter events during the call —
  *   from `startedAt` to the first frame, between consecutive

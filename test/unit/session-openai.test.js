@@ -235,3 +235,69 @@ describe('session/adapters/openai — abort', () => {
     expect(events[0].result.warning).toBe('aborted')
   })
 })
+
+describe('session/adapters/openai — reasoning carried across rounds', () => {
+  const done = { type: 'response.completed', response: { usage: { input_tokens: 10, output_tokens: 50, output_tokens_details: { reasoning_tokens: 40 } } } }
+  const thought = { type: 'response.output_item.done', item: { type: 'reasoning', id: 'rs_1', summary: [], encrypted_content: 'gAAAAB-opaque' } }
+  const call = [
+    { type: 'response.output_item.added', item: { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'get_weather' } },
+    { type: 'response.function_call_arguments.delta', item_id: 'fc_1', delta: '{"city":"paris"}' }
+  ]
+  const recordedBy = (model) => [
+    { role: 'user', content: 'weather in paris?' },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'reasoning', text: '', encrypted: 'gAAAAB-opaque', id: 'rs_1', model },
+        { type: 'text', text: 'Checking.' }
+      ],
+      toolCalls: [{ id: 'call_1', name: 'get_weather', arguments: { city: 'paris' } }]
+    },
+    { role: 'tool', toolCallId: 'call_1', content: '{"temp":21}' }
+  ]
+
+  test.each(['openai/gpt-5', 'meta/any-model', 'xai/grok-4.7'])('%s: a reasoning model is asked for its reasoning back', async (model) => {
+    setCatalog({ [model]: { thinkingEffortLevels: { low: 0, none: 0 } } })
+    const { client, captured } = makeClient({ events: [done] })
+    await collect(openai(envelope({ model }), { client }))
+    expect(captured.request.include).toEqual(['reasoning.encrypted_content'])
+  })
+
+  test('a model that does not reason, or reasons at none, is not asked', async () => {
+    setCatalog({ 'openai/gpt-5': { thinkingEffortLevels: { low: 0, none: 0 } } })
+    const plain = makeClient({ events: [done] })
+    await collect(openai(envelope({ model: 'openai/unknown-xyz' }), { client: plain.client }))
+    expect(plain.captured.request.include).toBeUndefined()
+    const off = makeClient({ events: [done] })
+    await collect(openai(envelope({ outputEffort: 'none' }), { client: off.client }))
+    expect(off.captured.request.include).toBeUndefined()
+  })
+
+  test.each(['openai/gpt-5', 'meta/any-model'])('%s: reasoning that came with a tool call returns as parts naming the model', async (model) => {
+    const { client } = makeClient({ events: [thought, ...call, done] })
+    const result = (await collect(openai(envelope({ model }), { client }))).at(-1).result
+    expect(result.status).toBe('tool_use')
+    expect(result.reasoningParts).toEqual([{ type: 'reasoning', text: '', id: 'rs_1', encrypted: 'gAAAAB-opaque', model }])
+  })
+
+  test('a reasoning item without encrypted content is not kept', async () => {
+    const bare = { type: 'response.output_item.done', item: { type: 'reasoning', id: 'rs_2', summary: [] } }
+    const { client } = makeClient({ events: [bare, ...call, done] })
+    const result = (await collect(openai(envelope({ model: 'meta/any-model' }), { client }))).at(-1).result
+    expect(result.reasoningParts).toBeUndefined()
+  })
+
+  test('recorded reasoning is replayed to the model that produced it, ahead of its turn', async () => {
+    const { client, captured } = makeClient({ events: [done] })
+    await collect(openai(envelope({ model: 'meta/any-model', prompt: recordedBy('meta/any-model') }), { client }))
+    expect(captured.request.input.map(item => item.type ?? item.role)).toEqual(['user', 'reasoning', 'message', 'function_call', 'function_call_output'])
+    expect(captured.request.input[1]).toEqual({ type: 'reasoning', id: 'rs_1', summary: [], encrypted_content: 'gAAAAB-opaque' })
+  })
+
+  test.each(['openai/gpt-5', 'meta/another-model'])('%s never receives reasoning another model produced', async (model) => {
+    const { client, captured } = makeClient({ events: [done] })
+    await collect(openai(envelope({ model, prompt: recordedBy('meta/any-model') }), { client }))
+    expect(captured.request.input.some(item => item.type === 'reasoning')).toBe(false)
+    expect(JSON.stringify(captured.request)).not.toContain('gAAAAB-opaque')
+  })
+})

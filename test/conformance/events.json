@@ -299,5 +299,39 @@
       "speed": "fast",
       "servedSpeed": null
     }
+  },
+  "done-tool_use-with-encrypted-reasoning": {
+    "type": "done",
+    "result": {
+      "status": "tool_use",
+      "output": "Checking.",
+      "inputTokens": 10,
+      "outputTokens": 12,
+      "thinkingTokens": 40,
+      "cost": 0.0004,
+      "timestamps": {
+        "start": "1000000000",
+        "first": "1050000000",
+        "end": "1200000000"
+      },
+      "toolCalls": [
+        {
+          "id": "call_1",
+          "name": "get_weather",
+          "arguments": {
+            "city": "paris"
+          }
+        }
+      ],
+      "reasoningParts": [
+        {
+          "type": "reasoning",
+          "text": "",
+          "encrypted": "gAAAAB-opaque",
+          "id": "rs_1",
+          "model": "meta/muse-spark-1.3"
+        }
+      ]
+    }
   }
 }

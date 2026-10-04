@@ -415,6 +415,26 @@ describe('reasoning_content capture + roundtrip', () => {
     expect(assistantMsg.tool_calls[0].function.name).toBe('lookup')
   })
 
+  test('roundtrip: another provider\'s encrypted reasoning never reaches the wire', async () => {
+    const { client, captured } = mockChat(basicResponse())
+    await collect(deepseek(envelope('deepseek', 'deepseek-v4-flash', {
+      prompt: [
+        { role: 'user', content: 'q' },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'a summary', encrypted: 'gAAAAB-opaque', id: 'rs_1' },
+            { type: 'text', text: 'final answer' }
+          ]
+        },
+        { role: 'user', content: 'follow-up' }
+      ]
+    }), { client }))
+    const assistantMsg = captured.args.messages.find(m => m.role === 'assistant')
+    expect(assistantMsg.reasoning_content).toBeUndefined()
+    expect(JSON.stringify(captured.args)).not.toContain('gAAAAB-opaque')
+  })
+
   test('roundtrip: plain string assistant content → no reasoning_content on wire', async () => {
     const { client, captured } = mockChat(basicResponse())
     await collect(deepseek(envelope('deepseek', 'deepseek-chat', {

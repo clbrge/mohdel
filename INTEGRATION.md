@@ -290,6 +290,7 @@ Message shape:
 - `role`: `'system'` | `'user'` | `'assistant'` | `'tool'`
 - `content`: `string` or an array of parts: `{ type: 'text' | 'reasoning', text }` or `{ type: 'image', fileUri, mimeType }` — see [Vision](#vision)
 - A `reasoning` part carries a model's prior reasoning text. Chat-completions adapters send it back as `reasoning_content` on assistant turns; Anthropic, OpenAI, xAI and Gemini leave it out, since they accept prior reasoning only in their own signed form.
+- A `reasoning` part with `encrypted` (and `id`, `model`) is that signed form, returned by the Responses-API providers (OpenAI, ChatGPT, Meta, xAI) so a model keeps its reasoning between tool rounds. Copy `result.reasoningParts` to the head of the assistant message you record for that result; the adapter replays them ahead of that turn when the next call is to the same `model`, and drops them for any other model or provider, so a conversation can change model.
 - `toolCallId`: present on `tool` role — identifies which assistant tool call this responds to
 - `name`: optional tool name on `tool` role
 - `toolCalls`: present on `assistant` role when the model invoked tools in that turn
@@ -591,7 +592,9 @@ The bridge maps `tool_result` → `tool` role and preserves `assistant.toolCalls
   warning: undefined,               // 'insufficientOutputBudget' on budget truncation;
                                     // 'aborted' when caller-side abort completed mid-stream:
                                     // usage is then a lower bound, as far as the provider reported it
-  toolCalls: undefined              // Array<{ id, name, arguments }> when status === 'tool_use'
+  toolCalls: undefined,             // Array<{ id, name, arguments }> when status === 'tool_use'
+  reasoningParts: undefined         // Array<{ type: 'reasoning', text, encrypted, id, model }> from a
+                                    // Responses-API provider; replay them, see Message shape
 }
 ```
 

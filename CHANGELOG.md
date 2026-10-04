@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.9.0] — Feat: reasoning carried across rounds
+
+### Added
+
+- `AnswerResult.reasoningParts`: the model's reasoning as encrypted
+  `reasoning` parts (`{ type, text, encrypted, id, model }`). A caller that puts
+  them at the head of the assistant message it records gets them replayed on
+  the next call to the same model, and dropped on a call to any other.
+- Responses-API providers (`openai`, `chatgpt`, `meta`, `xai`) request
+  `include: ['reasoning.encrypted_content']` when the model reasons (the
+  catalog declares `thinkingEffortLevels` and the effort is not `none`), and
+  return the reasoning items they receive as `reasoningParts`. Every other
+  adapter drops an encrypted reasoning part.
+
 ## [3.8.1] — Fix: a stream that never completed is an error
 
 ### Fixed

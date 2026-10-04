@@ -256,6 +256,15 @@ pub enum MessagePart {
     },
     Reasoning {
         text: String,
+        /// The provider's opaque reasoning, replayed only to `model`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        encrypted: Option<String>,
+        /// The provider's item id for an `encrypted` part.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        /// The model that produced an `encrypted` part.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     Image {
@@ -360,6 +369,11 @@ pub struct AnswerResult {
     /// 400s otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<String>,
+    /// Reasoning parts carrying `encrypted`, from a provider that returns its
+    /// reasoning to be replayed. A multi-turn caller puts them at the head of
+    /// the assistant message it records for this result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_parts: Option<Vec<MessagePart>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

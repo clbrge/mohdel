@@ -122,6 +122,13 @@
  * @property {('text'|'reasoning'|'image')} type
  * @property {string} [text]
  *   Required on `text` and `reasoning` parts.
+ * @property {string} [encrypted]
+ *   On a `reasoning` part: the provider's opaque reasoning, replayed only
+ *   to `model` and dropped for any other.
+ * @property {string} [id]
+ *   On a `reasoning` part carrying `encrypted`: the provider's item id.
+ * @property {string} [model]
+ *   On a `reasoning` part carrying `encrypted`: the model that produced it.
  * @property {string} [fileUri]
  *   Required on `image` parts. Same schemes and local-read rules as
  *   an envelope `images` ref. Accepted on `user` and `tool` messages.

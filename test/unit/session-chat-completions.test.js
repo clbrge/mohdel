@@ -106,6 +106,21 @@ describe('groq adapter', () => {
     expect(events.at(-1).result.status).toBe('completed')
   })
 
+  test.each([
+    ['text only', [{ choices: [{ delta: { content: 'Starting with #56.' } }] }]],
+    ['mid tool call', [
+      { choices: [{ delta: { content: 'Starting with #56.' } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'exec', arguments: '{"comm' } }] } }] }
+    ]],
+    ['nothing', []]
+  ])('a stream ending without finish_reason (%s) is a retryable error, never a done', async (_, chunks) => {
+    const { client } = mockChatStream(chunks)
+    const events = await collect(groq(envelope('groq', 'llama-3'), { client }))
+    expect(events.some(e => e.type === 'done')).toBe(false)
+    expect(events.at(-1).type).toBe('error')
+    expect(events.at(-1).error.retryable).toBe(true)
+  })
+
   test('finish_reason=length → incomplete + warning', async () => {
     const { client } = mockChatStream([
       { choices: [{ delta: { content: 'hello' } }] },

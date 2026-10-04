@@ -167,12 +167,12 @@ export async function * openai (envelope, deps = {}) {
           }
           break
 
-        case 'response.failed':
-          if (providerOf(envelope.model) === 'chatgpt') {
-            yield { type: 'error', error: classifyProviderError(new Error('ChatGPT response failed'), envelope.auth?.key, { provider: 'chatgpt' }) }
-            return
-          }
-          break
+        case 'response.failed': {
+          const provider = providerOf(envelope.model)
+          const failure = Object.assign(new Error(`${provider} response failed`), { error: event.response?.error })
+          yield { type: 'error', error: classifyProviderError(failure, envelope.auth?.key, { provider }) }
+          return
+        }
 
         default:
           break
@@ -194,8 +194,9 @@ export async function * openai (envelope, deps = {}) {
   }
 
   const end = String(process.hrtime.bigint())
-  if (providerOf(envelope.model) === 'chatgpt' && !terminalResponse) {
-    yield { type: 'error', error: classifyProviderError(new Error('ChatGPT stream ended before completion'), envelope.auth?.key, { provider: 'chatgpt' }) }
+  if (!terminalResponse) {
+    const provider = providerOf(envelope.model)
+    yield { type: 'error', error: classifyProviderError(new Error(`${provider} stream ended before completion`), envelope.auth?.key, { provider }) }
     return
   }
   // OpenAI Responses reports `output_tokens` INCLUDING reasoning

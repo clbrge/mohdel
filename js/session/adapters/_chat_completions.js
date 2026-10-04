@@ -262,6 +262,11 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     return
   }
 
+  if (finishReason === null) {
+    yield { type: 'error', error: classifyProviderError(new Error(`${config.provider} stream ended before completion`), envelope.auth?.key, { provider: config.provider }) }
+    return
+  }
+
   const collectedToolCalls = Object.values(toolCallAccum).map(tc => ({
     id: tc.id,
     function: { name: tc.name, arguments: tc.arguments }

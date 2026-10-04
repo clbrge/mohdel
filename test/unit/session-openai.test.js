@@ -115,6 +115,37 @@ describe('session/adapters/openai', () => {
     expect(events[0].error.retryable).toBe(true)
   })
 
+  const preambleThenCall = [
+    { type: 'response.output_text.delta', delta: 'Starting with #56.' },
+    { type: 'response.output_item.added', item: { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'exec' } },
+    { type: 'response.function_call_arguments.delta', item_id: 'fc_1', delta: '{"command":"git status"}' }
+  ]
+
+  test.each(['openai/gpt-5', 'meta/any-model', 'xai/grok-4'])('%s: a stream ending before its terminal event is a retryable error, never a done', async (model) => {
+    const { client } = makeClient({ events: preambleThenCall })
+    const events = await collect(openai(envelope({ model }), { client }))
+    expect(events.some(e => e.type === 'done')).toBe(false)
+    expect(events.at(-1).type).toBe('error')
+    expect(events.at(-1).error.retryable).toBe(true)
+  })
+
+  test('response.failed is an error, never a done', async () => {
+    const { client } = makeClient({
+      events: [...preambleThenCall, { type: 'response.failed', response: { error: { code: 'server_error', message: 'The server had an error' } } }]
+    })
+    const events = await collect(openai(envelope({ model: 'meta/any-model' }), { client }))
+    expect(events.some(e => e.type === 'done')).toBe(false)
+    expect(events.at(-1).type).toBe('error')
+  })
+
+  test('response.failed keeps the provider code for classification', async () => {
+    const { client } = makeClient({
+      events: [{ type: 'response.failed', response: { error: { code: 'context_length_exceeded', message: 'too long' } } }]
+    })
+    const events = await collect(openai(envelope(), { client }))
+    expect(events.at(-1).error.type).toBe('CONTEXT_OVERFLOW')
+  })
+
   test('done cost is 0 for unknown model; non-zero for priced', async () => {
     {
       const { client } = makeClient({

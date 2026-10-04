@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.8.1] — Fix: a stream that never completed is an error
+
+### Fixed
+
+- On every Responses-API provider (`openai`, `meta`, `xai`, `chatgpt`), a
+  stream that ends without `response.completed` or `response.incomplete`
+  yields a retryable error instead of a `completed` result. Its tool calls
+  were returned under status `completed` and read as a final answer.
+- `response.failed` yields an error on every Responses-API provider, classified
+  from the provider's `error.code`.
+- On every Chat Completions provider, a stream that ends without a
+  `finish_reason` yields a retryable error instead of a `completed` or
+  `tool_use` result.
+
 ## [3.8.0] — Feat: `evaluate()`, typed questions answered with probabilities
 
 ### Added

@@ -24,7 +24,7 @@
 
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -415,6 +415,13 @@ struct PoolInner {
     catalog_version: AtomicU64,
     aborts: std::sync::Mutex<AbortRegistry>,
     instance: String,
+    /// Sessions this pool has started and not lost for good: a discarded
+    /// one is replaced, so the count holds. Below `max`, an acquire that
+    /// finds none idle starts one instead of waiting.
+    started: AtomicUsize,
+    max: usize,
+    /// `None` reads `acquire_timeout()` per acquire.
+    acquire_timeout: Option<Duration>,
 }
 
 /// Why `SessionPool::acquire` gave up.
@@ -450,8 +457,29 @@ pub struct SessionPool {
 
 impl SessionPool {
     pub async fn new(cfg: SessionConfig, size: usize) -> Result<Self, PoolError> {
+        Self::start(cfg, size, size, None).await
+    }
+
+    /// One session at first, more on demand up to `max`, none ever stopped: for a
+    /// single tenant whose concurrency varies, which waits `acquire_timeout` for a
+    /// session once all `max` are busy.
+    pub async fn growing(
+        cfg: SessionConfig,
+        max: usize,
+        acquire_timeout: Duration,
+    ) -> Result<Self, PoolError> {
+        Self::start(cfg, 1, max, Some(acquire_timeout)).await
+    }
+
+    async fn start(
+        cfg: SessionConfig,
+        size: usize,
+        max: usize,
+        acquire_timeout: Option<Duration>,
+    ) -> Result<Self, PoolError> {
         assert!(size > 0, "pool size must be > 0");
-        let (tx, rx) = mpsc::channel(size);
+        assert!(max >= size, "pool max must be at least its initial size");
+        let (tx, rx) = mpsc::channel(max);
 
         // Spawn sessions with bounded concurrency. Done sequentially,
         // pool startup is linear in pool size — a 32-slot pool takes
@@ -495,6 +523,9 @@ impl SessionPool {
                 catalog_version: AtomicU64::new(0),
                 aborts: std::sync::Mutex::new(AbortRegistry::default()),
                 instance: new_instance_id(),
+                started: AtomicUsize::new(size),
+                max,
+                acquire_timeout,
             }),
         })
     }
@@ -531,7 +562,8 @@ impl SessionPool {
         // internal loop iterations that discard a session and retry
         // (e.g. catalog injection failure).
         let waited_since = Instant::now();
-        let outcome = tokio::time::timeout(acquire_timeout(), self.acquire_inner()).await;
+        let limit = self.inner.acquire_timeout.unwrap_or_else(acquire_timeout);
+        let outcome = tokio::time::timeout(limit, self.acquire_inner()).await;
         let waited_ms = waited_since.elapsed().as_secs_f64() * 1000.0;
         metrics::pool_acquire_wait(waited_ms);
         match outcome {
@@ -549,7 +581,18 @@ impl SessionPool {
 
     async fn acquire_inner(&self) -> Option<PooledSession> {
         loop {
-            let mut sess = self.inner.receiver.lock().await.recv().await?;
+            let idle = match self.inner.receiver.lock().await.try_recv() {
+                Ok(sess) => Some(sess),
+                Err(mpsc::error::TryRecvError::Empty) => None,
+                Err(mpsc::error::TryRecvError::Disconnected) => return None,
+            };
+            let mut sess = match idle {
+                Some(sess) => sess,
+                None => match self.grow().await {
+                    Some(sess) => sess,
+                    None => self.inner.receiver.lock().await.recv().await?,
+                },
+            };
             let pool_ver = self.inner.catalog_version.load(Ordering::Acquire);
             if sess.catalog_version >= pool_ver {
                 return Some(sess);
@@ -570,6 +613,33 @@ impl SessionPool {
             };
             let pool = self.clone();
             tokio::spawn(async move { pool.refresh_and_requeue(sess, &json, pool_ver).await });
+        }
+    }
+
+    /// A session of its own for this acquire, when the pool is below `max`. A spawn
+    /// that fails gives its place back, and the acquire waits for one instead.
+    async fn grow(&self) -> Option<PooledSession> {
+        let reserved = self
+            .inner
+            .started
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < self.inner.max).then_some(n + 1)
+            });
+        if reserved.is_err() {
+            return None;
+        }
+        let seed = self.inner.catalog_version.load(Ordering::Acquire);
+        match PooledSession::spawn_and_ready(&self.inner.cfg, READINESS_TIMEOUT, seed).await {
+            Ok(sess) => {
+                metrics::session_alive_delta(1);
+                Some(sess)
+            }
+            Err(e) => {
+                self.inner.started.fetch_sub(1, Ordering::AcqRel);
+                metrics::session_spawn_failed();
+                eprintln!("acquire: could not grow the pool ({e}); waiting for a session");
+                None
+            }
         }
     }
 

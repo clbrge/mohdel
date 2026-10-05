@@ -123,3 +123,46 @@ fn released_session_is_reacquired_within_the_timeout() {
         })
     });
 }
+
+#[test]
+fn a_growing_pool_starts_a_session_rather_than_wait_until_its_max() {
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    rt.block_on(async {
+        let pool = SessionPool::growing(idle_session_cfg(), 2, Duration::from_millis(300))
+            .await
+            .expect("pool");
+
+        let first = pool.acquire().await.expect("the session it started with");
+        let second = pool.acquire().await.expect("a session grown for this acquire");
+
+        let started = Instant::now();
+        match pool.acquire().await {
+            Err(e) => assert_eq!(e, AcquireError::Timeout),
+            Ok(_) => panic!("grew past its max"),
+        }
+        assert!(started.elapsed() >= Duration::from_millis(250));
+
+        pool.release(first);
+        assert!(pool.acquire().await.is_ok(), "a released session serves the next acquire");
+        drop(second);
+    });
+}
+
+#[test]
+fn a_growing_pool_waits_as_long_as_it_was_told() {
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    rt.block_on(async {
+        let pool = SessionPool::growing(idle_session_cfg(), 1, Duration::MAX)
+            .await
+            .expect("pool");
+        let held = pool.acquire().await.expect("first acquire");
+        let waiting = tokio::spawn({
+            let pool = pool.clone();
+            async move { pool.acquire().await.is_ok() }
+        });
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(!waiting.is_finished(), "gave up while told to wait");
+        pool.release(held);
+        assert!(waiting.await.expect("join"), "served once the session came back");
+    });
+}

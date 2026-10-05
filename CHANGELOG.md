@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.10.0] — Feat: a session pool that grows on demand
+
+### Added
+
+- `SessionPool::growing(cfg, max, acquire_timeout)`: starts one session and
+  starts another whenever an acquire finds none idle, up to `max`; an acquire
+  past `max` waits `acquire_timeout` (`Duration::MAX` waits without bound).
+  `SessionPool::new(cfg, size)` is unchanged.
+
 ## [3.9.1] — Fix: client suites match the conformance fixtures
 
 ### Fixed

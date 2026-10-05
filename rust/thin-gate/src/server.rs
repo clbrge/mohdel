@@ -381,6 +381,7 @@ async fn call_response(req: Request<Incoming>, state: Arc<GateState>) -> Respons
                 "ROUTE_REJECTED",
                 false,
                 Some(e.to_string()),
+                None,
             );
         }
     }
@@ -481,11 +482,12 @@ struct Denied {
     kind: &'static str,
     retryable: bool,
     detail: Option<String>,
+    retry_after_ms: Option<u64>,
 }
 
 impl Denied {
     fn into_stream(self) -> Response<Body> {
-        stream_error(self.message, self.severity, self.kind, self.retryable, self.detail)
+        stream_error(self.message, self.severity, self.kind, self.retryable, self.detail, self.retry_after_ms)
     }
 
     fn into_oneshot(self) -> Response<Body> {
@@ -495,6 +497,7 @@ impl Denied {
             severity: self.severity,
             retryable: self.retryable,
             kind: Some(self.kind.to_string()),
+            retry_after_ms: self.retry_after_ms,
         })
     }
 }
@@ -554,6 +557,7 @@ async fn enforce_policy(
                 kind: "QUOTA_POLICY_ERROR",
                 retryable: false,
                 detail: Some(e.to_string()),
+                retry_after_ms: None,
             });
         }
     };
@@ -571,6 +575,7 @@ async fn enforce_policy(
                 "{} is in cooldown for {}s after {} consecutive failures ({})",
                 provider, info.seconds_left, info.fail_count, info.reason
             )),
+            retry_after_ms: Some(info.seconds_left * 1_000),
         });
     }
 
@@ -584,6 +589,7 @@ async fn enforce_policy(
             kind: "QUOTA_EXCEEDED",
             retryable: true,
             detail: Some(format!("retry after {delay_ms}ms")),
+            retry_after_ms: Some(delay_ms),
         });
     }
 
@@ -983,6 +989,7 @@ fn terminal_error_line(
             severity,
             retryable,
             kind: Some(kind.to_string()),
+            retry_after_ms: None,
         },
     };
     let mut out = serde_json::to_string(&event).unwrap_or_else(|_| "{}".to_string());
@@ -1000,6 +1007,7 @@ fn stream_error(
     kind: &str,
     retryable: bool,
     detail: Option<String>,
+    retry_after_ms: Option<u64>,
 ) -> Response<Body> {
     let event = Event::Error {
         error: TypedError {
@@ -1008,6 +1016,7 @@ fn stream_error(
             severity,
             retryable,
             kind: Some(kind.to_string()),
+            retry_after_ms,
         },
     };
     let mut out = serde_json::to_vec(&event).unwrap_or_else(|_| b"{}".to_vec());
@@ -1649,6 +1658,7 @@ fn exchange_error(
         severity,
         retryable,
         kind: Some(kind.to_string()),
+        retry_after_ms: None,
     }
 }
 
@@ -1792,6 +1802,7 @@ pub fn typed_error_response(
         severity,
         retryable,
         kind: Some(kind.to_string()),
+        retry_after_ms: None,
     };
     typed_error_json_response(status, &err)
 }

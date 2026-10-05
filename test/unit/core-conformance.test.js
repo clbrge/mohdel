@@ -36,7 +36,7 @@ const ANSWER_RESULT_ALLOWED = new Set([
 const TIMESTAMPS_ALLOWED = new Set(['start', 'first', 'end'])
 const TOOL_CALL_ALLOWED = new Set(['id', 'name', 'arguments', 'thoughtSignature'])
 const TYPED_ERROR_ALLOWED = new Set([
-  'message', 'detail', 'severity', 'retryable', 'type'
+  'message', 'detail', 'severity', 'retryable', 'type', 'retryAfterMs'
 ])
 
 function loadFixture (name) {

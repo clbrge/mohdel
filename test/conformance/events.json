@@ -198,7 +198,8 @@
       "message": "rate limit exceeded",
       "severity": "warn",
       "retryable": true,
-      "type": "PROVIDER_COOLDOWN"
+      "type": "PROVIDER_COOLDOWN",
+      "retryAfterMs": 56000
     }
   },
   "error-auth": {

@@ -326,7 +326,8 @@ Three variants:
     detail?: string,
     severity: 'trace'|'debug'|'info'|'warn'|'error'|'fatal',
     retryable: boolean,
-    type: string   // AUTH_INVALID, RATE_LIMIT, PROVIDER_COOLDOWN, SESSION_DIED, ...
+    type: string,  // AUTH_INVALID, RATE_LIMIT, PROVIDER_COOLDOWN, SESSION_DIED, ...
+    retryAfterMs?: number  // how long until the same call can succeed, when the refusal knows
   }
 }
 ```
@@ -794,7 +795,8 @@ try {
 } catch (err) {
   if (err instanceof MohdelError) {
     if (err.type === 'PROVIDER_COOLDOWN') {
-      // backed off after consecutive failures; err.retryable === true
+      // backed off after consecutive failures; err.retryable === true,
+      // err.retryAfterMs is how long is left
     } else if (err.type === 'AUTH_INVALID') {
       // 401/403; err.retryable === false
     } else if (err.retryable) {

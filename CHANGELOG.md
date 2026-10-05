@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.11.0] — Feat: errors say how long to wait
+
+### Added
+
+- `TypedError.retryAfterMs`: how long until the same call can succeed, when the
+  refusal knows. `PROVIDER_COOLDOWN` carries the cooldown's time left, from the
+  gate and in-process alike; the gate's `QUOTA_EXCEEDED` carries its delay.
+  `MohdelError` keeps it through `fromJSON` and `toJSON`.
+
 ## [3.10.0] — Feat: a session pool that grows on demand
 
 ### Added

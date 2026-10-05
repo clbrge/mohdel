@@ -101,6 +101,7 @@ async fn other_items_pass_through_in_order() {
         severity: Severity::Error,
         retryable: true,
         kind: Some("NET_ERROR".into()),
+        retry_after_ms: None,
     };
     let items: Vec<_> = coalesce(stream(vec![Ok(msg("a")), Err(error)]), WIDE)
         .collect()

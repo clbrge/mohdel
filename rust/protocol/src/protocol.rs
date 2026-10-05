@@ -427,6 +427,10 @@ pub struct TypedError {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(rename = "type")]
     pub kind: Option<String>,
+    /// How long to wait before the same call can succeed, when the refusal knows: a provider
+    /// cooldown's time left, a quota's next window. Absent when nothing says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_after_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

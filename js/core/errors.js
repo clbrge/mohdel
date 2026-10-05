@@ -33,6 +33,10 @@
  *   Canonical tag callers branch on (e.g. `'PROVIDER_COOLDOWN'`,
  *   `'AUTH_INVALID'`). Optional on the wire; every
  *   `classifyProviderError` result sets it.
+ * @property {number} [retryAfterMs]
+ *   How long to wait before the same call can succeed, when the
+ *   refusal knows: a provider cooldown's time left, a quota's next
+ *   window. Absent when nothing says.
  */
 
 export const SEVERITY_TAGS = Object.freeze([
@@ -47,17 +51,19 @@ export class MohdelError extends Error {
    *   retryable?: boolean,
    *   detail?: string,
    *   type?: string,
+   *   retryAfterMs?: number,
    *   context?: object
    * }} [options]
    *   `context` is in-process only and never serialized.
    */
-  constructor (message, { severity = 'error', retryable = false, detail, type, context } = {}) {
+  constructor (message, { severity = 'error', retryable = false, detail, type, retryAfterMs, context } = {}) {
     super(message)
     this.name = 'MohdelError'
     this.severity = severity
     this.retryable = retryable
     if (detail) this.detail = detail
     if (type) this.type = type
+    if (retryAfterMs !== undefined) this.retryAfterMs = retryAfterMs
     if (context) this.context = context
   }
 
@@ -71,6 +77,7 @@ export class MohdelError extends Error {
     }
     if (this.detail) out.detail = this.detail
     if (this.type) out.type = this.type
+    if (this.retryAfterMs !== undefined) out.retryAfterMs = this.retryAfterMs
     return out
   }
 
@@ -85,6 +92,7 @@ export class MohdelError extends Error {
       retryable: data.retryable,
       detail: data.detail,
       type: data.type,
+      retryAfterMs: data.retryAfterMs,
       context
     })
   }

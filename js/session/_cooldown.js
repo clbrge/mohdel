@@ -97,7 +97,8 @@ export function createCooldownTracker (
       detail: `${key} is in cooldown for ${secsLeft}s after ${entry.failCount} consecutive failures (${entry.reason})`,
       severity: 'warn',
       retryable: true,
-      type: 'PROVIDER_COOLDOWN'
+      type: 'PROVIDER_COOLDOWN',
+      retryAfterMs: secsLeft * 1000
     }
   }
 

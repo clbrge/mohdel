@@ -54,9 +54,11 @@ describe('core/errors MohdelError', () => {
       message: 'rpm',
       severity: 'warn',
       retryable: true,
-      type: 'PROVIDER_COOLDOWN'
+      type: 'PROVIDER_COOLDOWN',
+      retryAfterMs: 56000
     }
     const e = MohdelError.fromJSON(wire)
+    expect(e.retryAfterMs).toBe(56000)
     expect(e.toJSON()).toEqual(wire)
   })
 

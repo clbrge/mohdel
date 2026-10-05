@@ -72,6 +72,8 @@ describe('session/run — cooldown enforcement', () => {
     expect(events[0].type).toBe('error')
     expect(events[0].error.type).toBe('PROVIDER_COOLDOWN')
     expect(events[0].error.retryable).toBe(true)
+    expect(events[0].error.retryAfterMs).toBeGreaterThan(0)
+    expect(events[0].error.retryAfterMs % 1000).toBe(0)
   })
 
   test('successful done resets cooldown failCount', async () => {

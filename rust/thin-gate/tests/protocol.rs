@@ -120,11 +120,13 @@ fn typed_error_uses_type_on_wire_via_kind_rename() {
         severity: Severity::Warn,
         retryable: true,
         kind: Some("PROVIDER_COOLDOWN".into()),
+        retry_after_ms: Some(56_000),
     };
     let v = serde_json::to_value(&e).unwrap();
     assert_eq!(v["type"], "PROVIDER_COOLDOWN");
     assert_eq!(v["severity"], "warn");
     assert_eq!(v["retryable"], true);
+    assert_eq!(v["retryAfterMs"], 56_000);
 }
 
 #[test]
@@ -136,9 +138,11 @@ fn error_event_wire_shape() {
             severity: Severity::Error,
             retryable: false,
             kind: None,
+            retry_after_ms: None,
         },
     };
     let v = serde_json::to_value(&e).unwrap();
+    assert_eq!(v["error"].get("retryAfterMs"), None);
     assert_eq!(v["type"], "error");
     assert_eq!(v["error"]["message"], "bad");
     assert_eq!(v["error"]["detail"], "more info");

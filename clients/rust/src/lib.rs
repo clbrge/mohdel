@@ -477,6 +477,7 @@ fn typed(kind: &str, message: &str, detail: Option<String>, retryable: bool) -> 
         severity: Severity::Error,
         retryable,
         kind: Some(kind.to_string()),
+        retry_after_ms: None,
     }
 }
 

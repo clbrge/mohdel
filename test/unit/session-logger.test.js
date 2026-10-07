@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach } from 'vitest'
 
 import { run } from '../../js/session/run.js'
 import { createLogger } from '../../js/session/_logger.js'
+import { createCooldownTracker } from '../../js/session/_cooldown.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
 
 beforeEach(() => setCatalog({ 'echo/m': {} }))
@@ -171,21 +172,22 @@ describe('run.js logger emission', () => {
     const key = 'sk-test-0123456789abcdef'
     const echoed = () => Object.assign(new Error(`401 Incorrect API key provided: ${key}`), { status: 401 })
     const adapter = async function * (_env, { log }) {
-      log.warn({ err: echoed() }, '[mohdel:echo] request failed')
+      log.debug({ err: echoed() }, '[mohdel:echo] request failed')
       throw echoed()
     }
     const { lines, stream } = captureStream()
     const logger = createLogger({ level: 'trace', stream })
 
-    await collect(run(envelope({ auth: { key } }), { logger, resolveAdapter: () => adapter }))
+    await collect(run(envelope({ auth: { key } }), { logger, cooldown: createCooldownTracker(), resolveAdapter: () => adapter }))
 
     const adapterLine = lines.find(l => l.msg === '[mohdel:echo] request failed')
     const runLine = lines.find(l => l.msg === '[mohdel:answer] adapter threw')
     for (const line of [adapterLine, runLine]) {
       expect(line.err.message).toBe('401 Incorrect API key provided: sk-t…cdef')
       expect(line.err.status).toBe(401)
-      expect(line.err.stack).not.toContain(key)
     }
+    expect(adapterLine.err.stack).toContain('sk-t…cdef')
+    expect(adapterLine.err.stack).not.toContain(key)
   })
 
   test('cooldown fast-fail emits [mohdel:cooldown] fast-fail', async () => {

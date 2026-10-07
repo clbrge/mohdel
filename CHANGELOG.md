@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.12.0] — Fix: a logged error no longer carries the API key / Chore: bump dependencies
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.129.0` → `^0.131.0`
+- `@google/genai` `^2.24.0` → `^2.27.0`
+- `openai` `^7.25.0` → `^7.30.0`
+- `@opentelemetry/exporter-trace-otlp-grpc` `^0.222.0` → `^0.223.0` (optional)
+- `@opentelemetry/sdk-node` `^0.222.0` → `^0.223.0` (optional)
+
+### Fixed
+
+- An error logged during a call no longer carries the caller's API key when the
+  provider's response quotes it; the key is masked in the logged message and
+  stack, in-process and in gate sessions alike.
+
 ## [3.11.0] — Feat: errors say how long to wait
 
 ### Added

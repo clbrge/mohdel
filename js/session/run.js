@@ -25,6 +25,7 @@
 import { ADAPTER_NAMES, isImageProvider } from './adapters/_registry.js'
 import { EVALUATION_PROVIDERS } from './adapters/evaluation/index.js'
 import { getSpec } from './adapters/_catalog.js'
+import { scrubKey } from './adapters/_errors.js'
 import { getProviderLimits } from './adapters/_providers.js'
 import { hasSpeed, mergeSpeed, speedHasOwnQuota, speedNames } from './adapters/_speed.js'
 import { providerOf, catalogKey, effortOf, speedOf } from '#core/model-id.js'
@@ -505,7 +506,41 @@ function scopedLogger (logger, envelope, span) {
       traceFlags: ctx.traceFlags ?? 1
     }
   }
-  return logger.withContext(context)
+  return keyScrubbingLogger(logger.withContext(context), envelope.auth?.key)
+}
+
+/**
+ * SDKs build `err.message` from the provider's response body, which
+ * can quote the rejected key.
+ *
+ * @param {any} log
+ * @param {string | undefined} key
+ */
+function keyScrubbingLogger (log, key) {
+  const scrubError = (e) => {
+    if (!e.message?.includes(key) && !e.stack?.includes(key)) return e
+    const copy = new Error(scrubKey(e.message, key))
+    copy.name = e.name
+    copy.stack = scrubKey(e.stack, key)
+    if (e.code) copy.code = e.code
+    if (e.status) copy.status = e.status
+    return copy
+  }
+  const scrub = (fields) => {
+    if (!fields || typeof fields !== 'object') return fields
+    const out = {}
+    for (const [k, v] of Object.entries(fields)) out[k] = v instanceof Error ? scrubError(v) : v
+    return out
+  }
+  const at = (level) => (fields, msg) => log[level](scrub(fields), msg)
+  return {
+    trace: at('trace'),
+    debug: at('debug'),
+    info: at('info'),
+    warn: at('warn'),
+    error: at('error'),
+    fatal: at('fatal')
+  }
 }
 
 /**

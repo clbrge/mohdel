@@ -44,7 +44,7 @@ const DETAIL_CAP = 500
  * @param {string | undefined} key
  * @returns {string | undefined}
  */
-function scrubKey (detail, key) {
+export function scrubKey (detail, key) {
   if (!detail || !key || typeof key !== 'string' || key.length < 8) return detail
   if (!detail.includes(key)) return detail
   const mask = key.length >= 16

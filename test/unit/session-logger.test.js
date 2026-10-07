@@ -167,6 +167,27 @@ describe('run.js logger emission', () => {
     expect(failed.provider).toBe('echo')
   })
 
+  test('the call key is masked in errors logged by the adapter and by run', async () => {
+    const key = 'sk-test-0123456789abcdef'
+    const echoed = () => Object.assign(new Error(`401 Incorrect API key provided: ${key}`), { status: 401 })
+    const adapter = async function * (_env, { log }) {
+      log.warn({ err: echoed() }, '[mohdel:echo] request failed')
+      throw echoed()
+    }
+    const { lines, stream } = captureStream()
+    const logger = createLogger({ level: 'trace', stream })
+
+    await collect(run(envelope({ auth: { key } }), { logger, resolveAdapter: () => adapter }))
+
+    const adapterLine = lines.find(l => l.msg === '[mohdel:echo] request failed')
+    const runLine = lines.find(l => l.msg === '[mohdel:answer] adapter threw')
+    for (const line of [adapterLine, runLine]) {
+      expect(line.err.message).toBe('401 Incorrect API key provided: sk-t…cdef')
+      expect(line.err.status).toBe(401)
+      expect(line.err.stack).not.toContain(key)
+    }
+  })
+
   test('cooldown fast-fail emits [mohdel:cooldown] fast-fail', async () => {
     const { lines, stream } = captureStream()
     const logger = createLogger({ level: 'debug', stream })

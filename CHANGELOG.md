@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.12.2] — Feat: a program built on mohdel lists the catalog and loads its keys
+
+### Added
+
+- `mohdel/readiness` exports `modelsOf([provider])`: the catalog's models, or one provider's, each
+  with how it bills and whether it is priced.
+- `mohdel/readiness` exports `loadDefaultEnv`, which loads mohdel's environment file into the
+  process environment, leaving variables already set alone, as `mo` does before its readiness checks.
+
 ## [3.12.1] — Feat: a program built on mohdel sets it up for its user / Chore: bump dependencies
 
 ### Changed

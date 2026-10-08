@@ -8,6 +8,8 @@ import providers, { billingOf } from './providers.js'
 import { catalogEntries, getAPIKey, getCuratedModels } from './common.js'
 import { catalogKey, providerOf } from '#core/model-id.js'
 
+export { loadDefaultEnv } from './common.js'
+
 const signsIn = (provider) => providers[provider]?.catalogClient === 'chatgpt'
 
 /** A key set, a ChatGPT account signed in with plan usage on, or nothing needed. */
@@ -45,6 +47,20 @@ export async function modelReadiness (model) {
         ? `mo curate ${provider}`
         : priced === false ? `mo model instructions ${provider}` : null
   return { model, inCatalog, priced, billing, credential, ready: credential && inCatalog, fix }
+}
+
+/**
+ * A provider's models in the catalog, or every provider's without one, deprecated ones left out,
+ * each `{ model, billing, priced }` as `modelReadiness` reads them: what a program offers its user
+ * to choose from.
+ */
+export async function modelsOf (provider = null) {
+  return catalogEntries(await getCuratedModels())
+    .filter(([key, spec]) => (provider === null || providerOf(key) === provider) && !spec.deprecated)
+    .map(([key, spec]) => {
+      const billing = billingOf(key).kind
+      return { model: key, billing, priced: billing === 'metered' ? hasPrices(spec) : null }
+    })
 }
 
 /** `{ provider, credential, models, ready, fix }` — `models` the provider's catalog entries in use. */

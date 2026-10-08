@@ -12,16 +12,19 @@ const dirs = vi.hoisted(() => {
 
 vi.mock('env-paths', () => ({ default: () => dirs }))
 
-const { modelReadiness, providerReadiness } = await import('../../src/lib/readiness.js')
+const { loadDefaultEnv, modelReadiness, modelsOf, providerReadiness } = await import('../../src/lib/readiness.js')
 const { CLI } = await import('../../src/lib/cli-path.js')
-const { CURATED_PATH } = await import('../../src/lib/common.js')
+const { CURATED_PATH, ENV_PATH } = await import('../../src/lib/common.js')
 
 const catalog = (entries) => fs.writeFileSync(CURATED_PATH, JSON.stringify(entries))
 const OPENAI = 'openai/gpt-test'
 const entry = (prices = {}) => ({ model: 'gpt-test', creator: 'openai', provider: 'openai', sdk: 'openai', inputFormat: ['text'], ...prices })
 
 afterAll(() => { fs.rmSync(dirs.config, { recursive: true, force: true }) })
-beforeEach(() => { catalog({}) })
+beforeEach(() => {
+  catalog({})
+  fs.rmSync(ENV_PATH, { force: true })
+})
 afterEach(() => { vi.unstubAllEnvs() })
 
 describe('one model', () => {
@@ -30,6 +33,14 @@ describe('one model', () => {
     expect(await modelReadiness(OPENAI)).toMatchObject({ credential: false, ready: false, fix: 'mo onboard openai' })
     vi.stubEnv('OPENAI_API_SK', 'sk-test')
     expect(await modelReadiness(OPENAI)).toMatchObject({ credential: true, inCatalog: false, ready: false, fix: 'mo curate openai' })
+  })
+
+  test('sees a key in mohdel\'s environment file once loadDefaultEnv has loaded it, as mo does', async () => {
+    vi.stubEnv('OPENAI_API_SK', undefined)
+    fs.writeFileSync(ENV_PATH, 'OPENAI_API_SK=sk-file\n')
+    expect(await modelReadiness(OPENAI)).toMatchObject({ credential: false })
+    loadDefaultEnv()
+    expect(await modelReadiness(OPENAI)).toMatchObject({ credential: true, fix: 'mo curate openai' })
   })
 
   test('is ready without its prices, and says the prices are what is missing', async () => {
@@ -55,6 +66,20 @@ describe('a provider', () => {
     expect(await providerReadiness('openai')).toMatchObject({ credential: true, models: 0, ready: false, fix: 'mo curate openai' })
     catalog({ [OPENAI]: entry(), 'openai/gpt-gone': { ...entry(), deprecated: OPENAI } })
     expect(await providerReadiness('openai')).toMatchObject({ models: 1, ready: true, fix: null })
+  })
+
+  test('lists its models in the catalog to choose from, with how each bills', async () => {
+    catalog({ [OPENAI]: entry(), 'openai/gpt-priced': entry({ inputPrice: 1, outputPrice: 4 }), 'openai/gpt-gone': { ...entry(), deprecated: OPENAI } })
+    expect(await modelsOf('openai')).toEqual([
+      { model: OPENAI, billing: 'metered', priced: false },
+      { model: 'openai/gpt-priced', billing: 'metered', priced: true }
+    ])
+    expect(await modelsOf('anthropic')).toEqual([])
+    catalog({ [OPENAI]: entry(), 'chatgpt/gpt-test': { ...entry(), provider: 'chatgpt' } })
+    expect(await modelsOf()).toEqual([
+      { model: OPENAI, billing: 'metered', priced: false },
+      { model: 'chatgpt/gpt-test', billing: 'plan', priced: null }
+    ])
   })
 })
 

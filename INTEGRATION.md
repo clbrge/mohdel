@@ -26,11 +26,12 @@ model before it calls it:
 ```js
 import { spawnSync } from 'node:child_process'
 import { CLI } from 'mohdel/cli'
-import { modelReadiness } from 'mohdel/readiness'
+import { loadDefaultEnv, modelReadiness } from 'mohdel/readiness'
 
 const { status } = spawnSync(process.execPath, [CLI, 'onboard', 'openrouter'], { stdio: 'inherit' })
 // 0: the provider has its credential and models in the catalog; 1: it does not yet
 
+loadDefaultEnv() // the keys mo onboard wrote, as mo loads them before it checks
 const ready = await modelReadiness('anthropic/claude-haiku-4-5')
 // { inCatalog, priced, billing, credential, ready, fix }
 ```
@@ -42,6 +43,8 @@ coding agent, ends the run with no models, and the agent writes them after `mo` 
 its prices is ready — it runs, and its calls report no cost — so a program that bounds spend on
 `cost` should offer `fix` (`mo model instructions <provider>`) when `priced` is `false`. ChatGPT
 (a plan: nothing metered) and OpenRouter (prices from its own API) need no prices filled by hand.
+`modelsOf([provider])` lists the catalog's models, or one provider's, each `{ model, billing,
+priced }`, for the user to choose one from.
 
 ## ChatGPT plan access
 

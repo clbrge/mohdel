@@ -131,6 +131,75 @@ export async function runOnboard () {
     process.exit(0)
   }
 
+  if (!await askKey(selected)) {
+    cancel('Setup cancelled')
+    process.exit(0)
+  }
+  await fillCatalog(selected)
+}
+
+export async function runOnboardCommand (args) {
+  if (args.includes('-h') || args.includes('--help')) {
+    console.log(`mohdel onboard — set up a provider: its key or sign-in, then its models
+
+Usage:
+  mo onboard                Pick a provider (interactive)
+  mo onboard <provider>     Start at that provider; steps already done are skipped
+
+Exit code (mo onboard <provider>):
+  0  the provider has its credential and at least one model in the catalog
+  1  it does not yet — the last line names the command that closes it
+  2  no such provider`)
+    return 0
+  }
+  const provider = args.find(a => !a.startsWith('-'))
+  if (provider) return runOnboardProvider(provider)
+  await runOnboard()
+  return 0
+}
+
+/**
+ * `mo onboard <provider>`: that provider's credential — its key, or a ChatGPT sign-in — then its
+ * models in the catalog, each step skipped when already done. The exit code is for a program that
+ * ran it for its user: 0 when the provider is ready, 1 when it is not, 2 for a provider mohdel does
+ * not know.
+ */
+export async function runOnboardProvider (provider) {
+  loadDefaultEnv()
+  const def = providers[provider]
+  if (!def) {
+    console.error(`mo onboard: no provider "${provider}" — mo providers lists them`)
+    return 2
+  }
+  const { credentialOf, providerReadiness } = await import('../lib/readiness.js')
+  intro(`mohdel — ${PROVIDER_INFO[provider]?.label ?? provider}`)
+  if (!await credentialOf(provider)) {
+    if (def.catalogClient === 'chatgpt') {
+      const { runChatGPT } = await import('./chatgpt.js')
+      await runChatGPT(['login'])
+    } else if (def.apiKeyEnv && !await askKey(provider)) {
+      cancel('Setup cancelled')
+      return 1
+    }
+    loadDefaultEnv()
+  }
+  if (await credentialOf(provider) && !(await providerReadiness(provider)).models) {
+    if (def.catalogClient === 'chatgpt') {
+      const { providerApi, processModels } = await import('../lib/select.js')
+      await processModels(provider, await providerApi(provider))
+    } else {
+      await fillCatalog(provider)
+    }
+  }
+  const ready = await providerReadiness(provider)
+  outro(ready.ready
+    ? `${provider} is ready — ${ready.models} model${ready.models > 1 ? 's' : ''} in the catalog`
+    : `${provider} is not ready — ${ready.fix}`)
+  return ready.ready ? 0 : 1
+}
+
+/** The provider's key, asked for and written to the environment file; false when the user cancelled. */
+async function askKey (selected) {
   const info = PROVIDER_INFO[selected]
   const envVar = providers[selected].apiKeyEnv
 
@@ -147,17 +216,23 @@ export async function runOnboard () {
     }
   })
 
-  if (isCancel(apiKey)) {
-    cancel('Setup cancelled')
-    process.exit(0)
-  }
+  if (isCancel(apiKey)) return false
 
   await appendToEnvFile(envVar, apiKey.trim())
 
   note(`${ok('✓')} Saved ${envVar} to ${meta(ENV_PATH)}`, 'Done')
+  return true
+}
 
+/**
+ * Fills the catalog with the provider's models: its free ones, picked by hand, or briefed to the
+ * user's coding agent, which reads the provider's pricing page.
+ */
+async function fillCatalog (selected) {
   // Reload env so the new key is visible, then fill the catalog.
   loadDefaultEnv()
+  // A provider with no entry there (local) is named by its id.
+  const info = PROVIDER_INFO[selected] ?? { label: selected }
 
   const selfPricing = !!providers[selected]?.pricesFromApi
 

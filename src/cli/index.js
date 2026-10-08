@@ -96,6 +96,7 @@ Commands:
   transcribe <provider/model> <file>      Speech → text from an audio file
 
   default [model]                         Set the model "mo ask" uses by default
+  onboard [provider]                      Set up a provider: its key or sign-in, then its models
   doctor                                  Check that your install is wired up
   completion bash                         Shell completion — source <(mo completion bash)
   --version                               Print the installed mohdel version
@@ -150,6 +151,9 @@ if (resolved === 'chatgpt') {
 } else if (resolved === 'default') {
   const { runDefault } = await import('./default.js')
   await runDefault(resolvedArgs)
+} else if (resolved === 'onboard') {
+  const { runOnboardCommand } = await import('./onboard.js')
+  process.exit(await runOnboardCommand(resolvedArgs))
 } else if (resolved === 'doctor') {
   const { runDoctor } = await import('./doctor.js')
   await runDoctor(resolvedArgs)

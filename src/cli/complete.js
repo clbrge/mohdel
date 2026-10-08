@@ -5,7 +5,7 @@ import { ALIASES } from './aliases.js'
 
 // Never import the factory here: it loads every provider SDK, on every tab press.
 
-const NOUNS = ['model', 'provider', 'creator', 'tag', 'ratelimit', 'ask', 'transcribe', 'default', 'doctor']
+const NOUNS = ['model', 'provider', 'creator', 'tag', 'ratelimit', 'ask', 'transcribe', 'default', 'onboard', 'doctor']
 
 const VERBS = {
   model: ['list', 'search', 'stats', 'show', 'get', 'set', 'rm', 'add', 'instructions',
@@ -19,6 +19,7 @@ const VERBS = {
 const ARGUMENT = {
   ask: ['model'],
   transcribe: ['model'],
+  onboard: ['provider'],
   'model show': ['model'],
   'model get': ['model', 'field'],
   'model set': ['model', 'field'],

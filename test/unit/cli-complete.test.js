@@ -44,6 +44,7 @@ describe('completion candidates', () => {
   test('offers providers where a provider is expected, catalog or not', async () => {
     expect(await at('mo curate gem')).toEqual(['gemini'])
     expect(await at('mo provider setup xi')).toEqual(['xiaomi'])
+    expect(await at('mo onboard openr')).toEqual(['openrouter'])
   })
 
   test('offers field names for the second argument of model set', async () => {

@@ -17,9 +17,12 @@ export async function runDoctor (args) {
 
 Usage:
   mo doctor [--all] [--json]
+  mo doctor --model <provider/model> [--json]
 
 Options:
   --all      List every provider's API key variable, set or not
+  --model    Check one model: in the catalog, priced, its credential set;
+             exit 0 when it is ready to call
 
 What it checks:
   - Config directory and environment file exist
@@ -35,6 +38,27 @@ Exit code:
 
   const json = args.includes('--json')
   loadDefaultEnv()
+
+  const modelAt = args.indexOf('--model')
+  if (modelAt !== -1) {
+    const model = args[modelAt + 1]
+    if (!model || model.startsWith('--')) {
+      console.error('mo doctor --model needs a model, as anthropic/claude-haiku-4-5')
+      process.exit(2)
+    }
+    const { modelReadiness } = await import('../lib/readiness.js')
+    const found = await modelReadiness(model)
+    if (json) console.log(JSON.stringify(found, null, 2))
+    else {
+      console.log(row(found.credential ? ok('✓') : err('✗'), 'Credential', found.credential ? 'set' : 'missing'))
+      console.log(row(found.inCatalog ? ok('✓') : err('✗'), 'Catalog', found.inCatalog ? 'listed' : 'not listed'))
+      if (found.billing === 'metered') console.log(row(found.priced ? ok('✓') : warn('!'), 'Prices', found.priced ? 'set' : 'missing — its calls report no cost'))
+      else if (found.billing) console.log(row(ok('✓'), 'Billing', `${found.billing}, not metered per call`))
+      console.log(found.ready ? ok(`${model} is ready`) : err(`${model} is not ready`))
+      if (found.fix) console.log(`  ${meta('next:')} ${found.fix}`)
+    }
+    process.exit(found.ready ? 0 : 1)
+  }
 
   const report = {
     configDir: { ok: false, path: CONFIG_DIR },

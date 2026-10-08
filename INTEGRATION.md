@@ -18,6 +18,31 @@ For CLI + installation see [README.md](README.md). For design rationale see [ARC
 
 Both paths drive the same session adapters with the same wire types and the same event stream. The factory is literally "the client path minus the IPC hop" — switching later is a configuration change, not a rewrite.
 
+## Setting up your user
+
+A program that runs mohdel for its user can set it up without the user learning `mo`, and check a
+model before it calls it:
+
+```js
+import { spawnSync } from 'node:child_process'
+import { CLI } from 'mohdel/cli'
+import { modelReadiness } from 'mohdel/readiness'
+
+const { status } = spawnSync(process.execPath, [CLI, 'onboard', 'openrouter'], { stdio: 'inherit' })
+// 0: the provider has its credential and models in the catalog; 1: it does not yet
+
+const ready = await modelReadiness('anthropic/claude-haiku-4-5')
+// { inCatalog, priced, billing, credential, ready, fix }
+```
+
+`mo onboard <provider>` asks for the key, or signs in to ChatGPT, then fills the catalog, skipping
+what is already done. Its 1 is not final: a user who picks "Later", or hands the catalog to their
+coding agent, ends the run with no models, and the agent writes them after `mo` exits — check
+`modelReadiness` again before the first call. `modelReadiness` is what `mo doctor --model <id> --json` prints. A model without
+its prices is ready — it runs, and its calls report no cost — so a program that bounds spend on
+`cost` should offer `fix` (`mo model instructions <provider>`) when `priced` is `false`. ChatGPT
+(a plan: nothing metered) and OpenRouter (prices from its own API) need no prices filled by hand.
+
 ## ChatGPT plan access
 
 Sign in with `mo chatgpt login`, then discover models with `mo chatgpt models`

@@ -4,6 +4,24 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.12.1] — Feat: a program built on mohdel sets it up for its user / Chore: bump dependencies
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.131.0` → `^0.132.1`
+- `@google/genai` `^2.27.0` → `^2.28.0`
+- `openai` `^7.30.0` → `^7.30.1`
+
+### Added
+
+- `mo onboard <provider>` starts at that provider — its key, or a ChatGPT sign-in, then its
+  models — skips what is already done, and exits 0 when the provider is ready, 1 when not.
+- `mo doctor --model <id> [--json]` says whether one model is ready: its credential, its catalog
+  entry, its prices, how it bills, and the command that closes what is missing.
+- `mohdel/readiness` exports `modelReadiness`, `providerReadiness` and `credentialOf`, the
+  readings behind both.
+- `mohdel/cli` exports `CLI`, the installed `mo`, for a program running it without `mo` on `PATH`.
+
 ## [3.12.0] — Fix: a logged error no longer carries the API key / Chore: bump dependencies
 
 ### Changed

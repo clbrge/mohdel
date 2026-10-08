@@ -46,6 +46,14 @@ its prices is ready — it runs, and its calls report no cost — so a program t
 `modelsOf([provider])` lists the catalog's models, or one provider's, each `{ model, billing,
 priced }`, for the user to choose one from.
 
+`mohdel/curate` fills the catalog without `mo`'s prompts: `upstream(provider)` lists what the
+provider offers beyond the catalog, each `{ id, label, inputPrice, outputPrice }` (null when mohdel
+cannot list it), and `curate(provider, ids)` adds the chosen ones, each `{ model, priced }`. It
+writes nothing when an id is not listed, already in the catalog or excluded from it, or when the
+provider does not describe the model well enough for the catalog — most providers do not say which
+inputs a model takes, and only OpenRouter and Novita list prices; `mo curate` asks the user for what
+is missing.
+
 ## ChatGPT plan access
 
 Sign in with `mo chatgpt login`, then discover models with `mo chatgpt models`

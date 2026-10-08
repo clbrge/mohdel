@@ -12,50 +12,29 @@ import {
   catalogEntries
 } from './common.js'
 import { getMohdelModel } from './curated-cache.js'
+import { addEntries, filterUncurated, freeModels, modelDetails, providerApi } from './curate.js'
 import { stripUnknown } from './schema.js'
-import { silent } from './logger.js'
+
+export { freeModels, providerApi }
 
 loadEnvFile('.env')
 loadDefaultEnv()
-
-// One provider's catalog client, for callers that don't need all of them.
-export const providerApi = async (name) => {
-  const config = providers[name]
-  if (config?.catalogClient === 'chatgpt') {
-    const { default: API } = await import('./catalog/chatgpt.js')
-    return API()
-  }
-  if (!config || config.catalog === false || !config.apiKeyEnv) return null
-  const apiKey = getAPIKey(config.apiKeyEnv)
-  if (!apiKey) return null
-  const { default: API } = await import(`./catalog/${config.catalogClient || config.sdk}.js`)
-  return API({ ...config.createConfiguration(apiKey), baseURL: config.baseURL }, {}, silent)
-}
 
 export const providersWithKeys = () =>
   Object.entries(providers)
     .filter(([, c]) => c.catalog !== false && c.apiKeyEnv && getAPIKey(c.apiKeyEnv))
     .map(([name]) => name)
 
+export const addModels = async (providerName, api, models) => {
+  const added = await addEntries(providerName, api, models)
+  for (const { why } of added) if (why) console.warn(`${providerName}: ${why}`)
+  return added.length
+}
+
 const getModelDetails = async (providerName, modelId, api) => {
-  try {
-    if (!api.getModelInfo) {
-      console.warn(`Provider ${providerName} does not support getModelInfo method`)
-      return null
-    }
-
-    const modelInfo = await api.getModelInfo(modelId)
-
-    if (!modelInfo) {
-      console.warn(`Model ${modelId} not found in provider response`)
-      return null
-    }
-
-    return modelInfo
-  } catch (err) {
-    console.error(`Error getting model details for ${modelId}:`, err.message)
-    return null
-  }
+  const { info, why } = await modelDetails(api, modelId)
+  if (why) console.warn(`${providerName}: ${why}`)
+  return info
 }
 
 // Find potential models to replace based on the new model name
@@ -145,21 +124,6 @@ const addAliasToExistingModel = async (targetCuratedKey, aliasModelId, curated) 
   return true
 }
 
-const isModelTrackedInCollection = (collection, providerName, modelId) => {
-  for (const [curatedKey, entry] of Object.entries(collection)) {
-    const { provider, model: keyModelId } = getMohdelModel(curatedKey)
-    if (provider !== providerName) continue
-
-    if (keyModelId === modelId) return true
-
-    const upstreamIds = Array.isArray(entry.upstreamIds) ? entry.upstreamIds : []
-    if (upstreamIds.includes(modelId)) {
-      return true
-    }
-  }
-  return false
-}
-
 const creatorOptions = async (providerName, guess) => {
   const catalog = await getCuratedModels()
   const served = new Set()
@@ -245,40 +209,6 @@ export const promptMissingFields = async (entry, curatedKey) => {
 // Threshold: providers with more uncurated models than this use search mode
 const SEARCH_MODE_THRESHOLD = 50
 const SEARCH_MAX_RESULTS = 15
-
-const filterUncurated = (models, providerName, curated, excluded) => {
-  return models.filter(model => {
-    if (!model || typeof model !== 'object' || typeof model.id !== 'string') return false
-    return !isModelTrackedInCollection(curated, providerName, model.id) &&
-           !isModelTrackedInCollection(excluded, providerName, model.id)
-  })
-}
-
-export const freeModels = (models) =>
-  models.filter(m => m.inputPrice === 0 && m.outputPrice === 0)
-
-const buildEntry = async (providerName, model, providerInstance) => {
-  const info = await getModelDetails(providerName, model.id, providerInstance)
-  const entry = stripUnknown({
-    provider: providerName,
-    sdk: providers[providerName].sdk,
-    model: model.id,
-    label: model.label || model.id,
-    ...(info || {})
-  })
-  // An upstream list names the provider, never the creator; an OpenRouter id carries the vendor in its first segment.
-  if (!entry.creator) entry.creator = creatorFromModelId(model.id) || model.id.split('/')[0]
-  return entry
-}
-
-export const addModels = async (providerName, providerInstance, models) => {
-  const curated = await getCuratedModels()
-  for (const model of models) {
-    curated[`${providerName}/${model.id}`] = await buildEntry(providerName, model, providerInstance)
-  }
-  await saveCuratedModels(curated)
-  return models.length
-}
 
 const searchModels = (models, query) => {
   const q = query.toLowerCase()

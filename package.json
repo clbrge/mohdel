@@ -70,6 +70,10 @@
       "types": "./src/lib/readiness.d.ts",
       "default": "./src/lib/readiness.js"
     },
+    "./curate": {
+      "types": "./src/lib/curate.d.ts",
+      "default": "./src/lib/curate.js"
+    },
     "./utils": {
       "types": "./src/lib/utils.d.ts",
       "default": "./src/lib/utils.js"

@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.12.3] — Feat: a program built on mohdel adds models to the catalog
+
+### Added
+
+- `mohdel/curate` exports `upstream(provider)`, what a provider lists that the catalog holds
+  neither as curated nor as excluded, and `curate(provider, ids)`, which adds those models without
+  prompting and refuses, writing nothing, an id the provider does not list or the catalog already
+  holds or excludes, or one whose entry the catalog schema would reject.
+
+### Changed
+
+- A warning while `mo curate` or `mo onboard` reads a model's details names the model.
+
 ## [3.12.2] — Feat: a program built on mohdel lists the catalog and loads its keys
 
 ### Added

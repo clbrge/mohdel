@@ -37,6 +37,8 @@ export const portablePath = (path) => {
 export const isMetaKey = (key) => key.startsWith('$') || key.startsWith('_')
 export const catalogEntries = (catalog) => Object.entries(catalog).filter(([k]) => !isMetaKey(k))
 export const catalogKeys = (catalog) => Object.keys(catalog).filter(k => !isMetaKey(k))
+export const hasPrices = (spec) => spec.inputPrice != null && spec.outputPrice != null
+
 export const catalogValues = (catalog) => catalogEntries(catalog).map(([, v]) => v)
 
 const DEFAULT_CURATED = {}

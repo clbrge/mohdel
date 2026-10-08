@@ -5,7 +5,7 @@
  */
 
 import providers, { billingOf } from './providers.js'
-import { catalogEntries, getAPIKey, getCuratedModels } from './common.js'
+import { catalogEntries, getAPIKey, getCuratedModels, hasPrices } from './common.js'
 import { catalogKey, providerOf } from '#core/model-id.js'
 
 export { loadDefaultEnv } from './common.js'
@@ -24,8 +24,6 @@ export async function credentialOf (provider) {
 }
 
 const credentialFix = (provider) => signsIn(provider) ? 'mo chatgpt login' : `mo onboard ${provider}`
-
-const hasPrices = (spec) => spec.inputPrice != null && spec.outputPrice != null
 
 /**
  * `{ model, inCatalog, priced, billing, credential, ready, fix }` — `priced` is null for a model

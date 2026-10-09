@@ -8,20 +8,17 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
-- Every provider SDK client is constructed with `maxRetries: 0` (Anthropic,
-  OpenAI and OpenAI-compatible, Groq, Cerebras, and the image path; `chatgpt`
-  already was). A 429/5xx now surfaces immediately as a classified error with
-  its `retryable` flag instead of being retried silently inside one call,
-  adding latency and spending rate budget the gate's cooldown never saw. The
-  retry budget stays with the caller, as documented. Gemini's `GoogleGenAI`
-  has no retry option. Gate sessions run the same adapters, so both paths
-  change together.
+- Every retrying provider SDK client is constructed with `maxRetries: 0`
+  (Anthropic, OpenAI and OpenAI-compatible, Groq, Cerebras, and the image
+  path). A 429/5xx surfaces at once as a classified error with its `retryable`
+  flag. Gate sessions run the same adapters.
 - `mo onboard` and `mo provider setup` verify a key against the provider
-  before saving it: refused keys are rejected and re-prompted, never written,
-  and a stored key the provider refuses counts as unset so onboarding repairs
-  it. OpenRouter is checked against `GET /v1/auth/key` because its model list
-  is public and a listing proves nothing. An unreachable provider offers to
-  save anyway instead of blocking. Both prompts mask the paste.
+  before saving it: a refused key is re-prompted and never written. OpenRouter
+  keys are checked against `GET /v1/auth/key`. A key that cannot be verified
+  is saved only on confirmation. The paste is masked. `mo onboard <provider>`
+  treats a stored key the provider refuses as unset and replaces it.
+- `cohere` is marked as having no model listing; `mo curate cohere` no longer
+  fails loading a catalog client that does not exist.
 
 ## [3.13.0] — Fix: a negative listing price is not a price / Chore: bump dependencies
 

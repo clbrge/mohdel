@@ -12,15 +12,18 @@ import { getMohdelModel } from './curated-cache.js'
 import { stripUnknown, validate } from './schema.js'
 import { silent } from './logger.js'
 
-/** One provider's catalog client, or null when it has no key or no listing mohdel reads. */
-export const providerApi = async (name) => {
+/**
+ * One provider's catalog client, or null when it has no key or no listing mohdel reads. `key`
+ * is a candidate to check before it is saved; without it the stored key is used.
+ */
+export const providerApi = async (name, key) => {
   const config = providers[name]
   if (config?.catalogClient === 'chatgpt') {
     const { default: API } = await import('./catalog/chatgpt.js')
     return API()
   }
   if (!config || config.catalog === false || !config.apiKeyEnv) return null
-  const apiKey = getAPIKey(config.apiKeyEnv)
+  const apiKey = key ?? getAPIKey(config.apiKeyEnv)
   if (!apiKey) return null
   const { default: API } = await import(`./catalog/${config.catalogClient || config.sdk}.js`)
   return API({ ...config.createConfiguration(apiKey), baseURL: config.baseURL }, {}, silent)

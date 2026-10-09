@@ -135,6 +135,7 @@ const providers = {
     billing: { kind: 'metered' },
     sdk: 'cohere',
     api: 'embeddings',
+    catalog: false,
     apiKeyEnv: 'COHERE_API_SK',
     baseURL: 'https://api.cohere.com/v2',
     createConfiguration: apiKey => ({ apiKey }),

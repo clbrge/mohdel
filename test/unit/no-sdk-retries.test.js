@@ -5,11 +5,9 @@ import { fileURLToPath } from 'node:url'
 const root = new URL('../../', import.meta.url)
 const src = (file) => readFileSync(fileURLToPath(new URL(file, root)), 'utf8')
 
-// Every SDK with built-in retries must be constructed with `maxRetries: 0`:
-// mohdel classifies errors but never retries (ARCHITECTURE.md:393-395,
-// README:182) — the caller owns the retry budget. A default `maxRetries: 2`
-// retries a 429/5xx silently inside one call, adding latency and spending
-// rate budget the gate's cooldown never sees.
+// mohdel classifies errors but never retries; the caller owns the retry budget
+// (ARCHITECTURE.md, "Error classification without retry or fallback"). An SDK
+// left at its default retries a 429/5xx silently inside one call.
 const RETRY_CLIENTS = [
   'js/session/adapters/anthropic.js',
   'js/session/adapters/openai.js',
@@ -42,7 +40,9 @@ describe('no hidden SDK retries', () => {
     })
   }
 
-  test('gemini documents its asymmetry: GoogleGenAI has no retry option', () => {
-    expect(src('js/session/adapters/gemini.js')).toContain('new GoogleGenAI(')
+  test('gemini passes no retryOptions, so GoogleGenAI never retries', () => {
+    const text = src('js/session/adapters/gemini.js')
+    expect(text).toContain('new GoogleGenAI(')
+    expect(text).not.toContain('retryOptions')
   })
 })

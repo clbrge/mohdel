@@ -5,10 +5,13 @@ import { fileURLToPath } from 'node:url'
 const root = new URL('../../', import.meta.url)
 const src = (file) => readFileSync(fileURLToPath(new URL(file, root)), 'utf8')
 
-const realFetch = globalThis.fetch
-afterEach(() => { globalThis.fetch = realFetch })
-
 const holder = vi.hoisted(() => ({ mode: 'ok' }))
+
+const realFetch = globalThis.fetch
+afterEach(() => {
+  globalThis.fetch = realFetch
+  holder.mode = 'ok'
+})
 
 vi.mock('../../src/lib/catalog/openai.js', () => ({
   default: () => ({
@@ -34,6 +37,7 @@ describe('verifyKey against a candidate key, before anything is saved', () => {
   test('openrouter refuses a bad key without touching the model list', async () => {
     globalThis.fetch = vi.fn(async () => ({ ok: false, status: 401 }))
     expect(await verifyKey('openrouter', 'sk-17chars')).toBe('invalid')
+    expect(globalThis.fetch.mock.calls.map(([url]) => url)).toEqual(['https://openrouter.ai/api/v1/auth/key'])
   })
 
   test('openrouter offline is unknown, never invalid', async () => {
@@ -42,21 +46,17 @@ describe('verifyKey against a candidate key, before anything is saved', () => {
   })
 
   test('a listed provider accepts its key', async () => {
-    holder.mode = 'ok'
     expect(await verifyKey('openai', 'sk-good')).toBe('valid')
-    holder.mode = 'ok'
   })
 
   test('a 401 listing refuses the key', async () => {
     holder.mode = 'auth'
     expect(await verifyKey('openai', 'sk-17chars')).toBe('invalid')
-    holder.mode = 'ok'
   })
 
   test('a network failure is unknown, so setup offers to save anyway', async () => {
     holder.mode = 'down'
     expect(await verifyKey('openai', 'sk-x')).toBe('unknown')
-    holder.mode = 'ok'
   })
 
   test('a provider with no listing mohdel reads is unknown', async () => {

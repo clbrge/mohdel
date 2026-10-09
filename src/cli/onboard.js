@@ -5,6 +5,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { loadDefaultEnv, getAPIKey, getConfig, saveConfig, getCuratedModels, catalogEntries, ENV_PATH } from '../lib/common.js'
 import providers from '../lib/providers.js'
+import { providerApi } from '../lib/curate.js'
 import PROVIDER_INFO from '../lib/provider-info.js'
 
 export { PROVIDER_INFO, appendToEnvFile, verifyKey, askValidatedKey }
@@ -202,7 +203,7 @@ export async function runOnboardProvider (provider) {
   }
   if (await credentialOf(provider) && !(await providerReadiness(provider)).models) {
     if (def.catalogClient === 'chatgpt') {
-      const { providerApi, processModels } = await import('../lib/select.js')
+      const { processModels } = await import('../lib/select.js')
       await processModels(provider, await providerApi(provider))
     } else {
       await fillCatalog(provider)
@@ -239,23 +240,10 @@ const verifyOpenRouterKey = async (key) => {
  * (chatgpt, local) are always `unknown`; callers skip them.
  */
 async function verifyKey (provider, key) {
-  const def = providers[provider]
-  if (!def?.apiKeyEnv) return 'unknown'
+  if (!providers[provider].apiKeyEnv) return 'unknown'
   if (provider === 'openrouter') return verifyOpenRouterKey(key)
-  let API
-  try {
-    ({ default: API } = await import(`../lib/catalog/${def.catalogClient || def.sdk}.js`))
-  } catch {
-    return 'unknown'
-  }
-  const { silent } = await import('../lib/logger.js')
-  let api
-  try {
-    api = API({ ...def.createConfiguration(key), baseURL: def.baseURL }, {}, silent)
-  } catch {
-    return 'unknown'
-  }
-  if (!api?.listModels) return 'unknown'
+  const api = await providerApi(provider, key)
+  if (!api) return 'unknown'
   try {
     await api.listModels()
     return 'valid'
@@ -315,6 +303,8 @@ async function askKey (selected) {
   if (!key) return false
 
   await appendToEnvFile(envVar, key)
+  // loadEnvFile never overrides a variable already set, so a replaced key must be set here too.
+  process.env[envVar] = key
 
   note(`${ok('✓')} Saved ${envVar} to ${meta(ENV_PATH)}`, 'Done')
   return true
@@ -335,7 +325,7 @@ async function fillCatalog (selected) {
   let api = null
   let free = []
   if (selfPricing) {
-    const { providerApi, freeModels } = await import('../lib/select.js')
+    const { freeModels } = await import('../lib/select.js')
     api = await providerApi(selected)
     if (api?.listModels) {
       const s = spinner()
@@ -384,7 +374,7 @@ async function fillCatalog (selected) {
   }
 
   if (how === 'hand') {
-    const { providerApi, processModels } = await import('../lib/select.js')
+    const { processModels } = await import('../lib/select.js')
     api = api || await providerApi(selected)
     if (!api) {
       outro(`Could not reach ${info.label}. Run ${id('mo curate ' + selected)} to retry.`)

@@ -224,7 +224,7 @@ mo rank --json                         # machine-readable
 
 # Manage the catalog
 mo curate anthropic                    # add new models from a provider
-mo onboard anthropic                  # key, then its models; skips what is done
+mo onboard anthropic                   # key, then its models; skips what is done
 mo model add fireworks/deepseek-r1     # add a model manually
 mo model set <model> <key> <value>     # set any field on a model
 mo model rm <model> <key>              # remove a field

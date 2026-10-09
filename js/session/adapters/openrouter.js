@@ -49,6 +49,7 @@ export async function * openrouter (envelope, deps = {}) {
     apiKey: envelope.auth.key,
     baseURL: BASE_URL,
     defaultHeaders,
+    maxRetries: 0,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
 

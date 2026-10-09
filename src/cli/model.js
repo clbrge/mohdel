@@ -610,8 +610,8 @@ see "mo creator --help".`)
       console.error(err(`Unknown provider or no API key supported: ${arg1}`))
       process.exit(1)
     }
-    const { PROVIDER_INFO, appendToEnvFile } = await import('./onboard.js')
-    const { text, note, isCancel } = await import('@clack/prompts')
+    const { PROVIDER_INFO, appendToEnvFile, askValidatedKey } = await import('./onboard.js')
+    const { note, isCancel } = await import('@clack/prompts')
     const info = PROVIDER_INFO[arg1]
 
     loadDefaultEnv()
@@ -627,14 +627,10 @@ see "mo creator --help".`)
       note(`${info.hint}\n\n${id(info.url)}`, `${info.label} — API Key`)
     }
 
-    const apiKey = await text({
-      message: `Paste your ${arg1} API key:`,
-      placeholder: providerConfig.apiKeyEnv,
-      validate: (v) => { if (!v?.trim()) return 'API key cannot be empty' }
-    })
-    if (isCancel(apiKey)) return
+    const key = await askValidatedKey(arg1)
+    if (!key) return
 
-    await appendToEnvFile(providerConfig.apiKeyEnv, apiKey.trim())
+    await appendToEnvFile(providerConfig.apiKeyEnv, key)
     console.log(`${ok('✓')} Saved ${providerConfig.apiKeyEnv}`)
     return
   }

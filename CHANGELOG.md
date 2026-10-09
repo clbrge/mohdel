@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.14.0] — Fix: provider SDKs no longer retry inside a call; keys are verified at onboarding
+
+### Fixed
+
+- Every provider SDK client is constructed with `maxRetries: 0` (Anthropic,
+  OpenAI and OpenAI-compatible, Groq, Cerebras, and the image path; `chatgpt`
+  already was). A 429/5xx now surfaces immediately as a classified error with
+  its `retryable` flag instead of being retried silently inside one call,
+  adding latency and spending rate budget the gate's cooldown never saw. The
+  retry budget stays with the caller, as documented. Gemini's `GoogleGenAI`
+  has no retry option. Gate sessions run the same adapters, so both paths
+  change together.
+- `mo onboard` and `mo provider setup` verify a key against the provider
+  before saving it: refused keys are rejected and re-prompted, never written,
+  and a stored key the provider refuses counts as unset so onboarding repairs
+  it. OpenRouter is checked against `GET /v1/auth/key` because its model list
+  is public and a listing proves nothing. An unreachable provider offers to
+  save anyway instead of blocking. Both prompts mask the paste.
+
 ## [3.13.0] — Fix: a negative listing price is not a price / Chore: bump dependencies
 
 ### Changed

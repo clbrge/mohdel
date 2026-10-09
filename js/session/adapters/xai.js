@@ -23,6 +23,7 @@ export async function * xai (envelope, deps = {}) {
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,
     baseURL: BASE_URL,
+    maxRetries: 0,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   yield * openai(envelope, { ...deps, client })

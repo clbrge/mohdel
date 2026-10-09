@@ -44,6 +44,7 @@ export async function * local (envelope, deps = {}) {
   }
   const client = deps.client ?? new OpenAI({
     baseURL,
+    maxRetries: 0,
     fetchOptions: { dispatcher: streamingDispatcher() },
     ...(envelope.auth.key
       ? { apiKey: envelope.auth.key }

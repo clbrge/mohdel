@@ -29,6 +29,7 @@ export async function * fireworks (envelope, deps = {}) {
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,
     baseURL: BASE_URL,
+    maxRetries: 0,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   yield * runChatCompletions(envelope, client, {

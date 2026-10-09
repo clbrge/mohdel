@@ -47,6 +47,7 @@ import { streamingDispatcher } from './_dispatcher.js'
 export async function * openai (envelope, deps = {}) {
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,
+    maxRetries: 0,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   const signal = deps.signal

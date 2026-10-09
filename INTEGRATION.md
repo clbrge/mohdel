@@ -1130,7 +1130,7 @@ Pass `traceparent` (W3C string) in answer options to parent mohdel's span under 
 | `~/.config/mohdel/default.json` | Default model |
 | `~/.cache/mohdel/uploaded-files.json` | Gemini file upload cache |
 
-Paths follow XDG via `env-paths`. Configure through `mo setup <provider>` and the `mo rl` / `mo model` commands.
+Paths follow XDG via `env-paths`. Configure through `mo onboard <provider>` and the `mo rl` / `mo model` commands.
 
 
 ---

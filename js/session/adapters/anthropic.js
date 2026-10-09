@@ -85,6 +85,7 @@ const ANTHROPIC_DEFAULT_MAX_TOKENS = 4096
 export async function * anthropic (envelope, deps = {}) {
   const client = deps.client ?? new Anthropic({
     apiKey: envelope.auth.key,
+    maxRetries: 0,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   const signal = deps.signal

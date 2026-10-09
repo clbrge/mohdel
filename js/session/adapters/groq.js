@@ -17,6 +17,7 @@ import { streamingDispatcher } from './_dispatcher.js'
 export async function * groq (envelope, deps = {}) {
   const client = deps.client ?? new Groq({
     apiKey: envelope.auth.key,
+    maxRetries: 0,
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   yield * runChatCompletions(envelope, client, {

@@ -15,7 +15,7 @@ import { runChatCompletions } from './_chat_completions.js'
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
 export async function * cerebras (envelope, deps = {}) {
-  const client = deps.client ?? new Cerebras({ apiKey: envelope.auth.key })
+  const client = deps.client ?? new Cerebras({ apiKey: envelope.auth.key, maxRetries: 0 })
   yield * runChatCompletions(envelope, client, {
     stream: true,
     provider: 'cerebras',

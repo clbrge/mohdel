@@ -1,4 +1,4 @@
-import { intro, outro, select, text, isCancel, cancel, note, spinner } from '@clack/prompts'
+import { intro, outro, select, text, password, confirm, isCancel, cancel, note, spinner } from '@clack/prompts'
 import { id, label, meta, ok } from './colors.js'
 import { chmodSync, existsSync, readFileSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
@@ -7,7 +7,7 @@ import { loadDefaultEnv, getAPIKey, getConfig, saveConfig, getCuratedModels, cat
 import providers from '../lib/providers.js'
 import PROVIDER_INFO from '../lib/provider-info.js'
 
-export { PROVIDER_INFO, appendToEnvFile }
+export { PROVIDER_INFO, appendToEnvFile, verifyKey, askValidatedKey }
 
 function getConfiguredProviders () {
   const configured = []
@@ -173,7 +173,24 @@ export async function runOnboardProvider (provider) {
   }
   const { credentialOf, providerReadiness } = await import('../lib/readiness.js')
   intro(`mohdel — ${PROVIDER_INFO[provider]?.label ?? provider}`)
-  if (!await credentialOf(provider)) {
+  // A stored key the provider refuses counts as unset, so onboarding repairs
+  // it instead of skipping past it. Anything unverifiable (offline, a provider
+  // with no listing mohdel reads) keeps the stored key and proceeds.
+  let credential = await credentialOf(provider)
+  if (credential && def.apiKeyEnv) {
+    const stored = getAPIKey(def.apiKeyEnv)
+    if (stored) {
+      const check = spinner()
+      check.start('Checking the saved key…')
+      const verdict = await verifyKey(provider, stored)
+      check.stop(verdict === 'valid' ? 'Saved key accepted' : verdict === 'invalid' ? 'Saved key refused' : 'Could not check the saved key')
+      if (verdict === 'invalid') {
+        note(`The saved ${def.apiKeyEnv} was refused by ${provider} — paste a fresh one.`, 'Invalid key')
+        credential = false
+      }
+    }
+  }
+  if (!credential) {
     if (def.catalogClient === 'chatgpt') {
       const { runChatGPT } = await import('./chatgpt.js')
       await runChatGPT(['login'])
@@ -198,27 +215,106 @@ export async function runOnboardProvider (provider) {
   return ready.ready ? 0 : 1
 }
 
-/** The provider's key, asked for and written to the environment file; false when the user cancelled. */
-async function askKey (selected) {
-  const info = PROVIDER_INFO[selected]
-  const envVar = providers[selected].apiKeyEnv
+const AUTH_FAILURE_RE = /40[13]|unauthorized|forbidden|invalid[\s_-]*api[\s_-]*key|invalid key|incorrect api key|authentication/i
+
+const isAuthFailure = (err) => AUTH_FAILURE_RE.test(`${err?.message ?? err}`)
+
+/** OpenRouter's model list is public, so a listing proves nothing about the key. */
+const verifyOpenRouterKey = async (key) => {
+  let res
+  try {
+    res = await fetch('https://openrouter.ai/api/v1/auth/key', { headers: { Authorization: `Bearer ${key}` } })
+  } catch {
+    return 'unknown'
+  }
+  if (res.ok) return 'valid'
+  if (res.status === 401 || res.status === 403) return 'invalid'
+  return 'unknown'
+}
+
+/**
+ * What the provider says of a candidate key, before anything is saved:
+ * `valid`, `invalid` (the provider refused it), or `unknown` (offline, or no
+ * listing mohdel reads — nothing to check against). Keyless providers
+ * (chatgpt, local) are always `unknown`; callers skip them.
+ */
+async function verifyKey (provider, key) {
+  const def = providers[provider]
+  if (!def?.apiKeyEnv) return 'unknown'
+  if (provider === 'openrouter') return verifyOpenRouterKey(key)
+  let API
+  try {
+    ({ default: API } = await import(`../lib/catalog/${def.catalogClient || def.sdk}.js`))
+  } catch {
+    return 'unknown'
+  }
+  const { silent } = await import('../lib/logger.js')
+  let api
+  try {
+    api = API({ ...def.createConfiguration(key), baseURL: def.baseURL }, {}, silent)
+  } catch {
+    return 'unknown'
+  }
+  if (!api?.listModels) return 'unknown'
+  try {
+    await api.listModels()
+    return 'valid'
+  } catch (err) {
+    return isAuthFailure(err) ? 'invalid' : 'unknown'
+  }
+}
+
+/**
+ * The provider's key, prompted for masked, verified against the provider, and
+ * returned — never saved here. Loops on a refused key, offers to save an
+ * unverifiable one, and returns null when the user cancels.
+ */
+async function askValidatedKey (provider) {
+  const info = PROVIDER_INFO[provider]
+  const envVar = providers[provider].apiKeyEnv
 
   note(
     `${info.hint}\n\n${id(info.url)}`,
     `${info.label} — API Key`
   )
 
-  const apiKey = await text({
-    message: `Paste your ${selected} API key:`,
-    placeholder: envVar,
-    validate: (value) => {
-      if (!value || !value.trim()) return 'API key cannot be empty'
+  for (;;) {
+    const pasted = await password({
+      message: `Paste your ${provider} API key:`,
+      placeholder: envVar,
+      mask: '•',
+      validate: (value) => {
+        if (!value || !value.trim()) return 'API key cannot be empty'
+      }
+    })
+
+    if (isCancel(pasted)) return null
+    const key = pasted.trim()
+
+    const check = spinner()
+    check.start('Checking the key…')
+    const verdict = await verifyKey(provider, key)
+    check.stop(verdict === 'valid' ? 'Key accepted' : verdict === 'invalid' ? 'Key refused' : 'Could not check the key')
+
+    if (verdict === 'valid') return key
+    if (verdict === 'unknown') {
+      const save = await confirm({ message: 'The key could not be verified (offline?). Save it anyway?' })
+      if (isCancel(save)) return null
+      if (save) return key
+    } else {
+      note('That key was refused — check for a truncated paste and try again.', 'Invalid key')
     }
-  })
+  }
+}
 
-  if (isCancel(apiKey)) return false
+/** The provider's key, asked for and written to the environment file; false when the user cancelled. */
+async function askKey (selected) {
+  const envVar = providers[selected].apiKeyEnv
 
-  await appendToEnvFile(envVar, apiKey.trim())
+  const key = await askValidatedKey(selected)
+  if (!key) return false
+
+  await appendToEnvFile(envVar, key)
 
   note(`${ok('✓')} Saved ${envVar} to ${meta(ENV_PATH)}`, 'Done')
   return true

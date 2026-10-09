@@ -18,7 +18,7 @@ import { catalogKey, bareOf } from '#core/model-id.js'
  * @returns {Promise<import('#core/image.js').ImageResult>}
  */
 export async function openaiImage (envelope, deps = {}) {
-  const client = deps.client ?? new OpenAI({ apiKey: envelope.auth.key })
+  const client = deps.client ?? new OpenAI({ apiKey: envelope.auth.key, maxRetries: 0 })
   const spec = deps.spec ?? getSpec(catalogKey(envelope.model)) ?? {}
   const start = String(process.hrtime.bigint())
 

@@ -534,7 +534,7 @@ see "mo creator --help".`)
     }
     const hasUnconfigured = rows.some(r => r.hasKey === false)
     console.log(`\n${meta('Next:')}  mo provider show <name>  ${meta('│')}  mo curate <name>` +
-      (hasUnconfigured ? `  ${meta('│')}  mo provider setup <name>` : ''))
+      (hasUnconfigured ? `  ${meta('│')}  mo onboard <name>` : ''))
     return
   }
 
@@ -574,7 +574,7 @@ see "mo creator --help".`)
     if (!api?.listModels) {
       const why = providerConfig.catalog === false || !providerConfig.apiKeyEnv
         ? `${arg1} publishes no model list`
-        : `no API key for ${arg1} — run "mo provider setup ${arg1}"`
+        : `no API key for ${arg1} — run "mo onboard ${arg1}"`
       console.error(err(why))
       process.exit(1)
     }

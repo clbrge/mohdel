@@ -2,7 +2,9 @@ const toPrice = (entry) => {
   const raw = entry?.price_per_m_decimal
   if (typeof raw !== 'string') return undefined
   const n = parseFloat(raw)
-  return Number.isFinite(n) ? n : undefined
+  if (!Number.isFinite(n)) return undefined
+  if (n < 0) return undefined
+  return n
 }
 
 const MODALITIES = new Set(['text', 'image', 'video', 'audio'])

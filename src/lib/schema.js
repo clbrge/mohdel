@@ -22,6 +22,20 @@ const validateInputFormat = (formats) => {
   return unknown.length ? `unknown modality '${unknown.join("', '")}' (allowed: ${INPUT_FORMATS.join(', ')})` : null
 }
 
+// Prices are USD per million tokens and never negative: a negative listing
+// price (OpenRouter's `-1` for a variable-priced router) is not a rate.
+// The catalog clients drop it on import; the validator refuses it here so
+// `curate()` and `mo model check` reject an entry that would lower a ledger.
+const validatePrice = (value) => {
+  if (typeof value === 'number') return value < 0 ? 'must be >= 0' : null
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [tier, rate] of Object.entries(value)) {
+      if (typeof rate === 'number' && rate < 0) return `tier '${tier}' must be >= 0`
+    }
+  }
+  return null
+}
+
 const fieldDefs = {
   model: { type: 'string', required: true },
   baseURL: { type: 'string' },
@@ -32,12 +46,12 @@ const fieldDefs = {
   label: { type: 'string' },
   displayName: { type: 'string', deprecated: 'use label instead' },
   description: { type: 'string' },
-  inputPrice: { type: 'number', altType: 'object' },
-  outputPrice: { type: 'number', altType: 'object' },
-  thinkingPrice: { type: 'number', altType: 'object' },
-  cacheReadPrice: { type: 'number', altType: 'object' },
-  cacheWritePrice: { type: 'number', altType: 'object' },
-  cacheWrite1hPrice: { type: 'number', altType: 'object' },
+  inputPrice: { type: 'number', altType: 'object', validate: validatePrice, severity: 'error' },
+  outputPrice: { type: 'number', altType: 'object', validate: validatePrice, severity: 'error' },
+  thinkingPrice: { type: 'number', altType: 'object', validate: validatePrice, severity: 'error' },
+  cacheReadPrice: { type: 'number', altType: 'object', validate: validatePrice, severity: 'error' },
+  cacheWritePrice: { type: 'number', altType: 'object', validate: validatePrice, severity: 'error' },
+  cacheWrite1hPrice: { type: 'number', altType: 'object', validate: validatePrice, severity: 'error' },
   contextTokenLimit: { type: 'number' },
   inputCeilingMargin: { type: 'number' },
   outputTokenLimit: { type: 'number' },
@@ -54,11 +68,11 @@ const fieldDefs = {
   version: { type: 'string' },
   createdAt: { type: 'string' },
   created: { type: 'number' },
-  imagePrice: { type: 'number' },
+  imagePrice: { type: 'number', validate: validatePrice, severity: 'error' },
   imageEndpoint: { type: 'string' },
   imageDefaultSize: { type: 'string' },
-  transcriptionPrice: { type: 'number' },
-  embeddingPrice: { type: 'number' },
+  transcriptionPrice: { type: 'number', validate: validatePrice, severity: 'error' },
+  embeddingPrice: { type: 'number', validate: validatePrice, severity: 'error' },
   dimensions: { type: 'number' },
   dimensionsSelectable: { type: 'boolean' },
   maxBatch: { type: 'number' },

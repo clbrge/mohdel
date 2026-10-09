@@ -8,9 +8,13 @@ const fetchModels = async ({ apiKey }) => {
 }
 
 // OpenRouter prices are decimal USD per token — convert to per-million-tokens.
+// A negative listing price (e.g. `-1` for a variable-priced router) is not a
+// rate; treat it as no price so curate() writes no price instead of one that
+// would lower a spend ledger.
 const toPerMillion = (raw) => {
   const n = typeof raw === 'string' ? parseFloat(raw) : raw
   if (!Number.isFinite(n)) return undefined
+  if (n < 0) return undefined
   return n * 1_000_000
 }
 

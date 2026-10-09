@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.13.0] — Fix: a negative listing price is not a price / Chore: bump dependencies
+
+### Changed
+
+- `openai` `^7.30.1` → `^7.31.0`
+- A missing key points to `mo onboard <provider>` in `mo ask`, `mo providers` and
+  `mo provider models`; a key the provider rejects still points to `mo setup <provider>`, which
+  replaces it.
+
+### Fixed
+
+- A negative price in OpenRouter's or Novita's model list (`-1` for a variable-priced router) is
+  read as no price, and the catalog refuses a negative price: `mo model check` and `mo doctor`
+  report one, and `curate()` does not write it.
+
 ## [3.12.3] — Feat: a program built on mohdel adds models to the catalog
 
 ### Added

@@ -217,6 +217,27 @@ describe('altType (tiered pricing)', () => {
       expect.objectContaining({ field: 'inputPrice', severity: 'error' })
     )
   })
+
+  test('negative prices are errors, so curate() refuses them', () => {
+    for (const field of ['inputPrice', 'outputPrice', 'thinkingPrice', 'cacheReadPrice', 'cacheWritePrice', 'cacheWrite1hPrice', 'imagePrice', 'transcriptionPrice', 'embeddingPrice']) {
+      const issues = validate({ model: 'x', creator: 'y', [field]: -1 }, 'p/x')
+      expect(issues, field).toContainEqual(
+        expect.objectContaining({ field, severity: 'error', message: expect.stringMatching(/>= 0/) })
+      )
+    }
+  })
+
+  test('negative tiered rates are errors', () => {
+    const issues = validate({ model: 'x', creator: 'y', inputPrice: { default: 2.5, '>100': -5 } }, 'p/x')
+    expect(issues).toContainEqual(
+      expect.objectContaining({ field: 'inputPrice', severity: 'error', message: expect.stringMatching(/>= 0/) })
+    )
+  })
+
+  test('zero and positive prices pass', () => {
+    const issues = validate({ model: 'x', creator: 'y', inputPrice: 0, outputPrice: 4, embeddingPrice: 0.02 }, 'p/x')
+    expect(issues.filter(i => /Price/.test(i.field))).toEqual([])
+  })
 })
 
 describe('speeds', () => {

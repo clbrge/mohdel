@@ -42,9 +42,10 @@ export const hintsForError = (err, modelId) => {
     hints.push('→ see:  docs/CATALOG.md             # catalog format reference')
   }
 
-  if (/API key not found/i.test(both) || /AUTH_INVALID/i.test(err?.type || '') || /401|unauthorized|invalid api key/i.test(both)) {
+  const keyMissing = /API key not found/i.test(both)
+  if (keyMissing || /AUTH_INVALID/i.test(err?.type || '') || /401|unauthorized|invalid api key/i.test(both)) {
     if (provider === 'chatgpt') hints.push('→ run:  mo chatgpt login')
-    else if (provider) hints.push(`→ run:  mo setup ${provider}`)
+    else if (provider) hints.push(keyMissing ? `→ run:  mo onboard ${provider}` : `→ run:  mo setup ${provider}`)
     else hints.push('→ run:  mo                          # interactive provider/key setup')
   }
 

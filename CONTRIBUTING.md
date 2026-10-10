@@ -314,7 +314,9 @@ Before calling a change done, walk the four seams:
    `/v1/evaluate`, `/v1/image`, `/v1/transcription` — runs the same
    pre-dispatch sequence: auth, quota policy, cooldown, rate check,
    `record_request`. A route that dispatches without it is an unguarded door
-   into the pool, whatever the session does afterwards.
+   into the pool, whatever the session does afterwards. `/v1/info` is the one
+   route that reaches the pool without it: it reads the catalog, calls no
+   provider and has no `authId`, and the pool's own admission bounds it.
 3. **Wire.** See *Adding a wire-protocol field* below; a field that only one
    side understands is the same class of bug.
 4. **Docs.** `INTEGRATION.md` describes what a caller observes. Where the paths

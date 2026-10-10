@@ -286,8 +286,8 @@ the §4 event stream:
   `error` line (§4.4) a call would terminate with
   (`SESSION_INVALID_OUTPUT_EFFORT`, `SESSION_INVALID_SPEED`,
   `SESSION_SPEED_NOT_IMPLEMENTED`, `SESSION_UNKNOWN_PROVIDER`).
-- Internal to the gate and its embedders (`SessionPool::info`); there is
-  no HTTP route.
+- The gate serves it as `POST /v1/info` (§10), and embedders call
+  `SessionPool::info`.
 
 ## 4. Stdout — four events
 
@@ -480,7 +480,8 @@ stdin/stdout framing.
 - **Requests:** `POST /v1/call`, `POST /v1/image`,
   `POST /v1/transcription`, `POST /v1/embed`, `POST /v1/evaluate` with
   `Content-Type: application/json` and the envelope (§3.1) as the
-  body; `POST /v1/abort` with `{ callId, authId, gate }`; `GET /v1/health`
+  body; `POST /v1/abort` with `{ callId, authId, gate }`; `POST /v1/info`
+  with `{ model }`; `GET /v1/health`
   on the admin plane. One request per
   connection; `Connection: close` is honoured.
 - **`/v1/call` response:** `200 OK`, `Content-Type: application/x-ndjson`,
@@ -497,6 +498,10 @@ stdin/stdout framing.
   `Content-Length` set; the body is an `ImageResult`, a
   `TranscriptionResult`, an `EmbedResult`, an `EvaluateResult`, or
   `{ status, version, uptime_ms }`.
+- **`/v1/info` response:** `200 OK` with the catalog entry (§3.3) as
+  JSON, or `null` when the catalog has none. A lane the entry cannot
+  take is `400` with the session's `TypedError`. It runs no auth, quota
+  or rate check: it reaches no provider.
 - **Rejections before dispatch:** a non-200 status with a `TypedError`
   (§4.4) JSON body — `400` (`PROTOCOL_INVALID_ENVELOPE`), `401`,
   `413`, `503` (`SESSION_POOL_BUSY`), `500`. A body that does not

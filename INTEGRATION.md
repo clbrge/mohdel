@@ -261,6 +261,16 @@ for await (const ev of call(envelope, {
 
 `AbortSignal` forwards: once the gate has answered, the client posts `/v1/abort` with the call's `callId` and `authId` and the `mohdel-gate` token of the gate's response, the gate sends the session a `{op:"abort", callId}` control message, and the stream ends with the session's `done` (`warning: 'aborted'`), carrying the partial output and the usage reported before the cut, as in-process. The pool reuses the session. The iterator waits for that `done` with no limit of its own; to stop waiting, stop iterating, which abandons the call and loses its usage. An abort before the gate answered drops the request, and the client ends with an aborted `done` of its own at zero usage. An abort the gate refuses is thrown: `CALL_MISDIRECTED` when it reached a gate that did not stream the call, or the router's own error when it has no `/v1/abort` route.
 
+### A model's catalog entry
+
+```js
+import { callInfo } from 'mohdel/client'
+
+const entry = await callInfo('anthropic/claude-haiku-4-5', { socketPath })
+```
+
+`POST /v1/info` answers what `model.info()` answers in process: the catalog entry a call with that model would run on, or `null` when the gate's catalog has none. An effort or speed the entry does not declare is thrown as the session's error.
+
 ## Envelope shape
 
 Required fields:

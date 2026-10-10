@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.15.0] — Feature: a model's catalog entry through the gate (`POST /v1/info`) / Chore: bump dependencies
+
+### Changed
+
+- `@anthropic-ai/sdk` `^0.132.1` → `^0.133.0`
+- `openai` `^7.31.0` → `^7.32.0`
+
+### Added
+
+- `POST /v1/info` on the gate: `{ model }` → the catalog entry a call with
+  that model would run on, or `null`; an effort or speed the entry does not
+  declare is `400` with the session's error. Clients: `callInfo` (JS),
+  `Client::info` (Rust).
+- `handle_data`, the gate's data-plane router, is exported: an embedder with
+  routes of its own hands it every other request.
+
 ## [3.14.0] — Fix: provider SDKs no longer retry inside a call; keys are verified at onboarding
 
 ### Fixed

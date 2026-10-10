@@ -240,7 +240,10 @@ pub fn remove_stale_socket(path: &Path) -> Result<(), ServeError> {
 
 // ---------- Data plane ----------
 
-async fn handle_data(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+/// The gate's data-plane router, every `/v1/*` route. An embedder serving
+/// routes of its own beside them hands it every request it does not route
+/// itself, so its gate serves each route this one does.
+pub async fn handle_data(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
@@ -256,6 +259,8 @@ async fn handle_data(req: Request<Incoming>, state: Arc<GateState>) -> Response<
         handle_evaluate(req, state).await
     } else if method == Method::POST && path == "/v1/abort" {
         handle_abort(req, state).await
+    } else if method == Method::POST && path == "/v1/info" {
+        handle_info(req, state).await
     } else {
         not_found_response(&method, &path)
     }
@@ -470,6 +475,71 @@ pub async fn handle_abort(req: Request<Incoming>, state: Arc<GateState>) -> Resp
             "CALL_NOT_FOUND",
             false,
         )
+    }
+}
+
+const MAX_INFO_BODY_BYTES: usize = 4 * 1024;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InfoRequest {
+    model: String,
+}
+
+/// HTTP handler for `POST /v1/info`: `{ model }` → `200` with the catalog
+/// entry a call with `model` would run on, or `null` when the catalog has
+/// none. A model the entry cannot take (an effort or speed lane, an unknown
+/// provider) is the session's `400`. No auth, quota or route policy: it
+/// reads the catalog and calls no provider.
+pub async fn handle_info(req: Request<Incoming>, state: Arc<GateState>) -> Response<Body> {
+    let body = match read_body(req, MAX_INFO_BODY_BYTES).await {
+        Ok(b) => b,
+        Err(refused) => return refused,
+    };
+    let request: InfoRequest = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            return typed_error_response(
+                StatusCode::BAD_REQUEST,
+                Severity::Error,
+                "invalid info request",
+                &format!("{e}"),
+                "PROTOCOL_INVALID_ENVELOPE",
+                false,
+            );
+        }
+    };
+    if let Err(reason) = crate::protocol::validate_ids("", "", &request.model) {
+        return typed_error_response(
+            StatusCode::BAD_REQUEST,
+            Severity::Error,
+            "invalid info request",
+            &reason,
+            "PROTOCOL_INVALID_ENVELOPE",
+            false,
+        );
+    }
+    let Some(pool) = state.pool.as_ref() else {
+        return typed_error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            Severity::Error,
+            "info path requires a session pool",
+            "no pool configured",
+            "SESSION_POOL_UNAVAILABLE",
+            false,
+        );
+    };
+    match pool.info(&request.model).await {
+        Ok(entry) => oneshot_ok_response(&entry),
+        Err(error) => match error.kind.as_deref() {
+            Some(
+                "SESSION_INVALID_OUTPUT_EFFORT"
+                | "SESSION_INVALID_SPEED"
+                | "SESSION_SPEED_NOT_IMPLEMENTED"
+                | "SESSION_UNKNOWN_PROVIDER",
+            ) => typed_error_json_response(StatusCode::BAD_REQUEST, &error),
+            _ => exchange_error_response(&error),
+        },
     }
 }
 

@@ -236,6 +236,33 @@ async fn evaluate_sends_the_envelope_and_returns_the_result() {
 }
 
 #[tokio::test]
+async fn info_asks_for_the_model_and_returns_the_entry() {
+    let (client, transport) = common::client(common::json_response(r#"{"contextWindow":200000}"#), 64);
+    let entry = client.info("echo/m").await.unwrap();
+    assert_eq!(entry, Some(serde_json::json!({ "contextWindow": 200000 })));
+
+    let text = String::from_utf8(transport.requests.lock().unwrap()[0].1.clone()).unwrap();
+    assert!(text.starts_with("POST /v1/info HTTP/1.1\r\n"));
+    let sent: serde_json::Value = serde_json::from_str(text.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    assert_eq!(sent, serde_json::json!({ "model": "echo/m" }));
+}
+
+#[tokio::test]
+async fn info_of_a_model_the_catalog_lacks_is_none() {
+    let (client, _) = common::client(common::json_response("null"), 64);
+    assert_eq!(client.info("echo/other").await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn info_rejection_is_the_gate_typed_error() {
+    let body = r#"{"message":"effort not supported","severity":"error","retryable":false,"type":"SESSION_INVALID_OUTPUT_EFFORT"}"#;
+    let bytes = format!("HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}", body.len()).into_bytes();
+    let (client, _) = common::client(bytes, 64);
+    let error = client.info("echo/m:high").await.unwrap_err();
+    assert_eq!(error.kind.as_deref(), Some("SESSION_INVALID_OUTPUT_EFFORT"));
+}
+
+#[tokio::test]
 async fn health_uses_the_admin_socket() {
     let (client, transport) = common::client(common::fixture("health-200.raw"), 64);
     let health = client.health().await.unwrap();

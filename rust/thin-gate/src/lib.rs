@@ -19,7 +19,8 @@ pub mod tracing;
 pub use enforcer::Enforcer;
 pub use server::{
     bind, dispatch_embed, dispatch_evaluate, dispatch_image, dispatch_transcription, handle_abort,
-    handle_call, handle_embed, handle_evaluate, handle_image, handle_transcription, health_handler,
+    handle_call, handle_data, handle_embed, handle_evaluate, handle_image, handle_info,
+    handle_transcription, health_handler,
     not_found_response, remove_stale_socket, serve_admin, serve_data, serve_data_with_state, typed_error_response,
     Body, CatalogSource, Exchange, GateState, ServeError, SessionConfig,
 };
@@ -43,8 +44,8 @@ pub mod prelude {
     };
     pub use crate::server::{
         bind, dispatch_embed, dispatch_evaluate, dispatch_image, dispatch_transcription,
-        handle_abort, handle_call, handle_embed, handle_evaluate, handle_image,
-        handle_transcription, health_handler, not_found_response, serve_data_with_state, typed_error_response, Body, Exchange, GateState, ServeError,
+        handle_abort, handle_call, handle_data, handle_embed, handle_evaluate, handle_image,
+        handle_info, handle_transcription, health_handler, not_found_response, serve_data_with_state, typed_error_response, Body, Exchange, GateState, ServeError,
         SessionConfig,
     };
     pub use crate::session_pool::{PooledSession, SessionPool};

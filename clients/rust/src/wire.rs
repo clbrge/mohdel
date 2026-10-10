@@ -11,6 +11,7 @@ pub const TRANSCRIPTION_PATH: &str = "/v1/transcription";
 pub const EMBED_PATH: &str = "/v1/embed";
 pub const EVALUATE_PATH: &str = "/v1/evaluate";
 pub const ABORT_PATH: &str = "/v1/abort";
+pub const INFO_PATH: &str = "/v1/info";
 pub const HEALTH_PATH: &str = "/v1/health";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

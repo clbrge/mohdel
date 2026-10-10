@@ -2,7 +2,8 @@
 
 Talks to a running [mohdel](../../README.md) thin-gate over its unix socket:
 chat completions with streaming, tool calls and vision, image generation,
-speech to text, embeddings, typed-question evaluation, per-call USD cost.
+speech to text, embeddings, typed-question evaluation, a model's catalog
+entry, per-call USD cost.
 Async (tokio). The wire types are the gate's own, from the `mohdel-protocol`
 crate.
 

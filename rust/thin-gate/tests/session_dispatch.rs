@@ -456,6 +456,66 @@ async fn pool_answers_info_from_the_session_catalog() {
 }
 
 #[tokio::test]
+async fn info_route_answers_the_entry_null_or_the_sessions_refusal() {
+    let path = temp_sock_path("info-route");
+    let _guard = SocketGuard(path.clone());
+
+    let pool = SessionPool::new(node_session_cfg(), 1).await.expect("pool");
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = mohdel_thin_gate::serve_data(&serve_path, Some(pool)).await;
+    });
+    wait_for_socket(&path).await;
+
+    let ask = |model: &str| Bytes::from(serde_json::to_vec(&json!({ "model": model })).unwrap());
+
+    let res = send(&path, "POST", "/v1/info", ask("echo/m")).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(), json!({}));
+
+    let res = send(&path, "POST", "/v1/info", ask("echo/other")).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(), serde_json::Value::Null);
+
+    let res = send(&path, "POST", "/v1/info", ask("echo/m:high")).await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let error: TypedError = serde_json::from_slice(&bytes).expect("typed error");
+    assert_eq!(error.kind.as_deref(), Some("SESSION_INVALID_OUTPUT_EFFORT"));
+
+    let res = send(&path, "POST", "/v1/info", ask("no-provider")).await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let error: TypedError = serde_json::from_slice(&bytes).expect("typed error");
+    assert_eq!(error.kind.as_deref(), Some("PROTOCOL_INVALID_ENVELOPE"));
+
+    server.abort();
+}
+
+#[tokio::test]
+async fn info_route_without_a_pool_is_unavailable() {
+    let path = temp_sock_path("info-no-pool");
+    let _guard = SocketGuard(path.clone());
+
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = mohdel_thin_gate::serve_data(&serve_path, None).await;
+    });
+    wait_for_socket(&path).await;
+
+    let body = Bytes::from(serde_json::to_vec(&json!({ "model": "echo/m" })).unwrap());
+    let res = send(&path, "POST", "/v1/info", body).await;
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let error: TypedError = serde_json::from_slice(&bytes).expect("typed error");
+    assert_eq!(error.kind.as_deref(), Some("SESSION_POOL_UNAVAILABLE"));
+
+    server.abort();
+}
+
+#[tokio::test]
 async fn abort_route_ends_the_stream_with_the_sessions_aborted_done() {
     let path = temp_sock_path("abort-route");
     let _guard = SocketGuard(path.clone());

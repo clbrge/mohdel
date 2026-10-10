@@ -256,6 +256,17 @@ impl Client {
         .await
     }
 
+    /// The catalog entry a call with `model` would run on, `None` when the
+    /// gate's catalog has none. A lane the entry cannot take is the
+    /// session's typed error.
+    pub async fn info(&self, model: &str) -> Result<Option<serde_json::Value>, TypedError> {
+        let body = serde_json::to_vec(&serde_json::json!({ "model": model })).map_err(|e| {
+            typed("PROTOCOL_INVALID_ENVELOPE", "info request does not serialize", Some(e.to_string()), false)
+        })?;
+        self.fetch_json(&self.socket, "POST", wire::INFO_PATH, Some(&body), "thin-gate returned a malformed catalog entry")
+            .await
+    }
+
     /// Aborts the call named by `request`, from [`Call::abort_request`].
     /// Keep reading its stream: it ends with the aborted `done`.
     /// `CALL_NOT_FOUND` when the call's terminal was already sent;

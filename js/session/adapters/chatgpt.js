@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import { openai } from './openai.js'
 import { streamingDispatcher } from './_dispatcher.js'
-import { classifyProviderError } from './_errors.js'
+import { classifyProviderError, extractCode } from './_errors.js'
 import { catalogKey, bareOf } from '#core/model-id.js'
 import { getSpec } from './_catalog.js'
 import { discoverModels } from '../../chatgpt/models.js'
@@ -51,6 +51,6 @@ export async function * chatgpt (envelope, deps = {}) {
     fetchOptions: { dispatcher: streamingDispatcher() }
   })
   // SDK errors can carry request details; never put OAuth credentials in logs.
-  const log = deps.log ? { warn: (_data, message) => deps.log.warn({ provider: 'chatgpt' }, message) } : undefined
+  const log = deps.log ? { warn: (data, message) => deps.log.warn({ provider: 'chatgpt', code: extractCode(data?.err) || null }, message) } : undefined
   yield * openai(envelope, { ...deps, client, log })
 }

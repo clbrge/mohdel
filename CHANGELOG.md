@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.16.0] — Fix: a ChatGPT usage limit is a quota, not retried
+
+### Fixed
+
+- A ChatGPT usage limit (`usage_limit_reached`, `usage_not_included`) is
+  `QUOTA_EXHAUSTED`, not retried; it arrives inside the stream, where it was
+  a retryable `NET_ERROR`.
+- A failed stream is classified under the call's provider, not always
+  `openai`.
+- The ChatGPT route logs a failed stream's error code.
+
 ## [3.15.0] — Feature: a model's catalog entry through the gate (`POST /v1/info`) / Chore: bump dependencies
 
 ### Changed

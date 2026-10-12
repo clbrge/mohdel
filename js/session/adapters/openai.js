@@ -200,7 +200,7 @@ export async function * openai (envelope, deps = {}) {
       return
     }
     log?.warn({ err: e }, '[mohdel:openai] stream failed')
-    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: 'openai' }) }
+    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: providerOf(envelope.model) }) }
     return
   }
 

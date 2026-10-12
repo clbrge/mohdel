@@ -34,6 +34,12 @@ describe('classifyProviderError — code-driven', () => {
     expect(out.severity).toBe('error')
   })
 
+  test.each(['usage_limit_reached', 'usage_not_included'])('a subscription\'s %s, carried in a stream with no status, is QUOTA_EXHAUSTED', (type) => {
+    const out = classifyProviderError({ message: 'limit', error: { type, message: 'limit' } })
+    expect(out.type).toBe('QUOTA_EXHAUSTED')
+    expect(out.retryable).toBe(false)
+  })
+
   test('credit_balance_too_low → QUOTA_EXHAUSTED', () => {
     const err = { status: 400, error: { type: 'credit_balance_too_low' } }
     expect(classifyProviderError(err).type).toBe('QUOTA_EXHAUSTED')

@@ -101,7 +101,7 @@ function extractDetail (err) {
  * @param {any} err
  * @returns {string}
  */
-function extractCode (err) {
+export function extractCode (err) {
   if (!err) return ''
   const candidates = [
     err.code,
@@ -373,7 +373,9 @@ export function classifyProviderError (e, key, opts = {}) {
     code === 'insufficient_quota' ||
     code === 'billing_hard_limit_reached' ||
     code === 'account_deactivated' ||
-    code === 'credit_balance_too_low'
+    code === 'credit_balance_too_low' ||
+    code === 'usage_limit_reached' ||
+    code === 'usage_not_included'
   ) {
     return {
       message: 'provider quota exhausted',

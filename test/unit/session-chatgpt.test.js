@@ -57,6 +57,19 @@ describe('ChatGPT Responses adapter', () => {
     expect(result.at(-1).type).toBe('error')
   })
 
+  test('a usage limit arriving in the stream is a quota, not retried, and logged by its code alone', async () => {
+    const call = envelope()
+    const limit = Object.assign(new Error('The ChatGPT user has reached their usage limit.'), {
+      error: { type: 'usage_limit_reached', message: `The ChatGPT user has reached their usage limit. ${call.auth.key}` }
+    })
+    const sdk = { responses: { stream: vi.fn(async function * () { yield { type: 'response.output_text.delta', delta: 'He' }; throw limit }) } }
+    const warn = vi.fn()
+    const events = await collect(chatgpt(call, { fetch: modelFetch, client: sdk, log: { warn } }))
+    expect(events.at(-1).error).toMatchObject({ type: 'QUOTA_EXHAUSTED', retryable: false })
+    expect(JSON.stringify(events.at(-1))).not.toContain(call.auth.key)
+    expect(warn.mock.calls[0][0]).toEqual({ provider: 'chatgpt', code: 'usage_limit_reached' })
+  })
+
   test.each([401, 403, 429, 500])('discovery failure %s is a terminal error', async status => {
     const events = await collect(chatgpt(envelope(), { fetch: async () => new Response('', { status }) }))
     expect(events).toHaveLength(1)

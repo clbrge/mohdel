@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- A ChatGPT call with an `outputBudget` is refused as `INVALID_REQUEST`; the
+  route documents `max_output_tokens` as a field to omit.
+
 ## [3.16.1] — Fix: a ChatGPT call with an identifier is no longer refused / Chore: bump dependencies
 
 ### Fixed

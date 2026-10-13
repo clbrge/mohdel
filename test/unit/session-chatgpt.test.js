@@ -33,6 +33,15 @@ describe('ChatGPT Responses adapter', () => {
     expect(request).not.toHaveProperty('safety_identifier')
   })
 
+  test('refuses an output budget, which the route asks callers to omit, and sends nothing', async () => {
+    const sdk = client([completed])
+    const events = await collect(chatgpt({ ...envelope(), outputBudget: 1000 }, { fetch: modelFetch, client: sdk }))
+    expect(events.at(-1)).toMatchObject({ type: 'error', error: { type: 'INVALID_REQUEST', retryable: false } })
+    expect(events.at(-1).error.message).toMatch(/no output budget/)
+    expect(sdk.responses.stream).not.toHaveBeenCalled()
+    expect(modelFetch).not.toHaveBeenCalled()
+  })
+
   test('does not infer with a model missing from the signed-in account', async () => {
     const sdk = client([completed])
     const events = await collect(chatgpt(envelope(), { fetch: async () => Response.json({ models: [] }), client: sdk }))

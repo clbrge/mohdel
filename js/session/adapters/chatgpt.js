@@ -30,6 +30,10 @@ export async function * chatgpt (envelope, deps = {}) {
   const key = envelope.auth?.key
   const start = String(process.hrtime.bigint())
   const model = getSpec(catalogKey(envelope.model))?.model ?? bareOf(catalogKey(envelope.model))
+  if (envelope.outputBudget !== undefined) {
+    yield { type: 'error', error: { type: 'INVALID_REQUEST', severity: 'error', message: 'ChatGPT plan usage takes no output budget: the route asks callers to omit max_output_tokens.', retryable: false } }
+    return
+  }
   try {
     const models = await accountModels(key, deps)
     if (!models.some(m => m.slug === model)) {

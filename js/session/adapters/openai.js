@@ -380,11 +380,13 @@ function buildRequest (envelope, input, instructions) {
     }
   }
 
-  // Per-user identifier — openai uses `safety_identifier`; other
-  // Responses-API providers (xai) use the legacy `user` field.
+  // Per-user identifier — openai uses `safety_identifier`, which the ChatGPT
+  // backend refuses; other Responses-API providers (xai) use the legacy `user` field.
   if (envelope.identifier) {
-    if (provider === 'openai' || provider === 'chatgpt') {
+    if (provider === 'openai') {
       request.safety_identifier = envelope.identifier
+      request.prompt_cache_key = envelope.identifier
+    } else if (provider === 'chatgpt') {
       request.prompt_cache_key = envelope.identifier
     } else {
       request.user = envelope.identifier

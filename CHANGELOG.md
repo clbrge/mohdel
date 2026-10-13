@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.16.1] — Fix: a ChatGPT call with an identifier is no longer refused / Chore: bump dependencies
+
+### Fixed
+
+- A ChatGPT call with an `identifier` no longer fails with 400 `Unsupported
+  parameter: safety_identifier`; it carries only `prompt_cache_key`.
+
+### Changed
+
+- `@google/genai` `^2.28.0` → `^2.29.0`
+
 ## [3.16.0] — Fix: a ChatGPT usage limit is a quota, not retried
 
 ### Fixed

@@ -25,6 +25,14 @@ describe('ChatGPT Responses adapter', () => {
     expect(events.at(-1).result).toMatchObject({ output: 'Hello', inputTokens: 10, outputTokens: 3, cost: 0 })
   })
 
+  test('routes by the identifier for the cache, and sends no safety_identifier, which the backend refuses', async () => {
+    const sdk = client([completed])
+    await collect(chatgpt({ ...envelope(), identifier: 'conv-1' }, { fetch: modelFetch, client: sdk }))
+    const request = sdk.responses.stream.mock.calls[0][0]
+    expect(request.prompt_cache_key).toBe('conv-1')
+    expect(request).not.toHaveProperty('safety_identifier')
+  })
+
   test('does not infer with a model missing from the signed-in account', async () => {
     const sdk = client([completed])
     const events = await collect(chatgpt(envelope(), { fetch: async () => Response.json({ models: [] }), client: sdk }))

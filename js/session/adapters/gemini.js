@@ -244,7 +244,7 @@ function buildRequest (envelope, contents, systemInstruction) {
   }
 
   // Thinking — model-family-dependent shape:
-  //   - gemini-3.x: thinkingConfig = { includeThoughts: true, thinkingLevel: <name> }
+  //   - gemini-3 and later: thinkingConfig = { includeThoughts: true, thinkingLevel: <name> }
   //   - gemini-2.x: thinkingConfig = { thinkingBudget: <number> }
   //   - other (e.g. gemini-1.5): thinkingBudget with maxOutputTokens
   //     adjustment for headroom
@@ -252,7 +252,7 @@ function buildRequest (envelope, contents, systemInstruction) {
   if (spec?.thinkingEffortLevels && effort && effort !== 'none') {
     const budget = spec.thinkingEffortLevels[effort]
     const bare = bareOf(envelope.model)
-    if (/^gemini-3/.test(bare)) {
+    if (/^gemini-(?:[3-9]|\d{2,})/.test(bare)) {
       config.thinkingConfig = { includeThoughts: true, thinkingLevel: effort }
     } else if (/gemini-2/.test(bare)) {
       if (typeof budget === 'number') {

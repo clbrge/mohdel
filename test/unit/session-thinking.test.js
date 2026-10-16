@@ -341,6 +341,12 @@ describe('gemini thinking config', () => {
         thinkingEffortLevels: { low: 1024, medium: 8192, high: 32768 },
         defaultThinkingEffort: 'medium'
       },
+      'gemini/gemini-4-argon': {
+        inputPrice: 2,
+        outputPrice: 10,
+        thinkingEffortLevels: { low: 1024, medium: 8192, high: 32768 },
+        defaultThinkingEffort: 'medium'
+      },
       'gemini/gemini-2.5-flash': {
         inputPrice: 0.075,
         outputPrice: 0.3,
@@ -361,6 +367,18 @@ describe('gemini thinking config', () => {
       includeThoughts: true,
       thinkingLevel: 'high'
     })
+  })
+
+  test('gemini-4 uses thinkingLevel string and leaves maxOutputTokens alone', async () => {
+    const { client, captured } = mockGemini([
+      { candidates: [{ content: { parts: [] }, finishReason: 'STOP' }] }
+    ])
+    await collect(gemini(envelope('gemini', 'gemini-4-argon', { outputEffort: 'low', outputBudget: 4000 }), { client }))
+    expect(captured.request.config.thinkingConfig).toEqual({
+      includeThoughts: true,
+      thinkingLevel: 'low'
+    })
+    expect(captured.request.config.maxOutputTokens).toBe(4000)
   })
 
   test('gemini-2.x uses thinkingBudget number', async () => {

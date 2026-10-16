@@ -4,12 +4,23 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [3.16.2] — Fix: Gemini 4 thinking levels / Chore: bump dependencies
+
+### Fixed
+
+- A Gemini 4 call with an effort sends `thinkingLevel`, as on Gemini 3; it
+  sent a numeric `thinkingBudget` and raised `maxOutputTokens` by it.
 
 ### Changed
 
 - A ChatGPT call with an `outputBudget` is refused as `INVALID_REQUEST`; the
   route documents `max_output_tokens` as a field to omit.
+- `@anthropic-ai/sdk` `^0.133.0` → `^0.135.0`
+- `@google/genai` `^2.29.0` → `^2.30.0`
+- `openai` `^7.32.0` → `^7.34.0`
+- `undici` `^7.29.0` → `^7.30.1`
+- `gpt-tokenizer` `^4.0.0` → `^4.0.3` (dev)
+- `vitest` `^4.1.11` → `^4.1.12` (dev)
 
 ## [3.16.1] — Fix: a ChatGPT call with an identifier is no longer refused / Chore: bump dependencies
 

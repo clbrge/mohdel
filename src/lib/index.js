@@ -16,7 +16,7 @@ import {
 import { createRateLimiter } from '../../js/session/_rate_limiter.js'
 import { createCooldownTracker } from '../../js/session/_cooldown.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
-import { runAnswer, runAnswerEmbedding, runAnswerEvaluation, runAnswerImage, runAnswerTranscription } from '../../js/factory/bridge.js'
+import { runAnswer, runAnswerEmbedding, runAnswerEvaluation, runAnswerImage, runAnswerTranscription, summariesOf } from '../../js/factory/bridge.js'
 import { startSpan, endSpanOk, endSpanError } from './tracing.js'
 import { isValidTag } from './schema.js'
 import { silent } from './logger.js'
@@ -120,7 +120,12 @@ const createFallbackModelSpec = (resolvedModelId) => {
   return normalizeModelSpec(resolvedModelId, fallback, providerConfig)
 }
 
-const resolveProviderConfiguration = async (provider, providerName) => {
+const resolveProviderConfiguration = async (provider, providerName, providersConfig) => ({
+  ...await keyConfiguration(provider, providerName),
+  ...summariesOf(providerName, providersConfig)
+})
+
+const keyConfiguration = async (provider, providerName) => {
   if (provider.resolveConfiguration) {
     return provider.resolveConfiguration()
   }
@@ -478,7 +483,7 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
       // Resolve configuration and cache the promise to handle
       // concurrent use() calls.
       const initPromise = (async () => {
-        const configuration = externalConfigurations?.[providerName] ?? await resolveProviderConfiguration(provider, providerName)
+        const configuration = externalConfigurations?.[providerName] ?? await resolveProviderConfiguration(provider, providerName, providersConfig)
         const specs = { [resolvedModelId]: modelSpec }
         return { provider, configuration, specs }
       })()
@@ -590,7 +595,7 @@ const createModelProxy = (resolvedModelId, modelSpec, handlers, aliasOutputEffor
             const defaultConfiguration = providers[modelSpec.provider].refreshConfiguration
               ? externalConfigurations?.[modelSpec.provider] ?? (sdkOptions.configuration
                 ? undefined
-                : await resolveProviderConfiguration(providers[modelSpec.provider], modelSpec.provider))
+                : await resolveProviderConfiguration(providers[modelSpec.provider], modelSpec.provider, providersConfig))
               : (await getRuntime()).configuration
             const effectiveConfiguration = sdkOptions.configuration || defaultConfiguration
             delete sdkOptions.configuration

@@ -4,6 +4,63 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.0.0] — Breaking: commentary and reasoning delta kinds / Feature: reasoning summaries asked per call / Fix: reasoning sent back as each provider takes it
+
+### Breaking
+
+- Three delta kinds beside `message` and `function_call`: `commentary` (text
+  a model writes for the person while it works), `reasoning_summary`, streamed
+  only when the envelope sets `reasoningSummaries`, and `reasoning` (raw),
+  streamed only when it sets `rawReasoning`. A typed consumer that does not
+  know them refuses them; a consumer that joins every delta's text into the
+  answer keeps `message` only.
+- PROTOCOL §8: a new delta kind is a breaking change.
+
+### Added
+
+- `reasoningSummaries` and `rawReasoning` on the envelope.
+- `auth.summaries`: whether a credential's account may ask for reasoning
+  summaries, on a provider that allows them only to verified organizations
+  (openai, chatgpt). Passed with a per-call key as `configuration.summaries`;
+  for the key mohdel finds itself, `reasoningSummaries` in that provider's
+  `providers.json` entry, read by the gate's `LocalAuth` and in-process.
+- `phase` on a `text` message part, and `commentaryParts` on `AnswerResult`.
+- Chat-completions providers stream raw reasoning as `reasoning` deltas —
+  from `reasoning_content`, `reasoning`, or Mistral's thinking chunks — and
+  OpenRouter's `reasoning.summary` details as `reasoning_summary`.
+- The Responses providers (openai, chatgpt, xai, meta) stream a
+  commentary-phase message as `commentary` and return it in
+  `commentaryParts`; reasoning summaries as `reasoning_summary`, asked for when
+  the envelope sets `reasoningSummaries` — on openai and chatgpt only when
+  `auth.summaries` is `true`; raw reasoning text as `reasoning`.
+- `SUMMARIES_REFUSED`: a request refused over `reasoning.summary`, naming
+  the setting that stops asking.
+- Gemini thought summaries stream as `reasoning_summary`; a Gemini 3 or later
+  call asks for them (`includeThoughts`) only when the envelope sets
+  `reasoningSummaries`.
+- Anthropic: a thinking call that sets `reasoningSummaries` gets summarized
+  thinking (`thinking.display: 'summarized'`), streamed as `reasoning_summary`,
+  progress notes included; any other gets `'omitted'`. Thinking tokens are
+  taken from `usage.output_tokens_details.thinking_tokens` when the response
+  reports them.
+
+### Fixed
+
+- `mo ask --stream` printed delta objects; it prints the answer's text.
+- OpenRouter: an effort was sent as `reasoning_effort`, which Anthropic models
+  ignore; it goes as `reasoning: { effort }`.
+- A Responses provider's commentary was part of `output`, and went back
+  without its `phase`; it goes back as its own messages with their phase,
+  and the answer beside it as `final_answer`.
+- Anthropic thinking blocks were never sent back: a turn with thinking goes
+  back to the model that produced it as its blocks came, unmodified and in
+  order. A prompt-cache breakpoint never lands on a thinking block.
+- A Mistral content array was streamed as one delta; its text is the answer
+  and its thinking is reasoning.
+- An assistant turn's reasoning goes back as each provider takes it: as
+  `reasoning` to Cerebras, as its `reasoning_details` unmodified to the same
+  OpenRouter model, as its thinking chunks inside `content` to Mistral.
+
 ## [3.16.3] — Fix: Gemini thought summaries in the answer
 
 ### Fixed

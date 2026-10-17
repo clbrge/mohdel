@@ -56,7 +56,13 @@ export async function * openrouter (envelope, deps = {}) {
   yield * runChatCompletions(envelope, client, {
     provider: 'openrouter',
     stream: true,
+    reasoningReplay: 'reasoning',
+    reasoningDetails: true,
     mutateArgs: (env, args) => {
+      if (args.reasoning_effort) {
+        args.reasoning = { effort: args.reasoning_effort }
+        delete args.reasoning_effort
+      }
       const routing = env.providerOptions?.openrouter
       if (routing && (routing.order || routing.allow || routing.deny)) {
         args.provider = {}

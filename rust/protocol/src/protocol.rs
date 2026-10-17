@@ -76,6 +76,19 @@ pub struct CallEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_heartbeat_ms: Option<u32>,
 
+    /// When true, the model is asked for a summary of its reasoning, streamed
+    /// as `reasoning_summary` deltas, where the provider gives one and the
+    /// credential's account may ask (`auth.summaries`). Absent or false, none
+    /// is asked for or streamed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_summaries: Option<bool>,
+
+    /// When true, the session streams the provider's raw reasoning as
+    /// `reasoning` deltas. Absent or false, none is streamed; it is still
+    /// kept for replay wherever the provider requires it back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_reasoning: Option<bool>,
+
     /// Namespaced bag of provider-specific options. Keys are
     /// provider names (e.g. `"openrouter"`); values are opaque JSON
     /// the matching session adapter reads. Accepting `Value` here
@@ -189,12 +202,30 @@ pub enum ToolChoiceMode {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Auth {
     pub key: SecretString,
+    /// Whether this credential's account may ask for reasoning summaries, on
+    /// a provider that allows them only to some accounts — openai and
+    /// chatgpt, for verified organizations. Held with the credential because
+    /// another key may be another organization. Absent there, they are not
+    /// asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summaries: Option<bool>,
+}
+
+impl Auth {
+    /// A key, saying nothing of summaries.
+    pub fn of(key: SecretString) -> Self {
+        Self {
+            key,
+            summaries: None,
+        }
+    }
 }
 
 impl std::fmt::Debug for Auth {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Auth")
             .field("key", &"<redacted>")
+            .field("summaries", &self.summaries)
             .finish()
     }
 }
@@ -253,6 +284,11 @@ pub enum MessagePart {
         /// Caller-set prompt-cache marker (`"5m"` | `"1h"`).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cache: Option<String>,
+        /// On an assistant's text: `"commentary"` for what the model wrote for
+        /// the person while it worked, `"final_answer"` for its answer, as the
+        /// provider marked it; replayed as given.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase: Option<String>,
     },
     Reasoning {
         text: String,
@@ -314,8 +350,16 @@ pub struct DeltaChunk {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeltaKind {
+    /// The answer's text.
     Message,
     FunctionCall,
+    /// Text the model writes for the person while it works.
+    Commentary,
+    /// A summary of the model's reasoning, only when the envelope asks for it
+    /// (`reasoningSummaries`).
+    ReasoningSummary,
+    /// Raw reasoning, only when the envelope asks for it (`rawReasoning`).
+    Reasoning,
 }
 
 // ---------- AnswerResult (terminal `done.result`) ----------
@@ -374,6 +418,12 @@ pub struct AnswerResult {
     /// the assistant message it records for this result.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_parts: Option<Vec<MessagePart>>,
+    /// What the model wrote for the person while it worked, as text parts
+    /// carrying their `phase`, in order. A multi-turn caller puts them in the
+    /// assistant message it records for this result, after `reasoningParts`,
+    /// so the provider gets them back where they were.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commentary_parts: Option<Vec<MessagePart>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

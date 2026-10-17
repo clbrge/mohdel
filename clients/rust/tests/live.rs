@@ -21,7 +21,7 @@ fn envelope(model: &str, prompt: &str, budget: u32) -> CallEnvelope {
     CallEnvelope {
         call_id: format!("rust-{}", std::process::id()),
         auth_id: "rust-live".into(),
-        auth: Some(Auth { key: SecretString::new(std::env::var("MOHDEL_LIVE_KEY").unwrap_or_default()) }),
+        auth: Some(Auth::of(SecretString::new(std::env::var("MOHDEL_LIVE_KEY").unwrap_or_default()))),
         model: model.into(),
         prompt: Prompt::Text(prompt.into()),
         output_budget: Some(budget),

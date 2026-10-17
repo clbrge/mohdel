@@ -80,6 +80,14 @@ const DSML_PARAM_RE = /<\uFF5CDSML\uFF5Cparameter\s+name="([^"]+)"(?:\s+string="
  * @property {boolean} [inlineImagesOnly]
  *   The provider takes images as data URIs only; an `https://` image
  *   is refused before dispatch.
+ * @property {'reasoning_content'|'reasoning'|'chunks'} [reasoningReplay]
+ *   How an assistant turn's reasoning goes back: as `reasoning_content`
+ *   (the default), as `reasoning`, or — Mistral — as its thinking chunks
+ *   inside `content`, never as a field.
+ * @property {boolean} [reasoningDetails]
+ *   The provider streams `reasoning_details` (OpenRouter): a `reasoning.summary`
+ *   entry is a `reasoning_summary` delta, and the entries go back unmodified
+ *   and in order on the next turn to the same model.
  */
 
 /**
@@ -132,7 +140,8 @@ export async function * runChatCompletions (envelope, client, config, deps = {})
 
   let content = message.content || ''
   let toolCalls = message.tool_calls
-  const reasoning = message.reasoning_content || null
+  const reasoning = rawReasoningOf(message)
+  if (reasoning) yield { type: 'delta', delta: { type: 'reasoning', delta: reasoning } }
 
   if (config.parseDsml && content && (!toolCalls || !toolCalls.length)) {
     const dsml = parseDsmlToolCalls(content)
@@ -166,6 +175,8 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
   // Array + join, not `+=`: per-delta cons-strings are the cost on a long stream.
   const contentParts = []
   const reasoningParts = []
+  const details = []
+  const think = { text: [], signature: null }
   let first = null
   let finishReason = null
   let usage = {}
@@ -197,19 +208,43 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
         return
       }
       const choice = chunk.choices?.[0]
-      // DeepSeek V4 / deepseek-reasoner / Cerebras reasoning models emit
-      // `delta.reasoning_content` chunks before visible content. Capture
-      // them so multi-turn callers can roundtrip reasoning back to the
-      // API (DeepSeek V4 hard-rejects assistant messages without it).
-      // Token count comes from `usage.completion_tokens_details.reasoning_tokens`.
-      if (choice?.delta?.reasoning_content) {
+      const delta = choice?.delta ?? {}
+      // Raw reasoning, captured so a multi-turn caller can send it back (DeepSeek V4 refuses an
+      // assistant turn without it) and streamed only to a caller that asked (`run.js`).
+      const raw = rawReasoningOf(delta)
+      if (raw) {
         if (first === null) first = String(process.hrtime.bigint())
-        reasoningParts.push(choice.delta.reasoning_content)
+        reasoningParts.push(raw)
+        yield { type: 'delta', delta: { type: 'reasoning', delta: raw } }
       }
-      if (choice?.delta?.content) {
+      if (config.reasoningDetails && Array.isArray(delta.reasoning_details)) {
+        for (const detail of delta.reasoning_details) {
+          mergeDetail(details, detail)
+          if (detail?.type === 'reasoning.summary' && typeof detail.summary === 'string' && detail.summary) {
+            if (first === null) first = String(process.hrtime.bigint())
+            yield { type: 'delta', delta: { type: 'reasoning_summary', delta: detail.summary } }
+          }
+        }
+      }
+      if (typeof delta.content === 'string' && delta.content) {
         if (first === null) first = String(process.hrtime.bigint())
-        contentParts.push(choice.delta.content)
-        yield { type: 'delta', delta: { type: 'message', delta: choice.delta.content } }
+        contentParts.push(delta.content)
+        yield { type: 'delta', delta: { type: 'message', delta: delta.content } }
+      } else if (Array.isArray(delta.content)) {
+        for (const part of delta.content) {
+          if (part?.type === 'thinking') {
+            const text = (part.thinking ?? []).filter(t => t?.type === 'text' && t.text).map(t => t.text).join('')
+            if (part.signature) think.signature = part.signature
+            if (!text) continue
+            if (first === null) first = String(process.hrtime.bigint())
+            think.text.push(text)
+            yield { type: 'delta', delta: { type: 'reasoning', delta: text } }
+          } else if (part?.type === 'text' && part.text) {
+            if (first === null) first = String(process.hrtime.bigint())
+            contentParts.push(part.text)
+            yield { type: 'delta', delta: { type: 'message', delta: part.text } }
+          }
+        }
       }
       if (choice?.delta?.tool_calls) {
         for (const tc of choice.delta.tool_calls) {
@@ -272,6 +307,16 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     function: { name: tc.name, arguments: tc.arguments }
   }))
 
+  const replay = []
+  if (details.length) replay.push(boundPart(envelope, details))
+  if (think.text.length || think.signature) {
+    replay.push(boundPart(envelope, [{
+      type: 'thinking',
+      thinking: [{ type: 'text', text: think.text.join('') }],
+      ...(think.signature ? { signature: think.signature } : {})
+    }]))
+  }
+
   yield finalize({
     envelope,
     content: contentParts.join(''),
@@ -280,8 +325,54 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
     finishReason,
     start,
     first,
-    reasoning: reasoningParts.length ? reasoningParts.join('') : null
+    reasoning: reasoningParts.length ? reasoningParts.join('') : null,
+    replay
   })
+}
+
+/**
+ * Raw reasoning on a chat-completions delta or message: `reasoning_content` (DeepSeek, Qwen,
+ * Fireworks, Novita) or `reasoning` (Groq, Cerebras, OpenRouter), never both counted.
+ *
+ * @param {any} at
+ * @returns {string | null}
+ */
+function rawReasoningOf (at) {
+  if (typeof at?.reasoning_content === 'string' && at.reasoning_content) return at.reasoning_content
+  if (typeof at?.reasoning === 'string' && at.reasoning) return at.reasoning
+  return null
+}
+
+/**
+ * A streamed `reasoning_details` entry added to the one at its `index`: text fields are pieces
+ * of one entry, the rest as last sent.
+ *
+ * @param {any[]} details
+ * @param {any} detail
+ */
+function mergeDetail (details, detail) {
+  if (!detail || typeof detail !== 'object') return
+  const at = Number.isInteger(detail.index) ? detail.index : details.length
+  const known = details[at]
+  if (!known) {
+    details[at] = { ...detail }
+    return
+  }
+  for (const [key, value] of Object.entries(detail)) {
+    if (value == null) continue
+    known[key] = ['text', 'summary', 'data'].includes(key) && typeof known[key] === 'string' ? known[key] + value : value
+  }
+}
+
+/**
+ * The provider's own reasoning structure, kept as a `reasoning` part bound to the model that
+ * produced it, as the Responses adapters keep encrypted reasoning.
+ *
+ * @param {import('#core/envelope.js').CallEnvelope} envelope
+ * @param {any[]} blocks
+ */
+function boundPart (envelope, blocks) {
+  return { type: 'reasoning', text: '', encrypted: JSON.stringify(blocks.filter(Boolean)), model: envelope.model }
 }
 
 /**
@@ -293,11 +384,12 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
  *   finishReason: string | null,
  *   start: string,
  *   first: string | null,
- *   reasoning?: string | null
+ *   reasoning?: string | null,
+ *   replay?: import('#core/envelope.js').MessagePart[]
  * }} p
  * @returns {import('#core/events.js').DoneEvent}
  */
-function finalize ({ envelope, content, toolCalls, usage, finishReason, start, first, reasoning = null }) {
+function finalize ({ envelope, content, toolCalls, usage, finishReason, start, first, reasoning = null, replay = [] }) {
   const end = String(process.hrtime.bigint())
   const totalInputTokens = usage.prompt_tokens || 0
   const totalOutputTokens = usage.completion_tokens || 0
@@ -340,6 +432,7 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
     done.result.toolCalls = fromCerebrasToolCalls(toolCalls)
   }
   if (reasoning) done.result.reasoning = reasoning
+  if (replay.length) done.result.reasoningParts = replay
   return done
 }
 
@@ -401,7 +494,10 @@ function buildRequest (envelope, spec, config, images) {
     temperature: 0,
     messages: toChatMessages(envelope.prompt, {
       reasoningPad: typeof spec?.reasoningContentPlaceholder === 'string' ? spec.reasoningContentPlaceholder : null,
-      imageParts: images.parts
+      imageParts: images.parts,
+      model: envelope.model,
+      replay: config.reasoningReplay ?? 'reasoning_content',
+      details: config.reasoningDetails === true
     })
   }
 
@@ -464,9 +560,9 @@ function buildRequest (envelope, spec, config, images) {
  * into one user message after the run of tool results.
  *
  * @param {string | import('#core/envelope.js').Message[]} prompt
- * @param {{ reasoningPad?: string | null, imageParts: Map<object, any> }} opts
+ * @param {{ reasoningPad?: string | null, imageParts: Map<object, any>, model: string, replay: 'reasoning_content'|'reasoning'|'chunks', details: boolean }} opts
  *   `reasoningPad`: when a string (including `''`), assistant messages without
- *   extractable reasoning get `reasoning_content: <pad>` so providers that
+ *   extractable reasoning get it as their reasoning field so providers that
  *   require the field on every assistant turn (e.g. deepseek-v4-pro) accept
  *   the resumed transcript. `null` / unset disables padding (default — most
  *   chat-completions providers don't require it).
@@ -490,7 +586,7 @@ function toChatMessages (prompt, opts) {
       out.push({ role: 'user', content: hoisted })
       hoisted = []
     }
-    out.push(toChatMessage(m, pad, opts.imageParts))
+    out.push(toChatMessage(m, { ...opts, pad }))
   }
   if (hoisted.length) out.push({ role: 'user', content: hoisted })
   return out
@@ -498,10 +594,9 @@ function toChatMessages (prompt, opts) {
 
 /**
  * @param {import('#core/envelope.js').Message} m
- * @param {string | null} pad
- * @param {Map<object, any>} imageParts
+ * @param {{ pad: string | null, imageParts: Map<object, any>, model: string, replay: 'reasoning_content'|'reasoning'|'chunks', details: boolean }} opts
  */
-function toChatMessage (m, pad, imageParts) {
+function toChatMessage (m, opts) {
   if (m.role === 'tool') {
     return {
       role: 'tool',
@@ -509,31 +604,52 @@ function toChatMessage (m, pad, imageParts) {
       content: flattenText(m.content)
     }
   }
-  const reasoning = m.role === 'assistant' ? extractReasoning(m.content) : null
-  const reasoningField = reasoning ?? (pad !== null && m.role === 'assistant' ? pad : null)
-  if (m.role === 'assistant' && m.toolCalls?.length) {
+  const assistant = m.role === 'assistant'
+  const bound = assistant ? boundBlocks(m.content, opts.model) : []
+  const reasoning = assistant ? extractReasoning(m.content) : null
+  const reasoningField = reasoning ?? (opts.pad !== null && assistant ? opts.pad : null)
+  const text = flattenText(m.content)
+  /** @type {Record<string, any>} */
+  let msg
+  if (assistant && opts.replay === 'chunks' && bound.length) {
+    msg = { role: 'assistant', content: [...bound, ...(text ? [{ type: 'text', text }] : [])] }
+  } else if (assistant && m.toolCalls?.length) {
     // Chat Completions assistant turn: optional `content` + the
     // `tool_calls` array. `arguments` must be a JSON string on
     // the wire.
-    const msg = {
-      role: 'assistant',
-      content: flattenText(m.content) || '',
-      tool_calls: m.toolCalls.map(tc => ({
-        id: tc.id,
-        type: 'function',
-        function: {
-          name: tc.name,
-          arguments: stringifyToolArgs(tc.arguments)
-        }
-      }))
-    }
-    if (reasoningField !== null) msg.reasoning_content = reasoningField
-    return msg
+    msg = { role: 'assistant', content: text || '' }
+  } else {
+    msg = { role: m.role, content: hasImagePart(m.content) ? toChatContent(m.content, opts.imageParts) : text }
   }
-  const content = hasImagePart(m.content) ? toChatContent(m.content, imageParts) : flattenText(m.content)
-  const msg = { role: m.role, content }
-  if (reasoningField !== null) msg.reasoning_content = reasoningField
+  if (assistant && m.toolCalls?.length) {
+    msg.tool_calls = m.toolCalls.map(tc => ({
+      id: tc.id,
+      type: 'function',
+      function: {
+        name: tc.name,
+        arguments: stringifyToolArgs(tc.arguments)
+      }
+    }))
+  }
+  if (opts.replay === 'chunks') return msg
+  if (opts.details && bound.length) msg.reasoning_details = bound
+  else if (reasoningField !== null) msg[opts.replay] = reasoningField
   return msg
+}
+
+/**
+ * The provider's own reasoning blocks an assistant turn carries for the model in this call —
+ * OpenRouter's `reasoning_details`, Mistral's thinking chunks — kept as JSON in a bound part.
+ *
+ * @param {string | import('#core/envelope.js').MessagePart[]} content
+ * @param {string} model
+ * @returns {any[]}
+ */
+function boundBlocks (content, model) {
+  if (!Array.isArray(content)) return []
+  return content
+    .filter(p => p.type === 'reasoning' && p.encrypted && p.model === model)
+    .flatMap(p => JSON.parse(p.encrypted))
 }
 
 /**

@@ -301,3 +301,105 @@ describe('session/adapters/openai — reasoning carried across rounds', () => {
     expect(JSON.stringify(captured.request)).not.toContain('gAAAAB-opaque')
   })
 })
+
+describe('session/adapters/openai — what the model says while it works', () => {
+  const completed = { type: 'response.completed', response: { usage: { input_tokens: 10, output_tokens: 20 } } }
+  const kinds = (events) => events.filter(e => e.type === 'delta').map(e => [e.delta.type, e.delta.delta])
+  const message = (id, phase, text) => [
+    { type: 'response.output_item.added', item: { type: 'message', id, role: 'assistant', content: [], ...(phase && { phase }) } },
+    { type: 'response.output_text.delta', item_id: id, delta: text },
+    { type: 'response.output_item.done', item: { type: 'message', id, role: 'assistant', content: [{ type: 'output_text', text }], ...(phase && { phase }) } }
+  ]
+
+  test('a commentary message streams as commentary, stays out of the answer and comes back as a part', async () => {
+    const { client } = makeClient({ events: [...message('msg_1', 'commentary', 'Checking the forecast.'), ...message('msg_2', 'final_answer', 'It is 21C.'), completed] })
+    const events = await collect(openai(envelope(), { client }))
+    expect(kinds(events)).toEqual([['commentary', 'Checking the forecast.'], ['message', 'It is 21C.']])
+    const { result } = events.at(-1)
+    expect(result.output).toBe('It is 21C.')
+    expect(result.commentaryParts).toEqual([{ type: 'text', text: 'Checking the forecast.', phase: 'commentary' }])
+  })
+
+  test('a message whose phase comes only as it closes is still kept out of the answer', async () => {
+    const late = [
+      { type: 'response.output_item.added', item: { type: 'message', id: 'msg_1', role: 'assistant', content: [] } },
+      { type: 'response.output_text.delta', item_id: 'msg_1', delta: 'Looking.' },
+      { type: 'response.output_item.done', item: { type: 'message', id: 'msg_1', role: 'assistant', content: [{ type: 'output_text', text: 'Looking.' }], phase: 'commentary' } }
+    ]
+    const { client } = makeClient({ events: [...late, ...message('msg_2', undefined, 'Done.'), completed] })
+    const { result } = (await collect(openai(envelope(), { client }))).at(-1)
+    expect(result.output).toBe('Done.')
+    expect(result.commentaryParts).toEqual([{ type: 'text', text: 'Looking.', phase: 'commentary' }])
+  })
+
+  test('summaries stream as reasoning_summary, parts apart, and raw reasoning text as reasoning', async () => {
+    const { client } = makeClient({
+      events: [
+        { type: 'response.reasoning_summary_part.added', item_id: 'rs_1', summary_index: 0 },
+        { type: 'response.reasoning_summary_text.delta', item_id: 'rs_1', summary_index: 0, delta: '**Planning**' },
+        { type: 'response.reasoning_summary_part.added', item_id: 'rs_1', summary_index: 1 },
+        { type: 'response.reasoning_summary_text.delta', item_id: 'rs_1', summary_index: 1, delta: '**Checking**' },
+        { type: 'response.reasoning_text.delta', item_id: 'rs_2', delta: 'raw step' },
+        ...message('msg_1', 'final_answer', 'Answer.'),
+        completed
+      ]
+    })
+    const events = await collect(openai(envelope(), { client }))
+    expect(kinds(events)).toEqual([
+      ['reasoning_summary', '**Planning**'], ['reasoning_summary', '\n\n'], ['reasoning_summary', '**Checking**'],
+      ['reasoning', 'raw step'], ['message', 'Answer.']
+    ])
+  })
+
+  test('openai asks for summaries when the call wants them and the credential says its organization may', async () => {
+    setCatalog({ 'openai/gpt-5': { thinkingEffortLevels: { low: 0, none: 0 } } })
+    const ask = (auth) => envelope({ reasoningSummaries: true, auth: { key: 'sk-test', ...auth } })
+    const unsaid = makeClient({ events: [completed] })
+    await collect(openai(ask({}), { client: unsaid.client }))
+    expect(unsaid.captured.request.reasoning).toEqual({ effort: 'low' })
+    const asked = makeClient({ events: [completed] })
+    await collect(openai(ask({ summaries: true }), { client: asked.client }))
+    expect(asked.captured.request.reasoning).toEqual({ effort: 'low', summary: 'auto' })
+    const unwanted = makeClient({ events: [completed] })
+    await collect(openai(envelope({ auth: { key: 'sk-test', summaries: true } }), { client: unwanted.client }))
+    expect(unwanted.captured.request.reasoning).toEqual({ effort: 'low' })
+    const off = makeClient({ events: [completed] })
+    await collect(openai(ask({ summaries: false }), { client: off.client }))
+    expect(off.captured.request.reasoning).toEqual({ effort: 'low' })
+    const none = makeClient({ events: [completed] })
+    await collect(openai(envelope({ reasoningSummaries: true, outputEffort: 'none' }), { client: none.client }))
+    expect(none.captured.request.reasoning).toEqual({ effort: 'none' })
+  })
+
+  test('a request refused over summaries says which setting stops asking for them', async () => {
+    const refused = Object.assign(new Error('Your organization must be verified to generate reasoning summaries.'), { status: 400, param: 'reasoning.summary', code: 'unsupported_value' })
+    const { client } = makeClient({ throws: refused })
+    const [event] = await collect(openai(envelope(), { client }))
+    expect(event.type).toBe('error')
+    expect(event.error).toMatchObject({ type: 'SUMMARIES_REFUSED', retryable: false })
+    expect(event.error.detail).toMatch(/reasoningSummaries: false for openai in providers.json/)
+  })
+
+  test('commentary goes back as messages with their phase, and the answer beside it as the final one', async () => {
+    const { client, captured } = makeClient({ events: [completed] })
+    await collect(openai(envelope({
+      prompt: [
+        { role: 'user', content: 'weather in paris?' },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Checking the forecast.', phase: 'commentary' }, { type: 'text', text: '' }],
+          toolCalls: [{ id: 'call_1', name: 'get_weather', arguments: { city: 'paris' } }]
+        },
+        { role: 'tool', toolCallId: 'call_1', content: '{"temp":21}' },
+        { role: 'assistant', content: [{ type: 'text', text: 'Noting it.', phase: 'commentary' }, { type: 'text', text: 'It is 21C.' }] },
+        { role: 'user', content: 'thanks' }
+      ]
+    }), { client }))
+    const assistant = captured.request.input.filter(item => item.type === 'message')
+    expect(assistant).toEqual([
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Checking the forecast.' }], phase: 'commentary' },
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Noting it.' }], phase: 'commentary' },
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'It is 21C.' }], phase: 'final_answer' }
+    ])
+  })
+})

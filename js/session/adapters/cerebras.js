@@ -21,6 +21,7 @@ export async function * cerebras (envelope, deps = {}) {
     provider: 'cerebras',
     toolChoiceFlavor: 'cerebras',
     reasoningField: 'cerebras_zai',
+    reasoningReplay: 'reasoning',
     inlineImagesOnly: true
   }, {
     signal: deps.signal,

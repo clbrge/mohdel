@@ -28,6 +28,21 @@ describe('session/run', () => {
     expect(events.map(e => e.type)).toEqual(['delta', 'delta', 'done'])
   })
 
+  test('streams reasoning summaries and raw reasoning only to a call that asked for each', async () => {
+    const adapter = async function * () {
+      yield { type: 'delta', delta: { type: 'reasoning', delta: 'raw thought' } }
+      yield { type: 'delta', delta: { type: 'reasoning_summary', delta: 'summary' } }
+      yield { type: 'delta', delta: { type: 'message', delta: 'answer' } }
+      yield { type: 'done', result: { status: 'completed', output: 'answer', inputTokens: 1, outputTokens: 1, thinkingTokens: 0, cost: 0, timestamps: { start: '1', first: '2', end: '3' } } }
+    }
+    const kinds = async (over) => (await collect(run(envelope(over), { resolveAdapter: () => adapter })))
+      .filter(e => e.type === 'delta').map(e => e.delta.type)
+    expect(await kinds({})).toEqual(['message'])
+    expect(await kinds({ reasoningSummaries: true })).toEqual(['reasoning_summary', 'message'])
+    expect(await kinds({ rawReasoning: true })).toEqual(['reasoning', 'message'])
+    expect(await kinds({ reasoningSummaries: true, rawReasoning: true })).toEqual(['reasoning', 'reasoning_summary', 'message'])
+  })
+
   test('unknown provider yields a single error event', async () => {
     const events = await collect(run(envelope({ model: 'nonesuch/m' })))
     expect(events.length).toBe(1)

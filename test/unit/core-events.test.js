@@ -1,10 +1,15 @@
 import { describe, test, expect } from 'vitest'
-import { EVENT_TYPES, isEvent } from '#core/events.js'
+import { DELTA_KINDS, EVENT_TYPES, isEvent } from '#core/events.js'
 
 describe('core/events', () => {
   test('EVENT_TYPES is frozen with 4 variants', () => {
     expect(Object.isFrozen(EVENT_TYPES)).toBe(true)
     expect([...EVENT_TYPES].sort()).toEqual(['delta', 'done', 'error', 'idle'])
+  })
+
+  test('DELTA_KINDS is frozen: the answer, call args, commentary, a reasoning summary and raw reasoning', () => {
+    expect(Object.isFrozen(DELTA_KINDS)).toBe(true)
+    expect(DELTA_KINDS).toEqual(['message', 'function_call', 'commentary', 'reasoning_summary', 'reasoning'])
   })
 
   test('isEvent accepts every variant type', () => {

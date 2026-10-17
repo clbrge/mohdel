@@ -29,7 +29,8 @@ export async function * mistral (envelope, deps = {}) {
   yield * runChatCompletions(envelope, client, {
     stream: true,
     provider: 'mistral',
-    toolChoiceFlavor: 'mistral'
+    toolChoiceFlavor: 'mistral',
+    reasoningReplay: 'chunks'
   }, {
     signal: deps.signal,
     log: deps.log,

@@ -59,7 +59,12 @@ interface CallEnvelope {
   // --- Transport metadata ---
   callId:       string            // unique per call
   authId:       string            // quota-scoping key for thin-gate
-  auth:         { key: string }   // provider API key
+  auth:         { key: string,    // provider API key
+                  summaries?: boolean } // whether this credential's account may
+                                        // ask for reasoning summaries where a
+                                        // provider allows them only to some
+                                        // accounts (openai, chatgpt: verified
+                                        // organizations); absent there, not asked
   traceparent?: string            // W3C trace context
   baggage?:     string            // W3C baggage
 
@@ -103,6 +108,12 @@ interface CallEnvelope {
   idleHeartbeatMs?:   number        // emit synthetic 'idle' events when adapter is silent
                                     // for ≥ N ms (re-emitted every N ms). Advisory only —
                                     // mohdel does not abort on its own. Omit to disable.
+  reasoningSummaries?: boolean      // ask for a summary of the model's reasoning,
+                                    // streamed as 'reasoning_summary' deltas;
+                                    // absent, none is asked for or streamed
+  rawReasoning?:      boolean       // stream the provider's raw reasoning as
+                                    // 'reasoning' deltas; absent, none is streamed
+                                    // (it is still kept for replay)
 }
 
 interface Message {
@@ -122,13 +133,19 @@ interface ToolCall {
 }
 
 type MessagePart =
-  | { type: 'text',      text: string; cache?: '5m' | '1h' }
+  | { type: 'text',      text: string; cache?: '5m' | '1h'; phase?: string }
+                              // phase: 'commentary' on what the model wrote for the person
+                              // while it worked, as it came in commentaryParts; sent back so
+                              // the model that wrote it reads it as such
                               // cache: on a system part, a breakpoint at this block; on any
                               // other part, opts the conversation into prefix caching and the
                               // adapter places the breakpoints. Ignored where caching is automatic.
                               // On another part type, or with another value, the call is refused:
                               // SESSION_INVALID_PROMPT; at the gate, 400 PROTOCOL_INVALID_ENVELOPE.
-  | { type: 'reasoning', text: string }
+  | { type: 'reasoning', text: string; encrypted?: string; id?: string; model?: string }
+                              // encrypted: the provider's opaque reasoning, as it came in
+                              // reasoningParts; model: the model that produced it — only that
+                              // model is sent it back
   | { type: 'image',     fileUri: string; mimeType: string }  // role 'user' or 'tool'
 
 interface MediaRef { fileUri: string; mimeType: string }
@@ -311,13 +328,18 @@ satisfy this automatically.
 
 ```ts
 interface DeltaChunk {
-  type: 'message' | 'function_call'
+  type: 'message'            // the answer's text, and nothing else
+      | 'function_call'      // a tool call's arguments as they stream
+      | 'commentary'         // text the model writes for the person while it works
+      | 'reasoning_summary'  // a summary of its reasoning — only when the envelope sets reasoningSummaries
+      | 'reasoning'          // raw reasoning — only when the envelope sets rawReasoning
   delta: string
 }
 ```
 
 Zero or more per call. Adapters **SHOULD** flush after each delta so
-downstream consumers see low latency.
+downstream consumers see low latency. `output` is what the `message`
+deltas said; commentary and reasoning are never part of it.
 
 ### 4.2 `idle` — synthetic heartbeat
 
@@ -366,6 +388,11 @@ interface AnswerResult {
                                          // reports one. `null` means it downgraded to
                                          // standard service. `cost` follows this, not
                                          // `speed`
+  commentaryParts?: Array<{              // what the model wrote for the person while
+    type:  'text'                        // it worked, in order; a multi-turn caller
+    text:  string                        // puts them in the assistant message it
+    phase: string                        // records, after reasoningParts, so the
+  }>                                     // provider gets them back where they were
 }
 ```
 
@@ -443,8 +470,12 @@ MUST NOT write `auth.key` or any secret to stderr.
 Frozen at 0.90. Post-release:
 
 - **Additive:** new optional envelope fields, new `TypedError.type`
-  values, new `warning` strings, new delta chunk types, new `Status`
-  values — allowed without a bump.
+  values, new `warning` strings, new `Status` values — allowed without a
+  bump.
+- **New delta chunk types** are breaking: a typed consumer (the Rust
+  protocol crate, the clients, the gate's abort drain) refuses a type it does
+  not know, and a consumer that joins every delta's text into the answer
+  would show text that is not the answer. They require a major version bump.
 - **Breaking:** renames, required-field additions, removal — require
   a major version bump.
 

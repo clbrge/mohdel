@@ -40,7 +40,7 @@ import { streamingDispatcher } from './_dispatcher.js'
 
 /**
  * Approximate chars-per-token used to estimate Anthropic thinking
- * tokens (the API doesn't report them separately in `usage`).
+ * tokens when `usage` reports no `output_tokens_details.thinking_tokens`.
  *
  * ## Known limitations (cost accuracy)
  *
@@ -67,6 +67,8 @@ import { streamingDispatcher } from './_dispatcher.js'
  * that the day they introduce asymmetric pricing.)
  */
 const ANTHROPIC_THINKING_CHARS_PER_TOKEN = 4
+
+const REPLAYED_BLOCKS = new Set(['text', 'thinking', 'redacted_thinking', 'tool_use'])
 
 /**
  * Fallback `max_tokens` when the caller supplied no `outputBudget`
@@ -108,7 +110,7 @@ export async function * anthropic (envelope, deps = {}) {
     return
   }
 
-  const { system, conversation, conversationCacheTtl } = splitPrompt(envelope.prompt, imageParts)
+  const { system, conversation, conversationCacheTtl } = splitPrompt(envelope.prompt, imageParts, envelope.model)
   if (imageBlocks.length) injectImageBlocks(conversation, imageBlocks)
 
   const request = buildRequest(envelope, conversation, system, conversationCacheTtl)
@@ -121,7 +123,12 @@ export async function * anthropic (envelope, deps = {}) {
   let cacheWriteTokens = 0
   let cacheWrite1hTokens = 0
   let cacheReadTokens = 0
-  let thinkingChars = 0
+  /** @type {number | null} */
+  let reportedThinkingTokens = null
+  // The response's content blocks as they came, sent back unmodified to this model on its next call.
+  /** @type {any[]} */
+  const blocks = []
+  let replayable = true
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
@@ -158,6 +165,8 @@ export async function * anthropic (envelope, deps = {}) {
           break
 
         case 'content_block_start':
+          if (REPLAYED_BLOCKS.has(event.content_block?.type)) blocks[event.index] = { ...event.content_block }
+          else replayable = false
           if (event.content_block?.type === 'tool_use') {
             toolBlocks.set(event.index, {
               id: event.content_block.id,
@@ -171,13 +180,17 @@ export async function * anthropic (envelope, deps = {}) {
           if (event.delta?.type === 'text_delta' && event.delta.text) {
             if (first === null) first = String(process.hrtime.bigint())
             outputParts.push(event.delta.text)
+            if (blocks[event.index]) blocks[event.index].text = (blocks[event.index].text ?? '') + event.delta.text
             yield { type: 'delta', delta: { type: 'message', delta: event.delta.text } }
           } else if (event.delta?.type === 'thinking_delta') {
-            // Thinking content is not surfaced via `delta` events —
-            // only `message` and `function_call` deltas stream to
-            // consumers. Accumulate char count to estimate
-            // thinking_tokens at the end.
-            thinkingChars += (event.delta.thinking || '').length
+            const text = event.delta.thinking || ''
+            if (blocks[event.index]) blocks[event.index].thinking = (blocks[event.index].thinking ?? '') + text
+            if (text) {
+              if (first === null) first = String(process.hrtime.bigint())
+              yield { type: 'delta', delta: { type: 'reasoning_summary', delta: text } }
+            }
+          } else if (event.delta?.type === 'signature_delta') {
+            if (blocks[event.index]) blocks[event.index].signature = event.delta.signature
           } else if (event.delta?.type === 'input_json_delta') {
             const block = toolBlocks.get(event.index)
             if (block) {
@@ -192,6 +205,9 @@ export async function * anthropic (envelope, deps = {}) {
           break
 
         case 'message_delta':
+          if (typeof event.usage?.output_tokens_details?.thinking_tokens === 'number') {
+            reportedThinkingTokens = event.usage.output_tokens_details.thinking_tokens
+          }
           if (event.delta?.stop_reason === 'max_tokens') {
             status = STATUS_INCOMPLETE
             warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
@@ -223,11 +239,10 @@ export async function * anthropic (envelope, deps = {}) {
   }
 
   const end = String(process.hrtime.bigint())
-  // Estimate thinking tokens. Primary path: count streamed thinking_delta
-  // chars (sonnet emits these). Fallback: gap between Anthropic's reported
-  // output_tokens and what actually streamed as visible output (text +
-  // tool input JSON) — catches redacted_thinking blocks (opus 4.7 default)
-  // that consume output tokens but emit no streaming deltas.
+  // Thinking tokens, when the response does not report them: the gap
+  // between Anthropic's output_tokens and what streamed as visible output
+  // (text + tool input JSON). Streamed thinking text is a summary, so its
+  // length says nothing of the tokens thought.
   //
   // When the caller explicitly disabled thinking via `outputEffort: 'none'`,
   // we did NOT send `request.thinking` (see buildRequest) — Anthropic
@@ -242,10 +257,10 @@ export async function * anthropic (envelope, deps = {}) {
   const streamedOutputTokens = Math.ceil(streamedOutputChars / ANTHROPIC_THINKING_CHARS_PER_TOKEN)
   const thinkingDisabled = envelope.outputEffort === 'none'
   let estimatedThinkingTokens
-  if (thinkingDisabled) {
+  if (reportedThinkingTokens !== null) {
+    estimatedThinkingTokens = Math.min(reportedThinkingTokens, outputTokens)
+  } else if (thinkingDisabled) {
     estimatedThinkingTokens = 0
-  } else if (thinkingChars > 0) {
-    estimatedThinkingTokens = Math.min(Math.ceil(thinkingChars / ANTHROPIC_THINKING_CHARS_PER_TOKEN), outputTokens)
   } else {
     estimatedThinkingTokens = Math.max(0, outputTokens - streamedOutputTokens)
   }
@@ -281,7 +296,29 @@ export async function * anthropic (envelope, deps = {}) {
   if (toolBlocks.size > 0) {
     done.result.toolCalls = finalizeToolCalls(toolBlocks)
   }
+  const turn = replayable && blocks.some(b => b?.type === 'thinking' || b?.type === 'redacted_thinking')
+    ? replayBlocks(blocks, toolBlocks)
+    : null
+  if (turn) done.result.reasoningParts = [{ type: 'reasoning', text: '', encrypted: JSON.stringify(turn), model: envelope.model }]
   yield done
+}
+
+/**
+ * A response's content blocks, cleaned to what goes back: thinking with its signature, redacted
+ * thinking, text, and tool calls with their parsed input.
+ *
+ * @param {any[]} blocks
+ * @param {Map<number, {id: string, name: string, inputJson: string}>} toolBlocks
+ */
+function replayBlocks (blocks, toolBlocks) {
+  return blocks.flatMap((b, index) => {
+    if (!b) return []
+    if (b.type === 'thinking') return [{ type: 'thinking', thinking: b.thinking ?? '', signature: b.signature ?? '' }]
+    if (b.type === 'redacted_thinking') return [{ type: 'redacted_thinking', data: b.data }]
+    if (b.type === 'text') return [{ type: 'text', text: b.text ?? '' }]
+    const call = toolBlocks.get(index)
+    return [{ type: 'tool_use', id: b.id, name: b.name, input: safeParseJson(call?.inputJson ?? '') }]
+  })
 }
 
 /**
@@ -345,7 +382,7 @@ function buildRequest (envelope, conversation, system, conversationCacheTtl = nu
   if (spec?.thinkingEffortLevels) {
     const effort = envelope.outputEffort ?? spec.defaultThinkingEffort
     if (effort && effort !== 'none') {
-      request.thinking = { type: 'adaptive' }
+      request.thinking = { type: 'adaptive', display: envelope.reasoningSummaries === true ? 'summarized' : 'omitted' }
       if (spec.thinkingEffortLevels[effort] != null) {
         request.output_config = { effort }
       }
@@ -419,26 +456,23 @@ function placeConversationBreakpoints (messages, ttl) {
   const targets = [trailing]
   const milestone = MILESTONE_INTERVAL * Math.floor(trailing / MILESTONE_INTERVAL) - 1
   if (milestone >= 0 && milestone !== trailing) targets.unshift(milestone)
-  let placed = 0
-  let idx = 0
-  for (const m of messages) {
-    const len = Array.isArray(m.content) ? m.content.length : 1
-    for (const t of targets) {
-      if (t >= idx && t < idx + len) {
-        if (!Array.isArray(m.content)) {
-          m.content = [{ type: 'text', text: m.content }]
-        }
-        m.content[t - idx].cache_control = cacheControlFor(ttl)
-        placed++
-      }
-    }
-    idx += len
+  // A thinking block cannot carry `cache_control`; the breakpoint moves back to the block before it.
+  const flat = messages.flatMap(m => Array.isArray(m.content) ? m.content.map((b, i) => ({ m, i, b })) : [{ m, i: 0, b: null }])
+  const thinking = (ref) => ref.b?.type === 'thinking' || ref.b?.type === 'redacted_thinking'
+  const marked = new Set()
+  for (let t of targets) {
+    while (t >= 0 && thinking(flat[t])) t--
+    if (t < 0 || marked.has(t)) continue
+    marked.add(t)
+    const { m, i } = flat[t]
+    if (!Array.isArray(m.content)) m.content = [{ type: 'text', text: m.content }]
+    m.content[i].cache_control = cacheControlFor(ttl)
   }
-  return placed
+  return marked.size
 }
 
 /** @param {string | import('#core/envelope.js').Message[]} prompt */
-function splitPrompt (prompt, imageParts) {
+function splitPrompt (prompt, imageParts, model) {
   if (typeof prompt === 'string') {
     return { system: '', conversation: [{ role: 'user', content: prompt }], conversationCacheTtl: null }
   }
@@ -494,6 +528,8 @@ function splitPrompt (prompt, imageParts) {
           content: hasImagePart(m.content) ? toAnthropicContent(m.content, imageParts) : flattenText(m.content)
         }]
       })
+    } else if (m.role === 'assistant' && boundTurn(m.content, model).length) {
+      conversation.push({ role: 'assistant', content: boundTurn(m.content, model) })
     } else if (m.role === 'assistant' && m.toolCalls?.length) {
       // Assistant + tool_use: optional text block followed by one
       // tool_use block per call.
@@ -526,10 +562,30 @@ function splitPrompt (prompt, imageParts) {
   return { system, conversation, conversationCacheTtl }
 }
 
-/** @param {string | import('#core/envelope.js').MessagePart[]} content */
+/**
+ * An assistant turn this model produced, as its blocks came — thinking included, which the API
+ * takes back only unmodified and in order — or none.
+ *
+ * @param {string | import('#core/envelope.js').MessagePart[]} content
+ * @param {string} model
+ * @returns {any[]}
+ */
+function boundTurn (content, model) {
+  if (!Array.isArray(content)) return []
+  return content
+    .filter(p => p.type === 'reasoning' && p.encrypted && p.model === model)
+    .flatMap(p => JSON.parse(p.encrypted))
+}
+
+/**
+ * The answer's text: what a model wrote for the person while it worked comes back in its own
+ * thinking blocks, never as text.
+ *
+ * @param {string | import('#core/envelope.js').MessagePart[]} content
+ */
 function flattenText (content) {
   if (typeof content === 'string') return content
-  return content.filter(p => p.type === 'text' && p.text).map(p => p.text).join('\n')
+  return content.filter(p => p.type === 'text' && p.text && p.phase !== 'commentary').map(p => p.text).join('\n')
 }
 
 /**
@@ -538,7 +594,7 @@ function flattenText (content) {
  */
 function toAnthropicContent (content, imageParts) {
   if (typeof content === 'string') return content
-  return content.filter(p => p.type !== 'reasoning').map(p => {
+  return content.filter(p => p.type !== 'reasoning' && p.phase !== 'commentary').map(p => {
     if (p.type === 'text') return { type: 'text', text: p.text ?? '' }
     if (p.type === 'image') return toAnthropicImageBlock(imageParts.get(p))
     throw new Error(`unsupported content part type: ${p.type}`)

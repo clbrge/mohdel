@@ -187,7 +187,8 @@ Examples:
   }
 
   if (stream && !json) {
-    options.realtimeHandler = (delta) => {
+    options.realtimeHandler = ({ type, delta }) => {
+      if (type !== 'message') return
       stop()
       process.stdout.write(delta)
     }

@@ -447,5 +447,56 @@
         "toolCallId": "call_1"
       }
     ]
+  },
+  "reasoning-asked-summaries-not-allowed": {
+    "callId": "c1",
+    "authId": "a1",
+    "auth": {
+      "key": "sk-test",
+      "summaries": false
+    },
+    "model": "deepseek/deepseek-v4",
+    "prompt": "Why is the sky blue?",
+    "reasoningSummaries": true,
+    "rawReasoning": true
+  },
+  "assistant-commentary-with-phase": {
+    "callId": "c1",
+    "authId": "a1",
+    "auth": {
+      "key": "sk-test"
+    },
+    "model": "openai/gpt-5.5",
+    "prompt": [
+      {
+        "role": "user",
+        "content": "Weather in Paris?"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Checking the forecast for Paris.",
+            "phase": "commentary"
+          }
+        ],
+        "toolCalls": [
+          {
+            "id": "call_1",
+            "name": "get_weather",
+            "arguments": {
+              "city": "paris"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "toolCallId": "call_1",
+        "toolName": "get_weather",
+        "content": "18C, clear"
+      }
+    ]
   }
 }

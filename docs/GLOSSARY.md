@@ -118,7 +118,7 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 
 **`curated.json`** — the catalog (see above).
 
-**`providers.json`** — provider-level rate limits (`rpmLimit`, `tpmLimit`). Per-model overrides go in `curated.json`.
+**`providers.json`** — provider-level rate limits (`rpmLimit`, `tpmLimit`), and `reasoningSummaries`: whether the account behind the key mohdel finds may ask for reasoning summaries. Per-model rate-limit overrides go in `curated.json`.
 
 **`default.json`** — the model `mo ask` falls back to when none is given, and the coding agent `mo` hands briefs to. Set with `mo default` and `mo`.
 

@@ -1,6 +1,7 @@
 //! `LocalAuth`: a provider's key the way `mo` finds it — the process
 //! environment first, then mohdel's environment file, under the variable
-//! names of `src/lib/providers.js`.
+//! names of `src/lib/providers.js` — and, from `providers.json`, whether
+//! that key's account may ask for reasoning summaries.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -44,6 +45,7 @@ pub struct LocalAuth {
     file: PathBuf,
     vars: HashMap<String, String>,
     env: fn(&str) -> Option<String>,
+    summaries: HashMap<String, bool>,
 }
 
 impl LocalAuth {
@@ -54,7 +56,7 @@ impl LocalAuth {
                 "cannot locate the home directory holding mohdel's environment file".into(),
             )
         })?;
-        Self::from_file(&dir.join("environment"))
+        Self::from_file(&dir.join("environment"))?.summaries_from(&dir.join("providers.json"))
     }
 
     /// The same, from a given file.
@@ -80,7 +82,40 @@ impl LocalAuth {
             file: path.to_path_buf(),
             vars,
             env,
+            summaries: HashMap::new(),
         })
+    }
+
+    /// `reasoningSummaries` per provider in a `providers.json`: whether the
+    /// account behind that provider's key may ask for reasoning summaries.
+    pub fn summaries_from(mut self, path: &Path) -> Result<Self, AuthError> {
+        let content = match std::fs::read_to_string(path) {
+            Ok(content) => content,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(self),
+            Err(e) => {
+                return Err(AuthError::Other(format!(
+                    "cannot read {}: {e}",
+                    path.display()
+                )))
+            }
+        };
+        let table: HashMap<String, serde_json::Value> = serde_json::from_str(&content)
+            .map_err(|e| AuthError::Other(format!("{} is not a JSON object: {e}", tilde(path))))?;
+        for (provider, entry) in table {
+            match entry.get("reasoningSummaries") {
+                None => {}
+                Some(serde_json::Value::Bool(allowed)) => {
+                    self.summaries.insert(provider, *allowed);
+                }
+                Some(_) => {
+                    return Err(AuthError::Other(format!(
+                        "{} — {provider}.reasoningSummaries is true or false",
+                        tilde(path)
+                    )))
+                }
+            }
+        }
+        Ok(self)
     }
 
     fn key_for(&self, model: &str) -> Result<SecretString, AuthError> {
@@ -99,6 +134,10 @@ impl LocalAuth {
                 self.missing(provider, var),
             )),
         }
+    }
+
+    pub(crate) fn summaries_for(&self, model: &str) -> Option<bool> {
+        self.summaries.get(provider_of(model)).copied()
     }
 
     /// A variable already in the environment wins, even when empty:
@@ -124,6 +163,7 @@ impl AuthPolicy for LocalAuth {
     async fn resolve(&self, _auth_id: &str, model: &str) -> Result<Auth, AuthError> {
         Ok(Auth {
             key: self.key_for(model)?,
+            summaries: self.summaries_for(model),
         })
     }
 }
@@ -313,6 +353,36 @@ mod tests {
             Ok(_) => panic!("expected an error"),
             Err(e) => e.to_string(),
         }
+    }
+
+    #[test]
+    fn reads_whether_an_account_may_ask_for_summaries_from_providers_json() {
+        let providers = temp_file(
+            "providers.json",
+            br#"{"openai":{"reasoningSummaries":true,"rpmLimit":500},"xai":{"reasoningSummaries":false},"anthropic":{"rpmLimit":50}}"#,
+        );
+        let auth = LocalAuth::with_env(&missing_file("summaries"), no_env)
+            .unwrap()
+            .summaries_from(&providers)
+            .unwrap();
+        assert_eq!(auth.summaries_for("openai/gpt-5.5"), Some(true));
+        assert_eq!(auth.summaries_for("xai/grok-4.7"), Some(false));
+        assert_eq!(auth.summaries_for("anthropic/claude-opus-5-5"), None);
+        let absent = LocalAuth::with_env(&missing_file("summaries"), no_env)
+            .unwrap()
+            .summaries_from(&missing_file("providers"))
+            .unwrap();
+        assert_eq!(absent.summaries_for("openai/gpt-5.5"), None);
+        let wrong = temp_file(
+            "providers-wrong.json",
+            br#"{"openai":{"reasoningSummaries":"on"}}"#,
+        );
+        let refused = LocalAuth::with_env(&missing_file("summaries"), no_env)
+            .unwrap()
+            .summaries_from(&wrong);
+        assert!(refused.is_err_and(|e| e
+            .to_string()
+            .contains("openai.reasoningSummaries is true or false")));
     }
 
     #[test]

@@ -128,7 +128,13 @@ export async function * gemini (envelope, deps = {}) {
 
       for (const part of chunk?.candidates?.[0]?.content?.parts ?? []) {
         // A thought summary, which `includeThoughts` asks for: the model's reasoning, never its answer.
-        if (part.thought === true) continue
+        if (part.thought === true) {
+          if (typeof part.text === 'string' && part.text) {
+            if (first === null) first = String(process.hrtime.bigint())
+            yield { type: 'delta', delta: { type: 'reasoning_summary', delta: part.text } }
+          }
+          continue
+        }
         if (typeof part.text === 'string' && part.text.length > 0) {
           if (first === null) first = String(process.hrtime.bigint())
           outputParts.push(part.text)
@@ -246,7 +252,8 @@ function buildRequest (envelope, contents, systemInstruction) {
   }
 
   // Thinking — model-family-dependent shape:
-  //   - gemini-3 and later: thinkingConfig = { includeThoughts: true, thinkingLevel: <name> }
+  //   - gemini-3 and later: thinkingConfig = { thinkingLevel: <name> }, plus includeThoughts
+  //     when the call asks for reasoning summaries
   //   - gemini-2.x: thinkingConfig = { thinkingBudget: <number> }
   //   - other (e.g. gemini-1.5): thinkingBudget with maxOutputTokens
   //     adjustment for headroom
@@ -255,7 +262,7 @@ function buildRequest (envelope, contents, systemInstruction) {
     const budget = spec.thinkingEffortLevels[effort]
     const bare = bareOf(envelope.model)
     if (/^gemini-(?:[3-9]|\d{2,})/.test(bare)) {
-      config.thinkingConfig = { includeThoughts: true, thinkingLevel: effort }
+      config.thinkingConfig = { thinkingLevel: effort, ...(envelope.reasoningSummaries === true ? { includeThoughts: true } : {}) }
     } else if (/gemini-2/.test(bare)) {
       if (typeof budget === 'number') {
         config.thinkingConfig = { thinkingBudget: budget }

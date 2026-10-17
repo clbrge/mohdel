@@ -19,11 +19,11 @@ const fixturesDir = path.join(here, '..', 'conformance')
 // shape evolves.
 
 const ENVELOPE_ALLOWED = new Set(ENVELOPE_FIELDS)
-const AUTH_ALLOWED = new Set(['key'])
+const AUTH_ALLOWED = new Set(['key', 'summaries'])
 const MEDIA_ALLOWED = new Set(['fileUri', 'mimeType'])
 const TOOL_SPEC_ALLOWED = new Set(['name', 'description', 'parameters'])
 const MESSAGE_ALLOWED = new Set(['role', 'content', 'toolCallId', 'toolName', 'toolCalls'])
-const MESSAGE_PART_ALLOWED = new Set(['type', 'text', 'cache', 'fileUri', 'mimeType', 'encrypted', 'id', 'model'])
+const MESSAGE_PART_ALLOWED = new Set(['type', 'text', 'cache', 'phase', 'fileUri', 'mimeType', 'encrypted', 'id', 'model'])
 
 const EVENT_ALLOWED = new Set(['type', 'delta', 'result', 'error', 'sinceMs'])
 const DELTA_CHUNK_ALLOWED = new Set(['type', 'delta'])
@@ -31,7 +31,7 @@ const ANSWER_RESULT_ALLOWED = new Set([
   'status', 'output', 'inputTokens', 'outputTokens', 'thinkingTokens',
   'cacheWriteInputTokens', 'cacheWrite1hInputTokens', 'cacheReadInputTokens',
   'cost', 'timestamps', 'warning', 'toolCalls', 'maxInterFrameMs', 'reasoning',
-  'speed', 'servedSpeed', 'reasoningParts'
+  'speed', 'servedSpeed', 'reasoningParts', 'commentaryParts'
 ])
 const TIMESTAMPS_ALLOWED = new Set(['start', 'first', 'end'])
 const TOOL_CALL_ALLOWED = new Set(['id', 'name', 'arguments', 'thoughtSignature'])
@@ -154,6 +154,9 @@ describe('conformance events (JS side)', () => {
         }
         for (const p of ev.result.reasoningParts ?? []) {
           assertOnlyKnownKeys(p, MESSAGE_PART_ALLOWED, 'reasoningPart')
+        }
+        for (const p of ev.result.commentaryParts ?? []) {
+          assertOnlyKnownKeys(p, MESSAGE_PART_ALLOWED, 'commentaryPart')
         }
       } else if (ev.type === 'error') {
         assertOnlyKnownKeys(ev.error, TYPED_ERROR_ALLOWED, 'error')

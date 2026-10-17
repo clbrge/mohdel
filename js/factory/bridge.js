@@ -55,12 +55,15 @@ import { createRealtimeDeltaBuffer } from '../../src/lib/utils.js'
  * | `tools` / `toolChoice` / `parallelToolCalls`      | flat fields on envelope                              |
  * | `identifier`                                      | envelope.identifier (adapter maps to provider field) |
  * | `idleHeartbeatMs`                                 | envelope.idleHeartbeatMs (session emits idle events) |
+ * | `reasoningSummaries`                              | envelope.reasoningSummaries (reasoning summaries)    |
+ * | `rawReasoning`                                    | envelope.rawReasoning (session streams raw reasoning)|
  * | `realtimeHandler` / `bufferOpts`                  | drained via createRealtimeDeltaBuffer                |
  * | `providerOrder` / `providerAllow` / `providerDeny`| envelope.providerOptions.openrouter                  |
  * | `traceparent` / `baggage`                         | envelope transport metadata                          |
  * | `callId` / `authId`                               | envelope transport metadata                          |
  * | `signal`                                          | not on the wire — `run()` deps, aborts the call      |
  * | `configuration.apiKey`                            | envelope.auth.key                                    |
+ * | `configuration.summaries`                         | envelope.auth.summaries                              |
  * | **`parentSpan`**                                  | **dropped** — use `traceparent` instead              |
  * | **`maybeThrowHandler`**                           | **dropped** — no factory-side validation hook        |
  * | **`configuration.baseURL` / `defaultHeaders` / …**| **rejected** — adapters own baseURL                  |
@@ -304,6 +307,8 @@ function toEnvelope ({ modelKey, configuration, prompt, options }) {
   if (options.parallelToolCalls === false) envelope.parallelToolCalls = false
   if (options.identifier) envelope.identifier = options.identifier
   if (options.idleHeartbeatMs !== undefined) envelope.idleHeartbeatMs = options.idleHeartbeatMs
+  if (options.reasoningSummaries === true) envelope.reasoningSummaries = true
+  if (options.rawReasoning === true) envelope.rawReasoning = true
 
   // OpenRouter routing prefs ride in their own bag; the adapter reads them via `config.mutateArgs`.
   if (options.providerOrder || options.providerAllow || options.providerDeny) {
@@ -350,7 +355,23 @@ function newCallId () {
  * @param {any} configuration
  * @returns {import('#core/envelope.js').Auth}
  */
-const ALLOWED_CONFIG_KEYS = new Set(['apiKey'])
+const ALLOWED_CONFIG_KEYS = new Set(['apiKey', 'summaries'])
+
+/**
+ * `reasoningSummaries` in a provider's `providers.json` entry: whether the account behind the
+ * key mohdel finds for that provider may ask for reasoning summaries. Read as the gate's
+ * `LocalAuth` reads it.
+ *
+ * @param {string} provider
+ * @param {Record<string, any>} providersConfig
+ * @returns {{ summaries?: boolean }}
+ */
+export function summariesOf (provider, providersConfig) {
+  const allowed = providersConfig[provider]?.reasoningSummaries
+  if (allowed === undefined) return {}
+  if (typeof allowed === 'boolean') return { summaries: allowed }
+  throw new MohdelError(`providers.json — ${provider}.reasoningSummaries is true or false`, { type: 'CONFIGURATION_INVALID', retryable: false })
+}
 
 export function configToAuth (configuration) {
   if (!configuration) return { key: '' }
@@ -359,13 +380,17 @@ export function configToAuth (configuration) {
     throw new MohdelError('unsupported per-call configuration', {
       type: 'CONFIGURATION_UNSUPPORTED',
       detail:
-        'per-call SDK configuration is limited to `apiKey`. ' +
+        'per-call SDK configuration is limited to `apiKey` and `summaries`. ' +
         `Unsupported keys: ${unsupported.join(', ')}. ` +
         'Move other fields to environment variables or pin them at factory construction.',
       retryable: false
     })
   }
-  return { key: configuration.apiKey || '' }
+  const { summaries } = configuration
+  if (summaries !== undefined && typeof summaries !== 'boolean') {
+    throw new MohdelError('configuration.summaries is true or false', { type: 'CONFIGURATION_INVALID', retryable: false })
+  }
+  return { key: configuration.apiKey || '', ...(summaries === undefined ? {} : { summaries }) }
 }
 
 /**

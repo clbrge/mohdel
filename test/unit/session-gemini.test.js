@@ -51,7 +51,7 @@ function chunk (text, finishReason) {
 }
 
 describe('session/adapters/gemini', () => {
-  test('a thought summary is neither streamed nor part of the answer', async () => {
+  test('a thought summary streams as reasoning_summary and is never part of the answer', async () => {
     const { client } = makeClient({
       chunks: [
         { candidates: [{ content: { parts: [{ text: '**Planning the reply**', thought: true }] } }] },
@@ -65,7 +65,9 @@ describe('session/adapters/gemini', () => {
 
     const events = await collect(gemini(envelope(), { client }))
     expect(events.filter(e => e.type === 'delta').map(e => e.delta)).toEqual([
+      { type: 'reasoning_summary', delta: '**Planning the reply**' },
       { type: 'message', delta: 'Hi' },
+      { type: 'reasoning_summary', delta: 'still thinking' },
       { type: 'message', delta: ' there' }
     ])
     const done = events.at(-1)

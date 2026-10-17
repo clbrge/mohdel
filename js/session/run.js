@@ -243,6 +243,9 @@ export async function * run (envelope, {
       lastFrameAt = now
 
       if (ev.type === 'delta') {
+        // Kept by the adapter for replay all the same; streamed only to a caller that asked.
+        if (ev.delta.type === 'reasoning' && envelope.rawReasoning !== true) continue
+        if (ev.delta.type === 'reasoning_summary' && envelope.reasoningSummaries !== true) continue
         sawDelta = true
       } else if (ev.type === 'done') {
         sawTerminal = true

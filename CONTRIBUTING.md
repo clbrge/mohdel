@@ -286,7 +286,7 @@ All under `~/.config/mohdel/` (XDG via `env-paths`):
 | `environment` | API keys (`KEY=value`, loaded automatically) |
 | `curated.json` | Model catalog |
 | `catalog.local.json` | This installation's own catalog fields and tags |
-| `providers.json` | Provider-level rate limits |
+| `providers.json` | Provider-level rate limits, and whether the account may ask for reasoning summaries (`reasoningSummaries`) |
 | `excluded.json` | Models hidden from `list` and `curate` |
 | `default.json` | Default model, and the chosen coding agent |
 

@@ -121,6 +121,7 @@ impl AuthPolicy for ChatGptAuth {
         }
         Ok(Auth {
             key: self.token().await?,
+            summaries: self.local.summaries_for(model),
         })
     }
 }

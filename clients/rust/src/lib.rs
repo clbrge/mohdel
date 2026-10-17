@@ -10,7 +10,7 @@
 //! let envelope = CallEnvelope {
 //!     call_id: "c-1".into(),
 //!     auth_id: "u-1".into(),
-//!     auth: Some(Auth { key: SecretString::new("sk-...") }),
+//!     auth: Some(Auth::of(SecretString::new("sk-..."))),
 //!     model: "anthropic/claude-haiku-4-5".into(),
 //!     prompt: Prompt::Text("Hello".into()),
 //!     ..Client::envelope_defaults()
@@ -162,6 +162,8 @@ impl Client {
             parallel_tool_calls: None,
             identifier: None,
             idle_heartbeat_ms: None,
+            reasoning_summaries: None,
+            raw_reasoning: None,
             provider_options: None,
         }
     }

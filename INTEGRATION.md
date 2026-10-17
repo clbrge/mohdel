@@ -247,7 +247,7 @@ for await (const ev of call(envelope, {
   socketPath: '/tmp/mohdel-data.sock',
   signal: controller.signal   // optional AbortSignal
 })) {
-  if (ev.type === 'delta') {
+  if (ev.type === 'delta' && ev.delta.type === 'message') {
     process.stdout.write(ev.delta.delta)
   } else if (ev.type === 'done') {
     console.log('\n→', ev.result.status, 'cost:', ev.result.cost)
@@ -346,9 +346,12 @@ Message shape:
 Three variants:
 
 ```js
-// Streaming content (message or function_call deltas)
+// Streaming content: the answer, call arguments, what the model says while it works
 { type: 'delta', delta: { type: 'message', delta: 'Hello' } }
 { type: 'delta', delta: { type: 'function_call', delta: '{"x":' } }
+{ type: 'delta', delta: { type: 'commentary', delta: 'Checking the forecast first.' } }
+{ type: 'delta', delta: { type: 'reasoning_summary', delta: '**Comparing sources**' } }  // only with reasoningSummaries
+{ type: 'delta', delta: { type: 'reasoning', delta: 'The user wants…' } }  // only with rawReasoning
 
 // Terminal success
 {
@@ -555,7 +558,9 @@ const response = await model.answer(prompt, {
   parallelToolCalls: false,                      // serialize tool calls
 
   // --- Streaming ---
-  realtimeHandler: (chunk) => {},    // chunk = { type: 'message'|'function_call', delta: string }
+  realtimeHandler: (chunk) => {},    // chunk = { type: 'message'|'function_call'|'commentary'|'reasoning_summary'|'reasoning', delta }
+  reasoningSummaries: false,         // ask for reasoning summaries, streamed as 'reasoning_summary' chunks
+  rawReasoning: false,               // stream raw reasoning as 'reasoning' chunks
   bufferOpts: { maxChars: 250, maxMs: 10_000 },  // realtimeHandler flush tuning
 
   // --- Tracing ---
@@ -577,7 +582,7 @@ const response = await model.answer(prompt, {
 **Not supported** (see bridge docstring for full table):
 - `parentSpan` — pass `traceparent` instead (W3C string is transport-friendly)
 - `maybeThrowHandler` — no factory-side validation hook
-- `configuration.baseURL` / `defaultHeaders` / etc. — only `configuration.apiKey` is threaded through; others throw `CONFIGURATION_UNSUPPORTED`
+- `configuration.baseURL` / `defaultHeaders` / etc. — only `configuration.apiKey` and `configuration.summaries` are threaded through; others throw `CONFIGURATION_UNSUPPORTED`
 
 Prompt shape accepted by `.answer()`:
 
@@ -685,8 +690,8 @@ Pass a `realtimeHandler` to receive buffered deltas:
 ```js
 const response = await model.answer(prompt, {
   realtimeHandler: (chunk) => {
-    // chunk = { type: 'message' | 'function_call', delta: string }
-    process.stdout.write(chunk.delta)
+    // chunk = { type: 'message' | 'function_call' | 'commentary' | 'reasoning_summary' | 'reasoning', delta: string }
+    if (chunk.type === 'message') process.stdout.write(chunk.delta)
   }
 })
 // `response` still resolves to the full AnswerResult after streaming completes.
@@ -700,7 +705,7 @@ All adapters emit delta events. The factory bridge pipes them into the handler i
 import { call, coalesce } from 'mohdel/client'
 
 for await (const ev of coalesce(call(envelope, { socketPath }), { maxChars: 50, maxMs: 500 })) {
-  if (ev.type === 'delta') process.stdout.write(ev.delta.delta)
+  if (ev.type === 'delta' && ev.delta.type === 'message') process.stdout.write(ev.delta.delta)
 }
 ```
 
@@ -1136,7 +1141,7 @@ Pass `traceparent` (W3C string) in answer options to parent mohdel's span under 
 |---|---|
 | `~/.config/mohdel/environment` | API keys (`ANTHROPIC_API_SK=…`, `OPENAI_API_SK=…`, …) |
 | `~/.config/mohdel/curated.json` | Model catalog (metadata, pricing, rate limits) |
-| `~/.config/mohdel/providers.json` | Provider-level rate limits |
+| `~/.config/mohdel/providers.json` | Provider-level rate limits, and whether the account may ask for reasoning summaries (`reasoningSummaries`) |
 | `~/.config/mohdel/default.json` | Default model |
 | `~/.cache/mohdel/uploaded-files.json` | Gemini file upload cache |
 

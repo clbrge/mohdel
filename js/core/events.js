@@ -2,7 +2,9 @@
  * Event union for the session → thin-gate → client stream.
  *
  * Four events:
- *   - `delta`  — streaming chunk (message text or function-call args).
+ *   - `delta`  — streaming chunk: the answer's text, function-call args, what the
+ *                model writes for the person while it works, a reasoning summary, or
+ *                raw reasoning when the envelope asks (`DELTA_KINDS`).
  *   - `idle`   — synthetic event emitted when the adapter has been
  *                silent for at least `idleHeartbeatMs` (opt-in via
  *                `CallEnvelope.idleHeartbeatMs`). Carries the elapsed
@@ -21,7 +23,7 @@
  */
 
 /**
- * Streaming chunk: `{ type: 'message' | 'function_call', delta: string }`.
+ * Streaming chunk: `{ type: DeltaKind, delta: string }`.
  *
  * @typedef {object} DeltaEvent
  * @property {'delta'} type
@@ -46,8 +48,17 @@
  */
 
 /**
+ * @typedef {('message'|'function_call'|'commentary'|'reasoning_summary'|'reasoning')} DeltaKind
+ *   `message` is the answer's text and nothing else; `commentary` what the model
+ *   writes for the person while it works; `reasoning_summary` a summary of its
+ *   reasoning, streamed only when the envelope sets `reasoningSummaries`;
+ *   `reasoning` raw reasoning, streamed only when the envelope sets
+ *   `rawReasoning`.
+ */
+
+/**
  * @typedef {object} DeltaChunk
- * @property {('message'|'function_call')} type
+ * @property {DeltaKind} type
  * @property {string} delta
  */
 
@@ -105,6 +116,11 @@
  *   Reasoning parts carrying `encrypted`, from a provider that returns its
  *   reasoning to be replayed. A multi-turn caller puts them at the head
  *   of the assistant message it records for this result.
+ * @property {import('./envelope.js').MessagePart[]} [commentaryParts]
+ *   What the model wrote for the person while it worked, as `text` parts
+ *   carrying their `phase`, in order. A multi-turn caller puts them in the
+ *   assistant message it records for this result, after `reasoningParts`, so
+ *   the provider gets them back where they were. Never part of `output`.
  * @property {number} [maxInterFrameMs]
  *   Longest gap (ms) between adapter events during the call —
  *   from `startedAt` to the first frame, between consecutive
@@ -140,6 +156,8 @@
  */
 
 export const EVENT_TYPES = Object.freeze(['delta', 'idle', 'done', 'error'])
+
+export const DELTA_KINDS = Object.freeze(['message', 'function_call', 'commentary', 'reasoning_summary', 'reasoning'])
 
 /**
  * @param {unknown} x

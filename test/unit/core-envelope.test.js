@@ -21,6 +21,10 @@ describe('core/envelope', () => {
       'identifier',
       // idle heartbeat (synthetic 'idle' events on adapter silence)
       'idleHeartbeatMs',
+      // reasoning summaries asked for and streamed as 'reasoning_summary' deltas
+      'reasoningSummaries',
+      // raw reasoning streamed as 'reasoning' deltas
+      'rawReasoning',
       // provider-specific bag (openrouter routing today; extensible)
       'providerOptions'
     ])

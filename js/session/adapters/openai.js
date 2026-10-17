@@ -79,8 +79,14 @@ export async function * openai (envelope, deps = {}) {
   const request = buildRequest(envelope, input, instructions)
 
   // Array + join, not `+=`: per-delta cons-strings are the cost on a long stream.
+  /** @type {Array<{item: string, text: string}>} */
   const outputParts = []
-  const currentOutput = () => outputParts.join('')
+  // A message item's phase, from the item as it opens or closes: its text deltas carry only the item id.
+  /** @type {Map<string, string>} */
+  const phases = new Map()
+  const currentOutput = () => outputParts.filter(p => phases.get(p.item) !== 'commentary').map(p => p.text).join('')
+  /** @type {import('#core/envelope.js').MessagePart[]} */
+  const commentaryParts = []
   let inputTokens = 0
   let outputTokens = 0
   let thinkingTokens = 0
@@ -111,12 +117,37 @@ export async function * openai (envelope, deps = {}) {
         case 'response.output_text.delta':
           if (event.delta) {
             if (first === null) first = String(process.hrtime.bigint())
-            outputParts.push(event.delta)
-            yield { type: 'delta', delta: { type: 'message', delta: event.delta } }
+            if (phases.get(event.item_id) === 'commentary') {
+              yield { type: 'delta', delta: { type: 'commentary', delta: event.delta } }
+            } else {
+              outputParts.push({ item: event.item_id, text: event.delta })
+              yield { type: 'delta', delta: { type: 'message', delta: event.delta } }
+            }
+          }
+          break
+
+        case 'response.reasoning_summary_part.added':
+          if (event.summary_index > 0) yield { type: 'delta', delta: { type: 'reasoning_summary', delta: '\n\n' } }
+          break
+
+        case 'response.reasoning_summary_text.delta':
+          if (event.delta) {
+            if (first === null) first = String(process.hrtime.bigint())
+            yield { type: 'delta', delta: { type: 'reasoning_summary', delta: event.delta } }
+          }
+          break
+
+        case 'response.reasoning_text.delta':
+          if (event.delta) {
+            if (first === null) first = String(process.hrtime.bigint())
+            yield { type: 'delta', delta: { type: 'reasoning', delta: event.delta } }
           }
           break
 
         case 'response.output_item.added':
+          if (event.item?.type === 'message' && typeof event.item.phase === 'string') {
+            phases.set(event.item.id, event.item.phase)
+          }
           if (event.item?.type === 'function_call') {
             toolItems.set(event.item.id, {
               call_id: event.item.call_id ?? event.item.id,
@@ -127,6 +158,11 @@ export async function * openai (envelope, deps = {}) {
           break
 
         case 'response.output_item.done':
+          if (event.item?.type === 'message' && event.item.phase === 'commentary') {
+            phases.set(event.item.id, 'commentary')
+            const text = (event.item.content ?? []).filter(c => c.type === 'output_text').map(c => c.text).join('')
+            if (text) commentaryParts.push({ type: 'text', text, phase: 'commentary' })
+          }
           if (event.item?.type === 'reasoning' && event.item.encrypted_content) {
             reasoningParts.push({
               type: 'reasoning',
@@ -200,7 +236,7 @@ export async function * openai (envelope, deps = {}) {
       return
     }
     log?.warn({ err: e }, '[mohdel:openai] stream failed')
-    yield { type: 'error', error: classifyProviderError(e, envelope.auth?.key, { provider: providerOf(envelope.model) }) }
+    yield { type: 'error', error: summariesRefused(e, envelope) ?? classifyProviderError(e, envelope.auth?.key, { provider: providerOf(envelope.model) }) }
     return
   }
 
@@ -257,10 +293,34 @@ export async function * openai (envelope, deps = {}) {
   }
   if (warning) done.result.warning = warning
   if (reasoningParts.length) done.result.reasoningParts = reasoningParts
+  if (commentaryParts.length) done.result.commentaryParts = commentaryParts
   if (toolItems.size > 0) {
     done.result.toolCalls = fromOpenAIToolCalls(Array.from(toolItems.values()))
   }
   yield done
+}
+
+/** Providers whose organizations must be verified for reasoning summaries: asked only when the credential says it may. */
+const SUMMARIES_NEED_VERIFIED = new Set(['openai', 'chatgpt'])
+
+/**
+ * A request refused for asking for reasoning summaries — an organization not verified for them —
+ * told as such, naming the setting that stops asking; null for any other failure.
+ *
+ * @param {any} e
+ * @param {import('#core/envelope.js').CallEnvelope} envelope
+ * @returns {import('#core/errors.js').TypedError | null}
+ */
+function summariesRefused (e, envelope) {
+  if ((e?.param ?? e?.error?.param) !== 'reasoning.summary') return null
+  const provider = providerOf(envelope.model)
+  return {
+    type: 'SUMMARIES_REFUSED',
+    message: `${provider} refused reasoning summaries for this credential`,
+    detail: `its account may not ask for them — set reasoningSummaries: false for ${provider} in providers.json, or auth.summaries: false with the key`,
+    severity: 'error',
+    retryable: false
+  }
 }
 
 /**
@@ -363,7 +423,10 @@ function buildRequest (envelope, input, instructions) {
         request.max_output_tokens += headroom
       }
       request.reasoning = { effort }
-      if (effort !== 'none') request.include = ['reasoning.encrypted_content']
+      if (effort !== 'none') {
+        request.include = ['reasoning.encrypted_content']
+        if (envelope.reasoningSummaries === true && (envelope.auth?.summaries ?? !SUMMARIES_NEED_VERIFIED.has(providerOf(envelope.model)))) request.reasoning.summary = 'auto'
+      }
     }
   }
 
@@ -459,18 +522,24 @@ function splitPrompt (prompt, imageParts, opts) {
         call_id: m.toolCallId ?? '',
         output
       })
-    } else if (m.role === 'assistant' && m.toolCalls?.length) {
-      // Responses API wants a message item (if any text) followed
-      // by one function_call item per tool invocation.
+    } else if (m.role === 'assistant' && (m.toolCalls?.length || hasCommentary(m.content))) {
+      // Responses API wants its message items — what the model said while it worked, each with its
+      // phase, then the answer — followed by one function_call item per tool invocation.
+      for (const p of Array.isArray(m.content) ? m.content : []) {
+        if (p.type === 'text' && p.phase === 'commentary' && p.text) {
+          input.push({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: p.text }], phase: 'commentary' })
+        }
+      }
       const text = flattenText(m.content)
       if (text) {
         input.push({
           type: 'message',
           role: 'assistant',
-          content: [{ type: 'output_text', text }]
+          content: [{ type: 'output_text', text }],
+          ...(hasCommentary(m.content) && { phase: 'final_answer' })
         })
       }
-      for (const tc of m.toolCalls) {
+      for (const tc of m.toolCalls ?? []) {
         input.push({
           type: 'function_call',
           name: tc.name,
@@ -489,10 +558,19 @@ function splitPrompt (prompt, imageParts, opts) {
   return { instructions: systemParts.filter(Boolean).join('\n\n'), input }
 }
 
-/** @param {string | import('#core/envelope.js').MessagePart[]} content */
+/**
+ * The answer's text: every text part but what the model said while it worked.
+ *
+ * @param {string | import('#core/envelope.js').MessagePart[]} content
+ */
 function flattenText (content) {
   if (typeof content === 'string') return content
-  return content.filter(p => p.type === 'text' && p.text).map(p => p.text).join('\n')
+  return content.filter(p => p.type === 'text' && p.text && p.phase !== 'commentary').map(p => p.text).join('\n')
+}
+
+/** @param {string | import('#core/envelope.js').MessagePart[]} content */
+function hasCommentary (content) {
+  return Array.isArray(content) && content.some(p => p.type === 'text' && p.phase === 'commentary')
 }
 
 /**

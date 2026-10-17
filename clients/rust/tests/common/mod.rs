@@ -70,7 +70,7 @@ pub fn envelope() -> CallEnvelope {
     CallEnvelope {
         call_id: "c-1".into(),
         auth_id: "u-1".into(),
-        auth: Some(Auth { key: SecretString::new("") }),
+        auth: Some(Auth::of(SecretString::new(""))),
         model: "local/llama3.1-8b".into(),
         prompt: Prompt::Text("why is the sky blue".into()),
         output_budget: Some(4),

@@ -452,6 +452,121 @@ describe('reasoning_content capture + roundtrip', () => {
 
 // ---------- Mistral ----------
 
+describe('what a model says mid-call, and its reasoning sent back', () => {
+  const kinds = (events) => events.filter(e => e.type === 'delta').map(e => [e.delta.type, e.delta.delta])
+  const end = { choices: [{ finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } }
+
+  test('raw reasoning streams as reasoning deltas, from reasoning_content or reasoning, and is kept for replay', async () => {
+    const fromContent = mockChatStream([
+      { choices: [{ delta: { reasoning_content: 'thinking ' } }] },
+      { choices: [{ delta: { reasoning_content: 'more' } }] },
+      { choices: [{ delta: { content: 'visible' } }] },
+      end
+    ])
+    const a = await collect(fireworks(envelope('fireworks', 'accounts/fireworks/models/k2p6'), { client: fromContent.client }))
+    expect(kinds(a)).toEqual([['reasoning', 'thinking '], ['reasoning', 'more'], ['message', 'visible']])
+    expect(a.at(-1).result.reasoning).toBe('thinking more')
+
+    const fromReasoning = mockChatStream([{ choices: [{ delta: { reasoning: 'parsed thought' } }] }, { choices: [{ delta: { content: 'ok' } }] }, end])
+    const b = await collect(groq(envelope('groq', 'qwen3-32b'), { client: fromReasoning.client }))
+    expect(kinds(b)).toEqual([['reasoning', 'parsed thought'], ['message', 'ok']])
+    expect(b.at(-1).result.reasoning).toBe('parsed thought')
+  })
+
+  test('non-streaming raw reasoning comes as one reasoning delta before the answer', async () => {
+    const { client } = mockChat({
+      choices: [{ message: { content: 'visible answer', reasoning_content: 'thought process' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 20 }
+    })
+    const events = await collect(deepseek(envelope('deepseek', 'deepseek-v4-flash'), { client }))
+    expect(kinds(events)).toEqual([['reasoning', 'thought process'], ['message', 'visible answer']])
+  })
+
+  test('cerebras gets its reasoning back as reasoning, not reasoning_content', async () => {
+    const { client, captured } = mockChatStream([end])
+    await collect(cerebras(envelope('cerebras', 'qwen-3-32b', {
+      prompt: [
+        { role: 'user', content: 'q' },
+        { role: 'assistant', content: [{ type: 'reasoning', text: 'I weighed it' }, { type: 'text', text: 'answer' }] },
+        { role: 'user', content: 'and?' }
+      ]
+    }), { client }))
+    const assistantMsg = captured.args.messages.find(m => m.role === 'assistant')
+    expect(assistantMsg.reasoning).toBe('I weighed it')
+    expect(assistantMsg.reasoning_content).toBeUndefined()
+  })
+
+  test('openrouter: a summary detail streams as reasoning_summary, and the details go back to that model unmodified', async () => {
+    const model = 'openrouter/anthropic/claude-sonnet-5-5'
+    const { client } = mockChatStream([
+      { choices: [{ delta: { reasoning: 'Let me ', reasoning_details: [{ type: 'reasoning.text', text: 'Let me ', format: 'anthropic-claude-v1', index: 0 }] } }] },
+      { choices: [{ delta: { reasoning: 'think.', reasoning_details: [{ type: 'reasoning.text', text: 'think.', signature: 'sig-1', index: 0 }] } }] },
+      { choices: [{ delta: { reasoning_details: [{ type: 'reasoning.summary', summary: 'Weighing options', format: 'openai-responses-v1', index: 1 }] } }] },
+      { choices: [{ delta: { content: 'done' } }] },
+      end
+    ])
+    const events = await collect(openrouter(envelope('openrouter', 'anthropic/claude-sonnet-5-5'), { client }))
+    expect(kinds(events)).toEqual([['reasoning', 'Let me '], ['reasoning', 'think.'], ['reasoning_summary', 'Weighing options'], ['message', 'done']])
+    const [part] = events.at(-1).result.reasoningParts
+    expect(part.model).toBe(model)
+    const details = JSON.parse(part.encrypted)
+    expect(details).toEqual([
+      { type: 'reasoning.text', text: 'Let me think.', format: 'anthropic-claude-v1', signature: 'sig-1', index: 0 },
+      { type: 'reasoning.summary', summary: 'Weighing options', format: 'openai-responses-v1', index: 1 }
+    ])
+
+    const history = (forModel) => ({
+      prompt: [
+        { role: 'user', content: 'q' },
+        { role: 'assistant', content: [part, { type: 'reasoning', text: 'Let me think.' }, { type: 'text', text: 'done' }] },
+        { role: 'user', content: 'and?' }
+      ],
+      model: forModel
+    })
+    const same = mockChatStream([end])
+    await collect(openrouter({ ...envelope('openrouter', 'anthropic/claude-sonnet-5-5'), ...history(model) }, { client: same.client }))
+    const sent = same.captured.args.messages.find(m => m.role === 'assistant')
+    expect(sent.reasoning_details).toEqual(details)
+    expect(sent.reasoning).toBeUndefined()
+    const other = mockChatStream([end])
+    await collect(openrouter({ ...envelope('openrouter', 'openai/gpt-5.5'), ...history('openrouter/openai/gpt-5.5') }, { client: other.client }))
+    const elsewhere = other.captured.args.messages.find(m => m.role === 'assistant')
+    expect(elsewhere.reasoning_details).toBeUndefined()
+    expect(elsewhere.reasoning).toBe('Let me think.')
+  })
+
+  test('mistral: thinking chunks stream as reasoning, text chunks as the answer, and the thinking goes back inside content', async () => {
+    const { client } = mockChatStream([
+      { choices: [{ delta: { content: [{ type: 'thinking', thinking: [{ type: 'text', text: 'Let me' }] }] } }] },
+      { choices: [{ delta: { content: [{ type: 'thinking', thinking: [{ type: 'text', text: ' add.' }], signature: 'm-sig' }, { type: 'text', text: '4' }] } }] },
+      { choices: [{ delta: { content: ' is it.' } }] },
+      end
+    ])
+    const events = await collect(mistral(envelope('mistral', 'mistral-medium-3-5'), { client }))
+    expect(kinds(events)).toEqual([['reasoning', 'Let me'], ['reasoning', ' add.'], ['message', '4'], ['message', ' is it.']])
+    const done = events.at(-1)
+    expect(done.result.output).toBe('4 is it.')
+    expect(done.result.reasoning).toBeUndefined()
+    const [part] = done.result.reasoningParts
+    expect(JSON.parse(part.encrypted)).toEqual([{ type: 'thinking', thinking: [{ type: 'text', text: 'Let me add.' }], signature: 'm-sig' }])
+
+    const replay = mockChatStream([end])
+    await collect(mistral(envelope('mistral', 'mistral-medium-3-5', {
+      prompt: [
+        { role: 'user', content: '2+2?' },
+        { role: 'assistant', content: [part, { type: 'text', text: '4 is it.' }] },
+        { role: 'user', content: 'and 3+3?' }
+      ]
+    }), { client: replay.client }))
+    const sent = replay.captured.args.messages.find(m => m.role === 'assistant')
+    expect(sent.content).toEqual([
+      { type: 'thinking', thinking: [{ type: 'text', text: 'Let me add.' }], signature: 'm-sig' },
+      { type: 'text', text: '4 is it.' }
+    ])
+    expect(sent.reasoning_content).toBeUndefined()
+  })
+})
+
 describe('mistral adapter', () => {
   test('tool_choice required → any (mistral flavor)', async () => {
     const { client, captured } = mockChat(basicResponse())
@@ -475,6 +590,16 @@ describe('openrouter adapter', () => {
     expect(events.filter(e => e.type === 'delta').map(e => e.delta.delta).join('')).toBe('hello world')
     expect(events.at(-1).result.status).toBe('completed')
     expect(events.at(-1).result.inputTokens).toBe(4)
+  })
+
+  test('an effort goes out as the reasoning object, none included', async () => {
+    setCatalog({ 'openrouter/anthropic/claude-sonnet-5-5': { thinkingEffortLevels: { none: 0, medium: 4000 } } })
+    for (const outputEffort of ['medium', 'none']) {
+      const { client, captured } = mockChatStream([{ choices: [{ finish_reason: 'stop' }], usage: {} }])
+      await collect(openrouter(envelope('openrouter', 'anthropic/claude-sonnet-5-5', { outputEffort }), { client }))
+      expect(captured.args.reasoning).toEqual({ effort: outputEffort })
+      expect(captured.args).not.toHaveProperty('reasoning_effort')
+    }
   })
 
   test('providerOptions.openrouter is spliced into args.provider', async () => {
@@ -660,8 +785,8 @@ describe('xai adapter', () => {
         }
       }
     }
-    await collect(xai(envelope('xai', 'grok-thinker', { outputEffort: 'low', outputBudget: 100 }), { client }))
-    expect(captured.req.reasoning).toEqual({ effort: 'low' })
+    await collect(xai(envelope('xai', 'grok-thinker', { outputEffort: 'low', outputBudget: 100, reasoningSummaries: true }), { client }))
+    expect(captured.req.reasoning).toEqual({ effort: 'low', summary: 'auto' })
     expect(captured.req.max_output_tokens).toBe(600)
   })
 

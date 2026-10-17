@@ -13,6 +13,27 @@
       "delta": "{\"city\":\""
     }
   },
+  "delta-commentary": {
+    "type": "delta",
+    "delta": {
+      "type": "commentary",
+      "delta": "Found the clause; checking the fee schedule next."
+    }
+  },
+  "delta-reasoning_summary": {
+    "type": "delta",
+    "delta": {
+      "type": "reasoning_summary",
+      "delta": "**Comparing the two fee tables**"
+    }
+  },
+  "delta-reasoning": {
+    "type": "delta",
+    "delta": {
+      "type": "reasoning",
+      "delta": "The user wants the late fee, so first"
+    }
+  },
   "idle": {
     "type": "idle",
     "sinceMs": 15000
@@ -331,6 +352,38 @@
           "encrypted": "gAAAAB-opaque",
           "id": "rs_1",
           "model": "meta/muse-spark-1.3"
+        }
+      ]
+    }
+  },
+  "done-tool_use-with-commentary": {
+    "type": "done",
+    "result": {
+      "status": "tool_use",
+      "output": null,
+      "inputTokens": 10,
+      "outputTokens": 14,
+      "thinkingTokens": 30,
+      "cost": 0.0004,
+      "timestamps": {
+        "start": "1000000000",
+        "first": "1040000000",
+        "end": "1200000000"
+      },
+      "toolCalls": [
+        {
+          "id": "call_1",
+          "name": "get_weather",
+          "arguments": {
+            "city": "paris"
+          }
+        }
+      ],
+      "commentaryParts": [
+        {
+          "type": "text",
+          "text": "Checking the forecast for Paris.",
+          "phase": "commentary"
         }
       ]
     }

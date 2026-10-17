@@ -77,6 +77,17 @@
  *   aborts on its own. Omitting the field disables the heartbeat.
  *   Positive values are raised to `MIN_IDLE_HEARTBEAT_MS` (250).
  *
+ * @property {boolean} [reasoningSummaries]
+ *   When true, the model is asked for a summary of its reasoning, streamed
+ *   as `reasoning_summary` deltas, where the provider gives one and the
+ *   credential's account may ask (`auth.summaries`). Absent or false, none
+ *   is asked for or streamed.
+ *
+ * @property {boolean} [rawReasoning]
+ *   When true, the session streams the provider's raw reasoning as
+ *   `reasoning` deltas. Absent or false, none is streamed; it is still
+ *   kept for replay wherever the provider requires it back.
+ *
  * @property {Object<string, object>} [providerOptions]
  *   Namespaced bag of provider-specific knobs that don't fit the
  *   shared envelope. Keys are provider names; values are arbitrary
@@ -91,6 +102,11 @@
 /**
  * @typedef {object} Auth
  * @property {string} key  Provider API key. Redact in logs; never persist.
+ * @property {boolean} [summaries]
+ *   Whether this credential's account may ask for reasoning summaries, on a
+ *   provider that allows them only to some accounts — openai and chatgpt,
+ *   for verified organizations. Held with the credential because another key
+ *   may be another organization. Absent there, they are not asked for.
  */
 
 /**
@@ -100,7 +116,7 @@
  * @property {string} [toolCallId]
  *   Set on `tool` messages — identifies which assistant tool call
  *   this is a response to.
- * @property {string} [name]
+ * @property {string} [toolName]
  *   Optional function name for `tool` messages (providers that
  *   require naming the tool alongside the response).
  * @property {ToolCall[]} [toolCalls]
@@ -134,6 +150,10 @@
  *   an envelope `images` ref. Accepted on `user` and `tool` messages.
  * @property {string} [mimeType]
  *   Required on `image` parts.
+ * @property {string} [phase]
+ *   On an assistant's `text` part: `'commentary'` for what the model wrote for
+ *   the person while it worked, `'final_answer'` for its answer, as the
+ *   provider marked it; replayed as given.
  * @property {('5m'|'1h')} [cache]
  *   Prompt-cache marker. On system parts: a breakpoint at this block.
  *   On non-system parts: opts the whole conversation into prefix
@@ -175,6 +195,8 @@ export const ENVELOPE_FIELDS = Object.freeze([
   'parallelToolCalls',
   'identifier',
   'idleHeartbeatMs',
+  'reasoningSummaries',
+  'rawReasoning',
   'providerOptions'
 ])
 

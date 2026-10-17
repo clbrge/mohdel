@@ -53,7 +53,10 @@ console.error(`Cost: $${result.cost.toFixed(4)} (${result.inputTokens} in, ${res
 mo ask anthropic/claude-sonnet-5-5 --stream "write a short story about a lighthouse"
 ```
 
-**JS** — pass a `realtimeHandler` to write deltas as they arrive:
+**JS** — pass a `realtimeHandler` to write deltas as they arrive. Each is `{ type, delta }`; the
+answer's text is `type: 'message'` — the others are function-call arguments, what the model writes
+for the person while it works (`commentary`) and reasoning (`reasoning_summary` when `reasoningSummaries`
+is set, `reasoning` when `rawReasoning` is):
 
 ```js
 import mohdel from 'mohdel'
@@ -62,7 +65,7 @@ const mo = await mohdel()
 const result = await mo.use('anthropic/claude-sonnet-5-5').answer(
   'Write a short story about a lighthouse.',
   {
-    realtimeHandler: (delta) => process.stdout.write(delta),
+    realtimeHandler: ({ type, delta }) => { if (type === 'message') process.stdout.write(delta) },
     bufferOpts: { maxChars: 1, maxMs: 0 } // flush every char
   }
 )

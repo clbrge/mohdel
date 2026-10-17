@@ -326,7 +326,7 @@ console.log(result.output, result.cost)
 
 No subprocess, no setup beyond your API key. Right for CLI tools (`mo ask`), scripts, tests, and single-process services — which is most projects. Pass an `AbortSignal` as `answer(prompt, { signal })` to abort in flight.
 
-The factory reads the catalog from `~/.config/mohdel/curated.json` and keys from the environment, the same defaults a gate session starts from. `mohdel({ models })` replaces the catalog for the process, factory and session runtime alike, the way `set_catalog` replaces it in a gate session. `mohdel({ configurations: { openai: { apiKey } } })` overrides the key per provider.
+The factory reads the catalog from `~/.config/mohdel/curated.json` and keys from the environment, the same defaults a gate session starts from. `mohdel({ models })` replaces the catalog for the process, factory and session runtime alike, the way `set_catalog` replaces it in a gate session. `mohdel({ configurations: { openai: { apiKey, summaries } } })` overrides the key per provider; `summaries: true` says its account may ask for reasoning summaries, which openai and chatgpt give only to verified organizations. For the key found in the environment, `reasoningSummaries` in that provider's `providers.json` entry says the same.
 
 ### Client — cross-process (the production gateway)
 
@@ -339,7 +339,7 @@ const envelope = {
 }
 
 for await (const ev of call(envelope, { socketPath: '/tmp/mohdel-data.sock' })) {
-  if (ev.type === 'delta') process.stdout.write(ev.delta.delta)
+  if (ev.type === 'delta' && ev.delta.type === 'message') process.stdout.write(ev.delta.delta)
   else if (ev.type === 'done') console.log('\n→', ev.result.cost)
 }
 ```
@@ -418,7 +418,7 @@ The gate's HTTP surface is specified in [PROTOCOL.md §10](PROTOCOL.md#10-gate-h
 local mohdel = require('mohdel')
 local c = mohdel.connect{ socket = '/tmp/mohdel-data.sock' }
 for ev in c:call(envelope):events() do
-  if ev.type == 'delta' then io.write(ev.delta.delta) end
+  if ev.type == 'delta' and ev.delta.type == 'message' then io.write(ev.delta.delta) end
 end
 ```
 
@@ -428,7 +428,7 @@ Wire format is JSON over NDJSON frames, camelCase. Types are defined in `js/core
 
 - **`CallEnvelope`** — flat `answer()` options plus transport metadata: `callId`, `authId`, `auth.key`, `traceparent?`, `baggage?`, `provider`, `model`, `prompt`, `outputBudget?`, `outputType?`, `outputStyle?`, `outputEffort?`, `images?`, `videos?`, `cache?`, `tools?`, `toolChoice?`, `parallelToolCalls?`, `identifier?`.
 - **`Event`** — three-variant union discriminated on `type`:
-  - `{ type: 'delta', delta: { type: 'message' | 'function_call', delta: string } }`
+  - `{ type: 'delta', delta: { type: 'message' | 'function_call' | 'commentary' | 'reasoning_summary' | 'reasoning', delta: string } }` — `message` is the answer's text alone; `reasoning` only when the envelope sets `rawReasoning`
   - `{ type: 'done', result: AnswerResult }`
   - `{ type: 'error', error: TypedError }`
 - **`AnswerResult`** — `status`, `output`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cost` (single number), `timestamps`, `warning?`, `toolCalls?`.
@@ -488,7 +488,7 @@ Only set keys for providers you use. Run `mo` with no arguments for interactive 
 | `~/.config/mohdel/default.json` | Default model, and the coding agent you chose |
 | `~/.config/mohdel/curated.json` | Model catalog with metadata, tags, pricing |
 | `~/.config/mohdel/catalog.local.json` | This installation's own fields and tags, declared for the agent |
-| `~/.config/mohdel/providers.json` | Provider-level rate limits |
+| `~/.config/mohdel/providers.json` | Provider-level rate limits, and whether the account may ask for reasoning summaries (`reasoningSummaries`) |
 | `~/.config/mohdel/excluded.json` | Excluded models |
 | `~/.cache/mohdel/uploaded-files.json` | Gemini file upload cache |
 

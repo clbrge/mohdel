@@ -69,7 +69,7 @@ Wire format is JSON-over-NDJSON, camelCase. Types are authored in `js/core/*.js`
 
 - **`CallEnvelope`** — flat `answer()` options plus transport metadata. Required: `callId`, `authId`, `auth.key`, `provider`, `model`, `prompt`. Optional: `traceparent`, `baggage`, `outputBudget`, `outputType`, `outputStyle`, `outputEffort`, `images`, `videos`, `cache`, `tools`, `toolChoice`, `parallelToolCalls`, `identifier`, `speed`, `providerOptions`.
 - **`Event`** — three-variant discriminated union:
-  - `{ type: 'delta', delta: {type: 'message'|'function_call', delta: string} }`
+  - `{ type: 'delta', delta: {type: 'message' | 'function_call' | 'commentary' | 'reasoning_summary' | 'reasoning', delta: string} }` — `message` is the answer's text alone
   - `{ type: 'done', result: AnswerResult }`
   - `{ type: 'error', error: TypedError }`
 - **`AnswerResult`** — `status`, `output`, `inputTokens`, `outputTokens`, `thinkingTokens`, `cost` (single number), `timestamps`, `warning?`, `toolCalls?`, `speed?`, `servedSpeed?`.
@@ -106,7 +106,7 @@ Thin-gate is a multiplexer with five extension points:
 - **`QuotaPolicy`** — `policy_for(auth_id) -> QuotaSpec { rpm, tpm, inpm, cooldown_threshold, cooldown_duration_ms }`. Default (`FileQuotaPolicy`) returns generous static values. Wrappers plug in per-user / per-plan quotas from their own storage.
 - **`ConfigSource`** — `load() -> PlatformConfig` + optional `watch()` stream. Default (`TomlConfigSource`) reads `~/.config/mohdel/thin-gate.toml` (or `MOHDEL_THIN_GATE_CONFIG`). PlatformConfig carries socket paths, session spec (command + args + pool size), provider registry, and default timeouts.
 - **`CachePolicy`** — optional content cache. No-op default; here for future prompt/response caching.
-- **`AuthPolicy`** — `resolve(auth_id, model) -> Auth`, called only when the envelope has no `auth`. Default (`RequireInlineAuth`) refuses, so the standalone binary reads no credential from disk. Embedders on the operator's machine can use `LocalAuth` (mohdel's environment file, read in the gate process) or `ChatGptAuth` (the ChatGPT credential store, read by a helper child the policy runs). Either way the key reaches the session on the envelope.
+- **`AuthPolicy`** — `resolve(auth_id, model) -> Auth`, called only when the envelope has no `auth`. Default (`RequireInlineAuth`) refuses, so the standalone binary reads no credential from disk. Embedders on the operator's machine can use `LocalAuth` (mohdel's environment file for the key and `providers.json` for whether its account may ask for reasoning summaries, read in the gate process) or `ChatGptAuth` (the ChatGPT credential store, read by a helper child the policy runs). Either way the key reaches the session on the envelope.
 
 A custom wrapper implements one or more and passes the bundled `GateState` into `serve_data_with_state(path, state)`. Shape:
 
@@ -221,7 +221,7 @@ The bridge (`runAnswer`) builds a `CallEnvelope` from the prompt + options, driv
 Three factory options are not carried into the envelope:
 - **`parentSpan`** — replaced by `traceparent` (a W3C string is serializable across process boundaries; an OTel Span object isn't).
 - **`maybeThrowHandler`** — removed as dead API.
-- **`configuration.baseURL` / `defaultHeaders` / …** — adapters bake in baseURL. Only `configuration.apiKey` is threaded through. Non-apiKey configuration keys throw `CONFIGURATION_UNSUPPORTED` rather than silently dropping, since a dropped baseURL could leak traffic to an unintended provider.
+- **`configuration.baseURL` / `defaultHeaders` / …** — adapters bake in baseURL. Only `configuration.apiKey` and `configuration.summaries` are threaded through. Other configuration keys throw `CONFIGURATION_UNSUPPORTED` rather than silently dropping, since a dropped baseURL could leak traffic to an unintended provider.
 
 The full option mapping is documented in the `runAnswer` docstring so a future auditor doesn't re-open these as regressions.
 
@@ -414,7 +414,7 @@ Providers with meaningfully different APIs get their own adapter file (`anthropi
 | Response caching | Caller owns policy |
 | Sub-5s session startup | Pool pre-warms; cold start isn't on the hot path |
 | Token counting before dispatch | Provider does it authoritatively |
-| Per-call provider config override beyond `apiKey` | Schema extension when a real consumer needs it |
+| Per-call provider config override beyond `apiKey` and `summaries` | Schema extension when a real consumer needs it — `summaries` came with callers mixing their own verified key with keys their users bring |
 
 ## FAQ / design choices
 

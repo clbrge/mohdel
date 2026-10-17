@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest'
 
-import { runAnswer, runAnswerImage, runAnswerTranscription } from '../../js/factory/bridge.js'
+import { runAnswer, runAnswerImage, runAnswerTranscription, summariesOf } from '../../js/factory/bridge.js'
 import { createCooldownTracker } from '../../js/session/_cooldown.js'
 import { createRateLimiter } from '../../js/session/_rate_limiter.js'
 import { setCatalog } from '../../js/session/adapters/_catalog.js'
@@ -183,6 +183,25 @@ describe('factory bridge — runAnswer', () => {
     expect(captured.toolChoice).toBe('auto')
     expect(captured.parallelToolCalls).toBe(false)
     expect(captured.traceparent).toBe('00-abc-def-01')
+  })
+
+  test('reasoningSummaries and rawReasoning reach the envelope only when asked for', async () => {
+    const seen = []
+    const capturing = async function * (env) {
+      seen.push(env)
+      yield * goneDoneAdapter()()
+    }
+    await runAnswer({ ...baseArgs, options: { reasoningSummaries: true, rawReasoning: true } }, { ...deps, resolveAdapter: () => capturing })
+    await runAnswer({ ...baseArgs, options: {} }, { ...deps, resolveAdapter: () => capturing })
+    expect(seen.map(env => [env.reasoningSummaries, env.rawReasoning])).toEqual([[true, true], [undefined, undefined]])
+  })
+
+  test('the key mohdel finds for a provider may ask for summaries as providers.json says, as the gate reads it', () => {
+    expect(summariesOf('openai', { openai: { reasoningSummaries: true, rpmLimit: 500 } })).toEqual({ summaries: true })
+    expect(summariesOf('openai', { openai: { reasoningSummaries: false } })).toEqual({ summaries: false })
+    expect(summariesOf('openai', { openai: { rpmLimit: 500 } })).toEqual({})
+    expect(summariesOf('openai', {})).toEqual({})
+    expect(() => summariesOf('xai', { xai: { reasoningSummaries: 'on' } })).toThrow(/xai\.reasoningSummaries is true or false/)
   })
 
   test('openrouter routing prefs are moved into providerOptions.openrouter', async () => {
@@ -615,6 +634,19 @@ describe('compat bridge — configuration normalization', () => {
   test('apiKey-only configuration is accepted', async () => {
     const result = await runAnswer({ ...baseArgs, configuration: { apiKey: 'k' } }, deps)
     expect(result.status).toBe('completed')
+  })
+
+  test('summaries reach the envelope from the configuration that carries the key', async () => {
+    const seen = []
+    const capturing = async function * (env) {
+      seen.push(env.auth)
+      yield * goneDoneAdapter()()
+    }
+    await runAnswer({ ...baseArgs, configuration: { apiKey: 'k', summaries: false } }, { ...deps, resolveAdapter: () => capturing })
+    await runAnswer({ ...baseArgs, configuration: { apiKey: 'k' } }, { ...deps, resolveAdapter: () => capturing })
+    expect(seen).toEqual([{ key: 'k', summaries: false }, { key: 'k' }])
+    await expect(runAnswer({ ...baseArgs, configuration: { apiKey: 'k', summaries: 'yes' } }, deps))
+      .rejects.toMatchObject({ type: 'CONFIGURATION_INVALID' })
   })
 
   test('missing configuration is accepted (empty apiKey)', async () => {

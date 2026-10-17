@@ -164,9 +164,7 @@ struct AcmeOnlyAuth;
 impl AuthPolicy for AcmeOnlyAuth {
     async fn resolve(&self, _auth_id: &str, model: &str) -> Result<Auth, AuthError> {
         match model.split('/').next() {
-            Some("acme") => Ok(Auth {
-                key: SecretString::new("sk-acme"),
-            }),
+            Some("acme") => Ok(Auth::of(SecretString::new("sk-acme"))),
             _ => Err(AuthError::ProviderNotConfigured(model.into())),
         }
     }

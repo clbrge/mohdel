@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.16.3] — Fix: Gemini thought summaries in the answer
+
+### Fixed
+
+- A Gemini 3 or 4 call no longer streams its thought summaries as `message`
+  deltas or puts them in `output`: a part marked `thought: true` is left out.
+
 ## [3.16.2] — Fix: Gemini 4 thinking levels / Chore: bump dependencies
 
 ### Fixed

@@ -51,6 +51,28 @@ function chunk (text, finishReason) {
 }
 
 describe('session/adapters/gemini', () => {
+  test('a thought summary is neither streamed nor part of the answer', async () => {
+    const { client } = makeClient({
+      chunks: [
+        { candidates: [{ content: { parts: [{ text: '**Planning the reply**', thought: true }] } }] },
+        chunk('Hi'),
+        {
+          candidates: [{ content: { parts: [{ text: 'still thinking', thought: true }, { text: ' there' }] }, finishReason: 'STOP' }],
+          usageMetadata: { promptTokenCount: 4, candidatesTokenCount: 2, thoughtsTokenCount: 9 }
+        }
+      ]
+    })
+
+    const events = await collect(gemini(envelope(), { client }))
+    expect(events.filter(e => e.type === 'delta').map(e => e.delta)).toEqual([
+      { type: 'message', delta: 'Hi' },
+      { type: 'message', delta: ' there' }
+    ])
+    const done = events.at(-1)
+    expect(done.result.output).toBe('Hi there')
+    expect(done.result.thinkingTokens).toBe(9)
+  })
+
   test('happy path yields delta events + completed done', async () => {
     const { client } = makeClient({
       chunks: [

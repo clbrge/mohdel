@@ -127,6 +127,8 @@ export async function * gemini (envelope, deps = {}) {
       }
 
       for (const part of chunk?.candidates?.[0]?.content?.parts ?? []) {
+        // A thought summary, which `includeThoughts` asks for: the model's reasoning, never its answer.
+        if (part.thought === true) continue
         if (typeof part.text === 'string' && part.text.length > 0) {
           if (first === null) first = String(process.hrtime.bigint())
           outputParts.push(part.text)

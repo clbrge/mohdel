@@ -31,7 +31,7 @@ function makeClient ({ events = [], throws = null } = {}) {
   const captured = {}
   const client = {
     responses: {
-      stream (request) {
+      create (request) {
         captured.request = request
         if (throws) throw throws
         return {

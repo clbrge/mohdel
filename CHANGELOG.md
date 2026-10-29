@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.1.0] — Fix: a Responses stream event the SDK does not know no longer ends the call / Changed: Anthropic API version 2026-10-21
+
+### Fixed
+
+- The OpenAI, ChatGPT, xAI and Meta routes read the Responses stream as it comes
+  (`responses.create` with `stream: true`) instead of through the SDK's
+  `responses.stream()`, whose accumulator throws on any event type outside its
+  list. The ChatGPT backend now sends `response.metadata` (its moderation
+  results) in the middle of every stream, and each `chatgpt/` call ended with
+  `Unhandled response stream event: unknown`. An event the adapter does not use
+  is passed over.
+
+### Changed
+
+- `@anthropic-ai/sdk` 1.3, which sends `anthropic-version: 2026-10-21` and the
+  key as `Authorization: Bearer`. That version refuses `temperature`, `top_p`
+  and `top_k`, a `document` block in an assistant message and `citations` in a
+  user one; the Anthropic adapter sends none of them.
+- `@opentelemetry/sdk-node` and `exporter-trace-otlp-grpc` 0.300, which need
+  `@opentelemetry/api` 1.10; `openai` 7.45.1, `@google/genai` 2.32, `jose`
+  6.2.14.
+
 ## [4.0.0] — Breaking: commentary and reasoning delta kinds / Feature: reasoning summaries asked per call / Fix: reasoning sent back as each provider takes it
 
 ### Breaking

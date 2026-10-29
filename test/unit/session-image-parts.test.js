@@ -99,7 +99,7 @@ function mockResponses () {
   const captured = {}
   const client = {
     responses: {
-      stream (req) {
+      create (req) {
         captured.request = req
         return { async * [Symbol.asyncIterator] () { yield { type: 'response.completed', response: { usage: {} } } } }
       }

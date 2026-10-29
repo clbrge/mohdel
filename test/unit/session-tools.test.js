@@ -165,7 +165,7 @@ function mockOpenAI (events, opts = {}) {
   return {
     client: {
       responses: {
-        stream (req) {
+        create (req) {
           captured.request = req
           if (opts.throws) throw opts.throws
           return {

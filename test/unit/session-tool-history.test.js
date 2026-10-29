@@ -85,7 +85,7 @@ describe('openai — assistant.toolCalls round-trip', () => {
     const captured = {}
     const client = {
       responses: {
-        stream (req) {
+        create (req) {
           captured.request = req
           return {
             async * [Symbol.asyncIterator] () {
@@ -133,7 +133,7 @@ describe('openai — assistant.toolCalls round-trip', () => {
     const captured = {}
     const client = {
       responses: {
-        stream (req) {
+        create (req) {
           captured.request = req
           return {
             async * [Symbol.asyncIterator] () {

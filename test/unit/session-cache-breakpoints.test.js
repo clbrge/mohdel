@@ -233,7 +233,7 @@ describe('openai adapter ignores conversation cache markers', () => {
     const captured = {}
     const client = {
       responses: {
-        stream (request) {
+        create (request) {
           captured.request = request
           return {
             async * [Symbol.asyncIterator] () {

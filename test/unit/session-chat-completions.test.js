@@ -735,7 +735,7 @@ describe('xai adapter', () => {
     const captured = {}
     const client = {
       responses: {
-        stream: (req) => {
+        create: (req) => {
           captured.req = req
           return {
             async * [Symbol.asyncIterator] () {
@@ -755,7 +755,7 @@ describe('xai adapter', () => {
     const captured = {}
     const client = {
       responses: {
-        stream: (req) => {
+        create: (req) => {
           captured.req = req
           return {
             async * [Symbol.asyncIterator] () {
@@ -775,7 +775,7 @@ describe('xai adapter', () => {
     const captured = {}
     const client = {
       responses: {
-        stream: (req) => {
+        create: (req) => {
           captured.req = req
           return {
             async * [Symbol.asyncIterator] () {
@@ -795,7 +795,7 @@ describe('xai adapter', () => {
     const captured = {}
     const client = {
       responses: {
-        stream: (req) => {
+        create: (req) => {
           captured.req = req
           return {
             async * [Symbol.asyncIterator] () {
@@ -818,7 +818,7 @@ describe('meta adapter', () => {
     const captured = {}
     const client = {
       responses: {
-        stream: (req) => {
+        create: (req) => {
           captured.req = req
           return { async * [Symbol.asyncIterator] () { yield * events } }
         }

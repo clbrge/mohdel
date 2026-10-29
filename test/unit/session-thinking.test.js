@@ -200,7 +200,7 @@ function mockOpenAI (events) {
   return {
     client: {
       responses: {
-        stream (req) {
+        create (req) {
           captured.request = req
           return {
             async * [Symbol.asyncIterator] () { for (const e of events) yield e }

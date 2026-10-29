@@ -106,7 +106,7 @@ export async function * openai (envelope, deps = {}) {
   const reasoningParts = []
 
   try {
-    const stream = await client.responses.stream(request, { signal })
+    const stream = await client.responses.create(request, { signal })
 
     for await (const event of stream) {
       if (signal?.aborted) {
@@ -395,7 +395,8 @@ function buildRequest (envelope, input, instructions) {
   /** @type {Record<string, any>} */
   const request = {
     model: spec?.model ?? bareOf(envelope.model),
-    input
+    input,
+    stream: true
   }
   if (instructions) request.instructions = instructions
   if (envelope.outputBudget !== undefined) request.max_output_tokens = envelope.outputBudget
@@ -460,10 +461,7 @@ function buildRequest (envelope, input, instructions) {
 
   // Meta's Responses API stores every prompt and response unless told not to.
   if (provider === 'meta') request.store = false
-  if (provider === 'chatgpt') {
-    request.store = false
-    request.stream = true
-  }
+  if (provider === 'chatgpt') request.store = false
 
   return request
 }

@@ -359,7 +359,7 @@ describe('openai adapter — emission and served-tier billing', () => {
       captured,
       client: {
         responses: {
-          stream (request) {
+          create (request) {
             captured.request = request
             return {
               async * [Symbol.asyncIterator] () {

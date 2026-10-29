@@ -153,28 +153,28 @@
     }
   },
   "optionalDependencies": {
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.223.0",
-    "@opentelemetry/sdk-node": "^0.223.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.300.0",
+    "@opentelemetry/sdk-node": "^0.300.0",
     "chalk": "^6.0.1",
     "mohdel-thin-gate-linux-x64-gnu": "4.0.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.135.0",
+    "@anthropic-ai/sdk": "^1.3.0",
     "@cerebras/cerebras_cloud_sdk": "^1.91.0",
     "@clack/prompts": "^1.8.1",
-    "@google/genai": "^2.30.0",
-    "@opentelemetry/api": "^1.9.1",
+    "@google/genai": "^2.32.0",
+    "@opentelemetry/api": "^1.10.0",
     "env-paths": "^4.0.0",
     "groq-sdk": "^1.6.0",
-    "jose": "^6.2.12",
-    "openai": "^7.34.0",
+    "jose": "^6.2.14",
+    "openai": "^7.45.1",
     "undici": "^7.30.1"
   },
   "lint-staged": {
     "*.{js,cjs}": "standard"
   },
   "devDependencies": {
-    "gpt-tokenizer": "^4.0.3",
+    "gpt-tokenizer": "^4.1.0",
     "lint-staged": "^17.6.0",
     "release-it": "^21.0.3",
     "standard": "^17.1.2",

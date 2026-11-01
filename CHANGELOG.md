@@ -4,6 +4,40 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.2.0] — Added: onboarding and curate take models from mohdex / Fix: picking models by hand ends where you expect
+
+### Added
+
+- `mo onboard <provider>` asks mohdex.dev, the public registry of catalog entries, which of the
+  models the key lists and the catalog lacks it holds. "Add from mohdex (N)" comes first and
+  recommended, and adds the entries the catalog accepts as served, each with its `source` and
+  `sourcedAt`; the ones still missing a field are counted and left to `mo curate`. When mohdex
+  cannot be reached, the onboarding says so and offers the usual choices.
+- `mo curate`: "Include from mohdex" for each model mohdex holds. Its values fill the entry, and
+  only the fields mohdex has no value for are asked.
+- `mo onboard <provider> --caller <name>`, for a program that runs the onboarding for its user:
+  the header reads "mohdel (via <name>)" and the last line hands back ("Back to <name>.")
+  without suggesting `mo` commands.
+- Run by you, the onboarding ends with "Try it": a `mo ask` line on the provider's cheapest
+  model, and `mo ls`.
+
+### Changed
+
+- Filling the catalog during the onboarding reports what was added; the next steps are given
+  once, at the end. The first-time setup ends the same way.
+- `openai` 7.47.0.
+
+### Fixed
+
+- `mo curate` and the onboarding's "Pick models by hand": once a model is handled, the next list
+  asks "Add another <provider> model?" with "✓ Done" first and selected, so Enter finishes. The
+  only way out was "← Skip all", last after every model; before any is picked it is now
+  "← Add none".
+- The model's raw JSON is no longer printed before its questions.
+- After picking by hand, the onboarding says which of the provider's models have no prices, and
+  only when some have none. It said "Prices are still missing" after every pass, prices typed or
+  not, and "Catalog complete" when none was picked.
+
 ## [4.1.0] — Fix: a Responses stream event the SDK does not know no longer ends the call / Changed: Anthropic API version 2026-10-21
 
 ### Fixed

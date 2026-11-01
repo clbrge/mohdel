@@ -14,6 +14,7 @@ import {
 import { getMohdelModel } from './curated-cache.js'
 import { addEntries, filterUncurated, freeModels, modelDetails, providerApi } from './curate.js'
 import { stripUnknown } from './schema.js'
+import { mohdexEntries } from './mohdex.js'
 
 export { freeModels, providerApi }
 
@@ -219,7 +220,7 @@ const searchModels = (models, query) => {
   })
 }
 
-const processModelsSearchMode = async (providerName, providerInstance, allModels) => {
+const processModelsSearchMode = async (providerName, providerInstance, allModels, served) => {
   let curated = await getCuratedModels()
   const excluded = await getExcludedModels()
   let uncurated = filterUncurated(allModels, providerName, curated, excluded)
@@ -280,21 +281,21 @@ const processModelsSearchMode = async (providerName, providerInstance, allModels
     if (selected === '__refine') continue
 
     const model = allModels.find(m => m.id === selected)
-    await processOneModel(providerName, providerInstance, model, curated, excluded)
+    await processOneModel(providerName, providerInstance, model, curated, excluded, served)
   }
 }
 
-const processOneModel = async (providerName, providerInstance, model, curated, excluded) => {
+const processOneModel = async (providerName, providerInstance, model, curated, excluded, served) => {
   const modelId = model.id
   const modelLabel = model.label || modelId
   const curatedKey = `${providerName}/${modelId}`
 
-  console.log('\nModel details:')
-  console.log(JSON.stringify(model, null, 2))
-
   const replacementCandidates = findReplacementCandidates(providerName, modelId, curated)
 
   const options = [
+    ...(served[curatedKey] && !served[curatedKey].deprecated
+      ? [{ value: 'mohdex', label: 'Include from mohdex', hint: 'its values fill the entry, you fill the rest' }]
+      : []),
     { value: 'include', label: 'Include in curated models' },
     { value: 'exclude', label: 'Add to excluded models' },
     { value: 'skip', label: 'Skip for now' }
@@ -343,7 +344,11 @@ const processOneModel = async (providerName, providerInstance, model, curated, e
     modelInfoWithMeta = await promptMissingFields(modelInfoWithMeta, curatedKey)
   }
 
-  if (answer === 'include') {
+  if (answer === 'mohdex') {
+    curated[curatedKey] = await promptMissingFields(stripUnknown({ ...baseModelMeta, ...served[curatedKey] }), curatedKey)
+    await saveCuratedModels(curated)
+    clack.log.success(`Added ${curatedKey} to curated models from mohdex`)
+  } else if (answer === 'include') {
     curated[curatedKey] = modelInfoWithMeta || baseModelMeta
     await saveCuratedModels(curated)
     clack.log.success(`Added ${curatedKey} to curated models with detailed information`)
@@ -378,7 +383,7 @@ const processOneModel = async (providerName, providerInstance, model, curated, e
   }
 }
 
-const processModelsSelectMode = async (providerName, providerInstance, allModels) => {
+const processModelsSelectMode = async (providerName, providerInstance, allModels, served, again = false) => {
   const curated = await getCuratedModels()
   const excluded = await getExcludedModels()
   const uncurated = filterUncurated(allModels, providerName, curated, excluded)
@@ -390,24 +395,24 @@ const processModelsSelectMode = async (providerName, providerInstance, allModels
 
   clack.log.info(`${providerName}: ${uncurated.length} new model${uncurated.length > 1 ? 's' : ''}`)
 
+  const models = uncurated.map(m => ({
+    value: m.id,
+    label: `${m.id}  ${m.label !== m.id ? m.label : ''}`.trim()
+  }))
+  // Once one is handled, finishing is the usual answer, so it comes first and Enter takes it.
   const selected = await clack.select({
-    message: 'Select a model to curate (or skip all):',
-    options: [
-      ...uncurated.map(m => ({
-        value: m.id,
-        label: `${m.id}  ${m.label !== m.id ? m.label : ''}`.trim()
-      })),
-      { value: '__skip', label: '← Skip all' }
-    ]
+    message: again ? `Add another ${providerName} model?` : 'Select a model to curate:',
+    options: again
+      ? [{ value: '__done', label: '✓ Done' }, ...models]
+      : [...models, { value: '__done', label: '← Add none' }]
   })
 
-  if (clack.isCancel(selected) || selected === '__skip') return
+  if (clack.isCancel(selected) || selected === '__done') return
 
   const model = allModels.find(m => m.id === selected)
-  await processOneModel(providerName, providerInstance, model, curated, excluded)
+  await processOneModel(providerName, providerInstance, model, curated, excluded, served)
 
-  // After curating one, recurse to offer the rest
-  await processModelsSelectMode(providerName, providerInstance, allModels)
+  await processModelsSelectMode(providerName, providerInstance, allModels, served, true)
 }
 
 export const processModels = async (providerName, providerInstance) => {
@@ -444,10 +449,17 @@ export const processModels = async (providerName, providerInstance) => {
       return true
     }
 
+    let served = {}
+    try {
+      served = await mohdexEntries(providerName)
+    } catch (err) {
+      clack.log.warn(`mohdex unreachable: ${err.message}`)
+    }
+
     if (uncurated.length > SEARCH_MODE_THRESHOLD) {
-      await processModelsSearchMode(providerName, providerInstance, models)
+      await processModelsSearchMode(providerName, providerInstance, models, served)
     } else {
-      await processModelsSelectMode(providerName, providerInstance, models)
+      await processModelsSelectMode(providerName, providerInstance, models, served)
     }
     return true
   } catch (err) {

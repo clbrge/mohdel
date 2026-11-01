@@ -1,11 +1,12 @@
-import { intro, outro, select, text, password, confirm, isCancel, cancel, note, spinner } from '@clack/prompts'
+import { intro, outro, select, text, password, confirm, isCancel, cancel, note, spinner, log } from '@clack/prompts'
 import { id, label, meta, ok } from './colors.js'
 import { chmodSync, existsSync, readFileSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { dirname, resolve } from 'path'
-import { loadDefaultEnv, getAPIKey, getConfig, saveConfig, getCuratedModels, catalogEntries, ENV_PATH } from '../lib/common.js'
+import { loadDefaultEnv, getAPIKey, getConfig, saveConfig, getCuratedModels, catalogEntries, hasPrices, ENV_PATH } from '../lib/common.js'
 import providers from '../lib/providers.js'
 import { providerApi } from '../lib/curate.js'
+import { addFromMohdex, mohdexOffer } from '../lib/mohdex.js'
 import PROVIDER_INFO from '../lib/provider-info.js'
 
 export { PROVIDER_INFO, appendToEnvFile, verifyKey, askValidatedKey }
@@ -137,6 +138,7 @@ export async function runOnboard () {
     process.exit(0)
   }
   await fillCatalog(selected)
+  await finishOnboarding(selected)
 }
 
 export async function runOnboardCommand (args) {
@@ -146,15 +148,23 @@ export async function runOnboardCommand (args) {
 Usage:
   mo onboard                Pick a provider (interactive)
   mo onboard <provider>     Start at that provider; steps already done are skipped
+  --caller <name>           Run for another program: end by handing back to it
+                            instead of suggesting mo commands
 
 Exit code (mo onboard <provider>):
   0  the provider has its credential and at least one model in the catalog
   1  it does not yet — the last line names the command that closes it
-  2  no such provider`)
+  2  no such provider, or --caller without a name`)
     return 0
   }
+  const callerAt = args.indexOf('--caller')
+  const caller = callerAt === -1 ? undefined : args.splice(callerAt, 2)[1]
+  if (callerAt !== -1 && (!caller || caller.startsWith('-'))) {
+    console.error('mo onboard: --caller needs a name, e.g. --caller spore')
+    return 2
+  }
   const provider = args.find(a => !a.startsWith('-'))
-  if (provider) return runOnboardProvider(provider)
+  if (provider) return runOnboardProvider(provider, caller)
   await runOnboard()
   return 0
 }
@@ -165,7 +175,7 @@ Exit code (mo onboard <provider>):
  * ran it for its user: 0 when the provider is ready, 1 when it is not, 2 for a provider mohdel does
  * not know.
  */
-export async function runOnboardProvider (provider) {
+export async function runOnboardProvider (provider, caller) {
   loadDefaultEnv()
   const def = providers[provider]
   if (!def) {
@@ -173,7 +183,7 @@ export async function runOnboardProvider (provider) {
     return 2
   }
   const { credentialOf, providerReadiness } = await import('../lib/readiness.js')
-  intro(`mohdel — ${PROVIDER_INFO[provider]?.label ?? provider}`)
+  intro(`${caller ? `mohdel (via ${caller})` : 'mohdel'} — ${PROVIDER_INFO[provider]?.label ?? provider}`)
   // A stored key the provider refuses counts as unset, so onboarding repairs
   // it instead of skipping past it. Anything unverifiable (offline, a provider
   // with no listing mohdel reads) keeps the stored key and proceeds.
@@ -209,11 +219,45 @@ export async function runOnboardProvider (provider) {
       await fillCatalog(provider)
     }
   }
+  return finishOnboarding(provider, caller)
+}
+
+/**
+ * The last lines of an onboarding: what is still missing, or, for a ready provider, how to try it,
+ * unless another program (`caller`) ran mohdel for its user and takes over from here.
+ */
+async function finishOnboarding (provider, caller) {
+  const { providerReadiness } = await import('../lib/readiness.js')
   const ready = await providerReadiness(provider)
-  outro(ready.ready
-    ? `${provider} is ready — ${ready.models} model${ready.models > 1 ? 's' : ''} in the catalog`
-    : `${provider} is not ready — ${ready.fix}`)
-  return ready.ready ? 0 : 1
+  if (!ready.ready) {
+    outro(`${provider} is not ready — ${ready.fix}`)
+    return 1
+  }
+  const models = `${ready.models} model${ready.models > 1 ? 's' : ''} in the catalog`
+  if (caller) {
+    outro(`${provider} is ready — ${models}. Back to ${caller}.`)
+    return 0
+  }
+  const example = await cheapestModel(provider)
+  note([
+    'Ask it something:',
+    `  ${id(`mo ask ${example} "What can you do?"`)}`,
+    'See your models and their prices:',
+    `  ${id('mo ls')}`
+  ].join('\n'), 'Try it')
+  outro(`${provider} is ready — ${models}`)
+  return 0
+}
+
+const inputPriceOf = (entry) => {
+  const price = typeof entry.inputPrice === 'object' ? entry.inputPrice?.default : entry.inputPrice
+  return typeof price === 'number' ? price : Infinity
+}
+
+const cheapestModel = async (provider) => {
+  const mine = catalogEntries(await getCuratedModels())
+    .filter(([key, entry]) => key.startsWith(`${provider}/`) && !entry.deprecated)
+  return mine.reduce((best, current) => inputPriceOf(current[1]) < inputPriceOf(best[1]) ? current : best)[0]
 }
 
 const AUTH_FAILURE_RE = /40[13]|unauthorized|forbidden|invalid[\s_-]*api[\s_-]*key|invalid key|incorrect api key|authentication/i
@@ -339,11 +383,27 @@ async function fillCatalog (selected) {
     }
   }
 
+  let offer = null
+  const ms = spinner()
+  ms.start('Asking mohdex...')
+  try {
+    offer = await mohdexOffer(selected)
+    ms.stop(offer
+      ? `mohdex: ${offer.complete.length} of ${info.label}'s models ready to add`
+      : `mohdex: mohdel cannot list ${info.label}'s models`)
+  } catch (e) {
+    ms.stop(`mohdex unreachable: ${e.message}`)
+  }
+  const fromMohdex = offer?.complete.length
+    ? [{ value: 'mohdex', label: `Add from mohdex (${offer.complete.length})`, hint: 'recommended — prices with their sources, from mohdex.dev' }]
+    : []
+
   const how = await select({
     message: 'How do you want to fill your catalog?',
-    initialValue: free.length ? 'free' : selfPricing ? 'hand' : 'agent',
+    initialValue: fromMohdex.length ? 'mohdex' : free.length ? 'free' : selfPricing ? 'hand' : 'agent',
     options: selfPricing
       ? [
+          ...fromMohdex,
           ...(free.length
             ? [{ value: 'free', label: `Add the free models (${free.length})`, hint: 'nothing to pay, nothing to type' }]
             : []),
@@ -352,6 +412,7 @@ async function fillCatalog (selected) {
           { value: 'later', label: 'Later' }
         ]
       : [
+          ...fromMohdex,
           { value: 'agent', label: 'Let my coding agent do it', hint: 'fetches the model list and the prices' },
           { value: 'hand', label: 'Pick models by hand', hint: 'ids only — prices left for later' },
           { value: 'later', label: 'Later' }
@@ -362,14 +423,21 @@ async function fillCatalog (selected) {
     return
   }
 
+  if (how === 'mohdex') {
+    await addFromMohdex(offer.complete)
+    const n = offer.complete.length
+    log.success(`Added ${n} model${n > 1 ? 's' : ''} from mohdex.` +
+      (offer.incomplete.length ? ` ${id('mo curate ' + selected)} adds ${offer.incomplete.length} more that need a field filled in.` : ''))
+    return
+  }
+
   if (how === 'free') {
     const { addModels } = await import('../lib/select.js')
     const s = spinner()
     s.start(`Adding ${free.length} model${free.length > 1 ? 's' : ''}...`)
     await addModels(selected, api, free)
     s.stop(`Added ${free.length} model${free.length > 1 ? 's' : ''}, priced at $0`)
-    outro(`Ready — ${id('mo ls')} lists them, then ${id('mo ask <model> "…"')}. ` +
-      `${id('mo curate ' + selected)} adds the paid ones.`)
+    log.info(`${id('mo curate ' + selected)} adds the paid ones.`)
     return
   }
 
@@ -384,9 +452,15 @@ async function fillCatalog (selected) {
       outro(`Nothing curated. Retry with ${id('mo curate ' + selected)}.`)
       return
     }
-    outro(selfPricing
-      ? `Catalog complete — ${id('mo ls')} to see it, then ${id('mo ask <model> "…"')}.`
-      : `Prices are still missing — ${id('mo model instructions ' + selected)} fills them in.`)
+    const mine = catalogEntries(await getCuratedModels()).filter(([, s]) => s.provider === selected)
+    if (!mine.length) {
+      outro(`Nothing curated. Retry with ${id('mo curate ' + selected)}.`)
+      return
+    }
+    const unpriced = mine.filter(([, s]) => !hasPrices(s)).map(([key]) => key)
+    if (unpriced.length) {
+      log.warn(`Prices are still missing for ${unpriced.join(', ')} — ${id('mo model instructions ' + selected)} fills them in.`)
+    }
     return
   }
 

@@ -23,6 +23,13 @@ const PROVIDER_INFO = {
     hint: 'Create an API key at cloud.cerebras.ai → Platform → API Keys',
     free: false
   },
+  chatgpt: {
+    label: 'ChatGPT plan',
+    description: 'OpenAI models on your ChatGPT subscription — calls count against the plan, not billed per token.',
+    url: 'https://chatgpt.com',
+    hint: 'Sign in with your ChatGPT account in the browser',
+    free: false
+  },
   anthropic: {
     label: 'Anthropic',
     description: 'Claude Opus, Sonnet, Haiku — reasoning, coding, vision, tool use.',

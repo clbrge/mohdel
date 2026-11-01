@@ -45,6 +45,7 @@ if (command === '-h' || command === '--help') {
   const { default: PROVIDER_INFO } = await import('../lib/provider-info.js')
   const { default: providerDefs } = await import('../lib/providers.js')
   const keyRows = Object.keys(PROVIDER_INFO)
+    .filter(name => providerDefs[name].apiKeyEnv)
     .map(name => [providerDefs[name].apiKeyEnv, `${PROVIDER_INFO[name].label} API key`])
     .concat([[providerDefs.local.optionalApiKeyEnv, 'Bearer token for a local server, if it wants one']])
   const keyWidth = Math.max(...keyRows.map(([k]) => k.length))

@@ -6,7 +6,7 @@ import { dirname, resolve } from 'path'
 import { loadDefaultEnv, getAPIKey, getConfig, saveConfig, getCuratedModels, catalogEntries, hasPrices, ENV_PATH } from '../lib/common.js'
 import providers from '../lib/providers.js'
 import { providerApi } from '../lib/curate.js'
-import { addFromMohdex, mohdexOffer } from '../lib/mohdex.js'
+import { addFromMohdex, mohdexCounts, mohdexOffer } from '../lib/mohdex.js'
 import PROVIDER_INFO from '../lib/provider-info.js'
 
 export { PROVIDER_INFO, appendToEnvFile, verifyKey, askValidatedKey }
@@ -149,11 +149,14 @@ Usage:
   mo onboard                Pick a provider (interactive)
   mo onboard <provider>     Start at that provider; steps already done are skipped
   --caller <name>           Run for another program: end by handing back to it
-                            instead of suggesting mo commands
+                            instead of suggesting mo commands. With no provider,
+                            pick one not yet set up, among those mohdex prices
 
-Exit code (mo onboard <provider>):
-  0  the provider has its credential and at least one model in the catalog
-  1  it does not yet — the last line names the command that closes it
+Exit code (mo onboard <provider>, or --caller with no provider):
+  0  the provider has its credential and at least one model in the catalog,
+     or (no provider) every provider that could be offered is set up already
+  1  it does not yet — the last line names the command that closes it —
+     or (no provider) the picker was cancelled
   2  no such provider, or --caller without a name`)
     return 0
   }
@@ -165,8 +168,60 @@ Exit code (mo onboard <provider>):
   }
   const provider = args.find(a => !a.startsWith('-'))
   if (provider) return runOnboardProvider(provider, caller)
+  if (caller) return runOnboardPicker(caller)
   await runOnboard()
   return 0
+}
+
+/**
+ * `mo onboard --caller <name>`: a provider not yet set up, picked and set up, whatever is set up
+ * already. Only the ones mohdex can price are offered, unless mohdex cannot be reached.
+ */
+async function runOnboardPicker (caller) {
+  loadDefaultEnv()
+  const { credentialOf } = await import('../lib/readiness.js')
+  intro(`mohdel (via ${caller})`)
+  const unset = []
+  for (const name of Object.keys(providers)) {
+    if (!await credentialOf(name)) unset.push(name)
+  }
+  if (!unset.length) {
+    outro(`Every provider mohdel knows is set up. Back to ${caller}.`)
+    return 0
+  }
+
+  let counts = null
+  const ms = spinner()
+  ms.start('Asking mohdex...')
+  try {
+    counts = await mohdexCounts()
+    const priced = unset.filter(name => counts[name] > 0).length
+    ms.stop(`mohdex: ${priced} of the ${unset.length} providers not set up have entries`)
+  } catch (e) {
+    ms.stop(`mohdex unreachable: ${e.message} — showing every provider`)
+  }
+  const offered = counts ? unset.filter(name => counts[name] > 0) : unset
+  if (!offered.length) {
+    outro(`Every provider on mohdex is set up. Back to ${caller}.`)
+    return 0
+  }
+
+  const free = (name) => PROVIDER_INFO[name]?.free ? 0 : 1
+  const selected = await select({
+    message: 'Select a provider to set up:',
+    options: offered
+      .sort((a, b) => free(a) - free(b))
+      .map(name => ({
+        value: name,
+        label: (PROVIDER_INFO[name]?.label ?? name) + (PROVIDER_INFO[name]?.free ? ok(' (free)') : ''),
+        hint: counts ? `${counts[name]} model${counts[name] > 1 ? 's' : ''} on mohdex` : PROVIDER_INFO[name]?.description
+      }))
+  })
+  if (isCancel(selected)) {
+    cancel(`No provider set up. Back to ${caller}.`)
+    return 1
+  }
+  return setUpProvider(selected, caller)
 }
 
 /**
@@ -182,8 +237,13 @@ export async function runOnboardProvider (provider, caller) {
     console.error(`mo onboard: no provider "${provider}" — mo providers lists them`)
     return 2
   }
-  const { credentialOf, providerReadiness } = await import('../lib/readiness.js')
   intro(`${caller ? `mohdel (via ${caller})` : 'mohdel'} — ${PROVIDER_INFO[provider]?.label ?? provider}`)
+  return setUpProvider(provider, caller)
+}
+
+async function setUpProvider (provider, caller) {
+  const def = providers[provider]
+  const { credentialOf, providerReadiness } = await import('../lib/readiness.js')
   // A stored key the provider refuses counts as unset, so onboarding repairs
   // it instead of skipping past it. Anything unverifiable (offline, a provider
   // with no listing mohdel reads) keeps the stored key and proceeds.
@@ -427,7 +487,7 @@ async function fillCatalog (selected) {
     await addFromMohdex(offer.complete)
     const n = offer.complete.length
     log.success(`Added ${n} model${n > 1 ? 's' : ''} from mohdex.` +
-      (offer.incomplete.length ? ` ${id('mo curate ' + selected)} adds ${offer.incomplete.length} more that need a field filled in.` : ''))
+      (offer.incomplete.length ? ` ${id('mo curate ' + selected)} adds ${offer.incomplete.length} more that mohdex cannot complete.` : ''))
     return
   }
 

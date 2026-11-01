@@ -43,6 +43,7 @@ const providers = {
     billing: { kind: 'plan', label: 'ChatGPT plan', usage: 'https://chatgpt.com/settings/usage' },
     sdk: 'openai',
     catalogClient: 'chatgpt',
+    pricesFrom: 'openai',
     refreshConfiguration: true,
     resolveConfiguration: async () => {
       const { createChatGPT } = await import('../../js/chatgpt/index.js')

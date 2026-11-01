@@ -4,6 +4,38 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.3.0] — Added: ChatGPT-plan entries from mohdex / Fix: mo onboard --caller sets up another provider
+
+### Added
+
+- A provider can declare `pricesFrom: '<provider>'` in `providers.js`: its entries are that
+  provider's. `chatgpt` declares `openai`, so `mo onboard chatgpt` and `mo curate chatgpt`
+  offer mohdex's `openai/` entries for the models the ChatGPT account lists, keyed `chatgpt/…`,
+  with their `source` and `sourcedAt`. `speeds` and the rate limits (`rpmLimit`, `tpmLimit`,
+  `inpmLimit`, `rateLimitScope`) are not carried over: they describe the API route. Prices are,
+  and the route stays billed `plan`. A model whose plan route has different limits from its API
+  twin gets the API's.
+
+### Fixed
+
+- `mo onboard --caller <name>` with no provider goes to a picker of the providers not yet set
+  up, which mohdex holds entries for, free ones first, each hinted with its model count. The
+  ChatGPT sign-in is among them, labelled "ChatGPT plan", as is the header of
+  `mo onboard chatgpt`. When mohdex cannot be reached, every provider not yet set up
+  is offered. The picked provider is set up as `mo onboard <provider> --caller <name>` would;
+  a cancelled picker ends with "No provider set up. Back to <name>." and exit code 1. Before,
+  the command printed a status line once any provider was set up, so the caller could never
+  set up a second one. Without `--caller`, `mo onboard` is unchanged.
+- `mo onboard <provider>` and curate's "Include from mohdex" find a mohdex entry whose key differs
+  from the id the provider lists, through its `model` or `aliases`, as the catalog matches a
+  listing: DeepSeek lists `deepseek-flash`, mohdex keys it `deepseek/deepseek-v4.1-flash`. Only
+  the key was compared, so mohdex offered 0 of DeepSeek's models. The entry is added under
+  mohdex's key.
+- "Add from mohdex" in `mo onboard` strips computed fields from the entries it writes, as
+  curate's "Include from mohdex" does.
+- `mo onboard <provider>`'s note on the models mohdex cannot complete also counts the listed
+  models mohdex holds no entry for.
+
 ## [4.2.0] — Added: onboarding and curate take models from mohdex / Fix: picking models by hand ends where you expect
 
 ### Added

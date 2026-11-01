@@ -14,7 +14,7 @@ import {
 import { getMohdelModel } from './curated-cache.js'
 import { addEntries, filterUncurated, freeModels, modelDetails, providerApi } from './curate.js'
 import { stripUnknown } from './schema.js'
-import { mohdexEntries } from './mohdex.js'
+import { mohdexEntries, mohdexMatch } from './mohdex.js'
 
 export { freeModels, providerApi }
 
@@ -291,9 +291,10 @@ const processOneModel = async (providerName, providerInstance, model, curated, e
   const curatedKey = `${providerName}/${modelId}`
 
   const replacementCandidates = findReplacementCandidates(providerName, modelId, curated)
+  const fromMohdex = mohdexMatch(served, providerName, modelId)
 
   const options = [
-    ...(served[curatedKey] && !served[curatedKey].deprecated
+    ...(fromMohdex && !fromMohdex.entry.deprecated
       ? [{ value: 'mohdex', label: 'Include from mohdex', hint: 'its values fill the entry, you fill the rest' }]
       : []),
     { value: 'include', label: 'Include in curated models' },
@@ -345,9 +346,9 @@ const processOneModel = async (providerName, providerInstance, model, curated, e
   }
 
   if (answer === 'mohdex') {
-    curated[curatedKey] = await promptMissingFields(stripUnknown({ ...baseModelMeta, ...served[curatedKey] }), curatedKey)
+    curated[fromMohdex.key] = await promptMissingFields(stripUnknown({ ...baseModelMeta, ...fromMohdex.entry }), fromMohdex.key)
     await saveCuratedModels(curated)
-    clack.log.success(`Added ${curatedKey} to curated models from mohdex`)
+    clack.log.success(`Added ${fromMohdex.key} to curated models from mohdex`)
   } else if (answer === 'include') {
     curated[curatedKey] = modelInfoWithMeta || baseModelMeta
     await saveCuratedModels(curated)

@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.3.1] — Fix: a gate session reads the catalog mo wrote, wherever XDG_CONFIG_HOME puts it
+
+### Fixed
+
+- A session started by the gate's pool now gets the `XDG_*` variables, as the ChatGPT helper
+  already did. It lost them with the rest of its environment, so with `XDG_CONFIG_HOME` set it
+  read `~/.config/mohdel/curated.json` while `mo` wrote the catalog and the gate read the keys
+  under `$XDG_CONFIG_HOME`: a model just added failed with `SESSION_UNKNOWN_MODEL`. The same
+  applied to `providers.json` (the gate and the session disagreed on which accounts may ask for
+  summaries) and to the video cache under `XDG_CACHE_HOME`. The in-process path read its own
+  environment and was not affected.
+- The onboarding's mohdex line says what is true when mohdex has nothing to add: "mohdex has
+  no <provider> models to add", or, when it holds entries none of which is complete, how many
+  and that `mo curate <provider>` fills them in. It read "0 of <provider>'s models ready to
+  add". After "Add from mohdex", the models left to `mo curate` are counted apart: missing a
+  field, or not on mohdex.
+
 ## [4.3.0] — Added: ChatGPT-plan entries from mohdex / Fix: mo onboard --caller sets up another provider
 
 ### Added

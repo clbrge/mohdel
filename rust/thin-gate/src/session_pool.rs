@@ -84,9 +84,10 @@ pub struct PooledSession {
 /// Environment the session is allowed to inherit.
 ///
 /// Everything else is dropped, including every `*_API_SK` a host may hold.
-/// `OTEL_*` is forwarded as a prefix so telemetry keeps working; note that
-/// `OTEL_EXPORTER_OTLP_HEADERS` is the one forwarded variable that commonly
-/// carries a credential of its own.
+/// Two prefixes are forwarded besides: `XDG_*`, so the session finds the
+/// catalog, `providers.json` and its cache where the `mo` CLI and the gate do,
+/// and `OTEL_*`, so telemetry keeps working. `OTEL_EXPORTER_OTLP_HEADERS` is
+/// the one forwarded variable that commonly carries a credential of its own.
 const FORWARDED_ENV: &[&str] = &[
     // process basics
     "PATH",
@@ -118,7 +119,7 @@ const FORWARDED_ENV: &[&str] = &[
 
 /// Whether a variable survives `env_clear()`.
 pub fn is_forwarded(key: &str) -> bool {
-    FORWARDED_ENV.contains(&key) || key.starts_with("OTEL_")
+    FORWARDED_ENV.contains(&key) || key.starts_with("XDG_") || key.starts_with("OTEL_")
 }
 
 impl PooledSession {
@@ -952,6 +953,9 @@ mod env_forwarding_tests {
             "OPENROUTER_REFERER",
             "NODE_EXTRA_CA_CERTS",
             "HTTPS_PROXY",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
         ] {
             assert!(is_forwarded(key), "{key} is read by the session");
         }

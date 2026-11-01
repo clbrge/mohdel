@@ -448,9 +448,7 @@ async function fillCatalog (selected) {
   ms.start('Asking mohdex...')
   try {
     offer = await mohdexOffer(selected)
-    ms.stop(offer
-      ? `mohdex: ${offer.complete.length} of ${info.label}'s models ready to add`
-      : `mohdex: mohdel cannot list ${info.label}'s models`)
+    ms.stop(mohdexLine(offer, selected, info.label))
   } catch (e) {
     ms.stop(`mohdex unreachable: ${e.message}`)
   }
@@ -486,8 +484,12 @@ async function fillCatalog (selected) {
   if (how === 'mohdex') {
     await addFromMohdex(offer.complete)
     const n = offer.complete.length
+    const rest = [
+      ...(offer.incomplete.length ? [`${offer.incomplete.length} missing a field`] : []),
+      ...(offer.unserved.length ? [`${offer.unserved.length} not on mohdex`] : [])
+    ]
     log.success(`Added ${n} model${n > 1 ? 's' : ''} from mohdex.` +
-      (offer.incomplete.length ? ` ${id('mo curate ' + selected)} adds ${offer.incomplete.length} more that mohdex cannot complete.` : ''))
+      (rest.length ? ` ${id('mo curate ' + selected)} adds the rest (${rest.join(', ')}).` : ''))
     return
   }
 
@@ -525,6 +527,15 @@ async function fillCatalog (selected) {
   }
 
   await writeCatalogBrief(selected)
+}
+
+function mohdexLine (offer, provider, label) {
+  if (!offer) return `mohdex: mohdel cannot list ${label}'s models`
+  if (offer.complete.length) return `mohdex: ${offer.complete.length} of ${label}'s models ready to add`
+  const n = offer.incomplete.length
+  if (!n) return `mohdex has no ${label} models to add`
+  const held = n > 1 ? `none of the ${n} ${label} models it holds is complete` : `the ${label} model it holds is not complete`
+  return `mohdex: ${held} — ${id('mo curate ' + provider)} fills ${n > 1 ? 'them' : 'it'} in`
 }
 
 async function writeCatalogBrief (selected) {

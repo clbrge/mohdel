@@ -64,9 +64,9 @@ export function mohdexMatch (served, provider, id) {
 
 /**
  * What mohdex serves for the models `provider` lists and the catalog lacks: `complete`, each
- * `{ key, entry }` the catalog accepts as served, and the keys of `incomplete` ones: listed models
- * mohdex holds no entry for, or one still missing a field it has no public value for. Null when
- * mohdel cannot list the provider's models.
+ * `{ key, entry }` the catalog accepts as served; `incomplete`, the keys of entries still missing a
+ * field mohdex has no public value for; and `unserved`, the keys of listed models it holds no entry
+ * for. Null when mohdel cannot list the provider's models.
  */
 export async function mohdexOffer (provider) {
   const listed = await upstream(provider)
@@ -74,11 +74,12 @@ export async function mohdexOffer (provider) {
   const served = await mohdexEntries(provider)
   const complete = []
   const incomplete = []
+  const unserved = []
   const offered = new Set()
   for (const { id } of listed) {
     const match = mohdexMatch(served, provider, id)
     if (!match) {
-      incomplete.push(`${provider}/${id}`)
+      unserved.push(`${provider}/${id}`)
       continue
     }
     const { key, entry } = match
@@ -87,7 +88,7 @@ export async function mohdexOffer (provider) {
     if (validate(entry, key).some(issue => issue.severity === 'error')) incomplete.push(key)
     else complete.push({ key, entry })
   }
-  return { complete, incomplete }
+  return { complete, incomplete, unserved }
 }
 
 export async function addFromMohdex (picked) {

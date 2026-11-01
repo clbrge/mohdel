@@ -129,9 +129,7 @@ impl AuthPolicy for ChatGptAuth {
 /// What a session gets, plus what `env-paths` reads to find the store.
 fn helper_env(key: &OsString) -> bool {
     key.to_str().is_some_and(|key| {
-        is_forwarded(key)
-            || key.starts_with("XDG_")
-            || matches!(key, "APPDATA" | "LOCALAPPDATA" | "USERPROFILE")
+        is_forwarded(key) || matches!(key, "APPDATA" | "LOCALAPPDATA" | "USERPROFILE")
     })
 }
 

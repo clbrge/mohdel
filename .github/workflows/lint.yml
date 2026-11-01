@@ -42,8 +42,9 @@ jobs:
   lua:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        luaVersion: ['5.1', '5.4', 'luajit']
+        luaVersion: ['5.1', '5.4', 'luajit-2.1-20261023']
     steps:
       - uses: actions/checkout@v4
       - uses: leafo/gh-actions-lua@v13

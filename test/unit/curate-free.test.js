@@ -11,6 +11,7 @@ vi.mock('env-paths', () => ({ default: () => dirs }))
 
 const { freeModels, addModels } = await import('../../src/lib/select.js')
 const { getCuratedModels } = await import('../../src/lib/common.js')
+const { reviewEntry } = await import('../../src/lib/catalog-review.js')
 
 describe('free models in a self-priced list', () => {
   test('a model is free only when both prices are zero', () => {
@@ -46,7 +47,7 @@ describe('adding models without prompting', () => {
     ])
     const curated = await getCuratedModels()
 
-    expect(curated['openrouter/deepseek/deepseek-r1:free']).toMatchObject({
+    expect(curated['openrouter/deepseek/deepseek-r1-free']).toMatchObject({
       provider: 'openrouter',
       model: 'deepseek/deepseek-r1:free',
       creator: 'deepseek',
@@ -54,7 +55,16 @@ describe('adding models without prompting', () => {
       outputPrice: 0,
       inputFormat: ['text']
     })
-    expect(curated['openrouter/nobody/unknown-model:free'].creator).toBe('nobody')
+    expect(curated['openrouter/nobody/unknown-model-free'].creator).toBe('nobody')
+    expect(reviewEntry('openrouter/deepseek/deepseek-r1-free', curated['openrouter/deepseek/deepseek-r1-free'], curated).errors).toEqual([])
+  })
+
+  test('refuses two listed ids that make one key, writing neither', async () => {
+    await expect(addModels('openrouter', api, [
+      { id: 'vendor/twin:free', label: 'Twin (free)' },
+      { id: 'vendor/twin-free', label: 'Twin free' }
+    ])).rejects.toThrow("openrouter's vendor/twin-free and vendor/twin:free both make the catalog key openrouter/vendor/twin-free")
+    expect((await getCuratedModels())['openrouter/vendor/twin-free']).toBeUndefined()
   })
 })
 

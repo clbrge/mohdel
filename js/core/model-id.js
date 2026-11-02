@@ -52,6 +52,20 @@ export function catalogKey (model) {
 }
 
 /**
+ * The catalog key for a model `provider` lists as `upstreamId`. The
+ * upstream id is kept whole in the entry's `model`; in the key, each
+ * `:` and `@` becomes `-`, since there they would read as an effort or
+ * speed suffix.
+ *
+ * @param {string} provider
+ * @param {string} upstreamId
+ * @returns {string}
+ */
+export function entryKey (provider, upstreamId) {
+  return `${provider}/${upstreamId.replace(/[:@]/g, '-')}`
+}
+
+/**
  * Effort suffix, without the `:`, or `undefined` if absent.
  *
  * @param {string} model

@@ -15,6 +15,7 @@ import { getMohdelModel } from './curated-cache.js'
 import { addEntries, filterUncurated, freeModels, modelDetails, providerApi } from './curate.js'
 import { stripUnknown } from './schema.js'
 import { mohdexEntries, mohdexMatch } from './mohdex.js'
+import { entryKey } from '#core/model-id.js'
 
 export { freeModels, providerApi }
 
@@ -288,7 +289,12 @@ const processModelsSearchMode = async (providerName, providerInstance, allModels
 const processOneModel = async (providerName, providerInstance, model, curated, excluded, served) => {
   const modelId = model.id
   const modelLabel = model.label || modelId
-  const curatedKey = `${providerName}/${modelId}`
+  const curatedKey = entryKey(providerName, modelId)
+  const holder = curated[curatedKey] || excluded[curatedKey]
+  if (holder) {
+    clack.log.error(`${providerName}'s ${modelId} and ${holder.model} both make the catalog key ${curatedKey}`)
+    return
+  }
 
   const replacementCandidates = findReplacementCandidates(providerName, modelId, curated)
   const fromMohdex = mohdexMatch(served, providerName, modelId)

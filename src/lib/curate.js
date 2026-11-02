@@ -10,6 +10,7 @@ import { creatorFromModelId } from './creators.js'
 import { getAPIKey, getCuratedModels, getExcludedModels, hasPrices, saveCuratedModels } from './common.js'
 import { getMohdelModel } from './curated-cache.js'
 import { stripUnknown, validate } from './schema.js'
+import { entryKey } from '#core/model-id.js'
 import { silent } from './logger.js'
 
 /**
@@ -73,24 +74,28 @@ const buildEntry = async (providerName, model, api) => {
   return { entry, why }
 }
 
-const buildEntries = async (providerName, api, models) => {
+const buildEntries = async (providerName, api, models, curated) => {
   const built = []
   for (const model of models) {
-    built.push({ key: `${providerName}/${model.id}`, ...await buildEntry(providerName, model, api) })
+    const key = entryKey(providerName, model.id)
+    const holder = built.find(one => one.key === key)?.entry || curated[key]
+    if (holder) throw new Error(`${providerName}'s ${model.id} and ${holder.model} both make the catalog key ${key}`)
+    built.push({ key, ...await buildEntry(providerName, model, api) })
   }
   return built
 }
 
-const saveEntries = async (built) => {
-  const curated = await getCuratedModels()
+const saveEntries = async (built, curated) => {
   for (const { key, entry } of built) curated[key] = entry
   await saveCuratedModels(curated)
   return built
 }
 
 /** Each model's entry written to the catalog, `{ key, entry, why }`, `why` as `modelDetails` gives it. */
-export const addEntries = async (providerName, api, models) =>
-  saveEntries(await buildEntries(providerName, api, models))
+export const addEntries = async (providerName, api, models) => {
+  const curated = await getCuratedModels()
+  return saveEntries(await buildEntries(providerName, api, models, curated), curated)
+}
 
 const cannotList = (provider) => {
   const def = providers[provider]
@@ -139,14 +144,14 @@ export async function curate (provider, ids) {
     if (isTracked(excluded, provider, id)) throw new Error(`${provider}'s ${id} is excluded from the catalog`)
     return found
   })
-  const built = await buildEntries(provider, api, picked)
+  const built = await buildEntries(provider, api, picked, curated)
   const rejected = built.flatMap(({ key, entry, why }) => validate(entry, key)
     .filter(issue => issue.severity === 'error')
     .map(issue => `${key}: ${issue.field} — ${issue.message}${why ? ` (${why})` : ''}`))
   if (rejected.length) {
     throw new Error(`the catalog would reject ${rejected.join('; ')}. mo curate ${provider} asks for what is missing`)
   }
-  return (await saveEntries(built)).map(({ key, entry }) => ({
+  return (await saveEntries(built, curated)).map(({ key, entry }) => ({
     model: key,
     priced: billingOf(key).kind === 'metered' ? hasPrices(entry) : null
   }))

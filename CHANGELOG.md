@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.3.2] — Fix: a listed id with `:` or `@` gets a catalog key mohdel accepts
+
+### Fixed
+
+- `mo curate`, and the free-model step of `mo onboard`, keyed an entry `<provider>/<listed id>`
+  even when the id held a `:` or `@`, as OpenRouter's `…:free` models do. `mo model apply` and
+  `mo check` reject such a key, since there `:` and `@` mark an effort or a speed. The key now
+  has each `:` and `@` turned into `-` (`openrouter/google/gemma-4-31b-it-free`). The entry's
+  `model` keeps the id as listed, so the call sends `google/gemma-4-31b-it:free`. When two
+  listed ids would make one key, neither is written and the error names both.
+
 ## [4.3.1] — Fix: a gate session reads the catalog mo wrote, wherever XDG_CONFIG_HOME puts it
 
 ### Fixed

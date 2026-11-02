@@ -4,6 +4,29 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.4.0] — Feature: mo onboard openrouter can sign in with OpenRouter instead of a pasted key
+
+### Added
+
+- Setting up OpenRouter (`mo onboard openrouter`, and `spore setup` through `--caller`) offers
+  "Sign in with OpenRouter" before "Paste an API key". It prints a link to open in any browser;
+  once the user authorizes, OpenRouter shows a code, the user pastes it, and mohdel exchanges it
+  (OAuth PKCE, S256) for a key OpenRouter makes on the user's account, labelled
+  `Mohdel (<hostname>)`, or `<caller> via Mohdel (<hostname>)`. The key is checked and saved to
+  `OPENROUTER_API_SK` as a pasted one is, never printed, and the key's own page is linked for
+  setting a spending limit. The link works wherever the browser is, a browser terminal included,
+  since nothing waits on a local callback. A code is good for 10 minutes; an expired one says so
+  and the choice comes back.
+
+### Fixed
+
+- An OpenRouter call the upstream provider failed reported only "Provider returned error". Its
+  detail is now what the upstream said, named: "Google AI Studio: google/gemma-4-31b-it:free is
+  temporarily rate-limited upstream…". A 429 from an upstream's free pool, which every OpenRouter
+  caller shares, is `RATE_LIMIT_LOAD`, as OpenRouter's `limit_source` says, where it was the
+  ambiguous `RATE_LIMIT`. Both runtimes classify in the session, so `mo`, an embedder and the gate
+  see the same.
+
 ## [4.3.2] — Fix: a listed id with `:` or `@` gets a catalog key mohdel accepts
 
 ### Fixed

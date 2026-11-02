@@ -114,7 +114,7 @@ shapes with no cost accounting.
 
 ## Quick Start
 
-Install, run `mo` to pick a provider and paste your API key, then `mo ask`. Gemini, Groq, Mistral and OpenRouter all have free tiers that need no card, and `mo` lists them first if you have no paid key set.
+Install, run `mo` to pick a provider and paste your API key (or, for OpenRouter, sign in), then `mo ask`. Gemini, Groq, Mistral and OpenRouter all have free tiers that need no card, and `mo` lists them first if you have no paid key set.
 
 `cost` stays `0` until the catalog carries prices. `mo` pulls the provider's model list, but that list carries ids, not prices. `mo model instructions <provider>` writes a brief carrying the field reference, the provider's own pricing and rate-limit links, and the commands that verify a draft; hand it to the coding agent you already run:
 

@@ -237,6 +237,27 @@ describe('classifyProviderError — 429 split (TIER vs LOAD)', () => {
       .toBe('RATE_LIMIT_LOAD')
   })
 
+  test('openrouter upstream shared-pool 429 → RATE_LIMIT_LOAD, detail from the upstream', () => {
+    const err = {
+      status: 429,
+      message: '429 Provider returned error',
+      error: {
+        message: 'Provider returned error',
+        code: 429,
+        metadata: {
+          raw: 'google/gemma-4-31b-it:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations',
+          provider_name: 'Google AI Studio',
+          is_byok: false,
+          provider_error_code: '429',
+          limit_source: 'upstream_provider_shared_pool'
+        }
+      }
+    }
+    const out = classifyProviderError(err, undefined, { provider: 'openrouter' })
+    expect(out.type).toBe('RATE_LIMIT_LOAD')
+    expect(out.detail).toBe('Google AI Studio: google/gemma-4-31b-it:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations')
+  })
+
   test('unknown provider falls back to generic header detection', () => {
     const err = {
       status: 429,

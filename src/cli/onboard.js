@@ -3,11 +3,13 @@ import { id, label, meta, ok } from './colors.js'
 import { chmodSync, existsSync, readFileSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { dirname, resolve } from 'path'
+import { hostname } from 'os'
 import { loadDefaultEnv, getAPIKey, getConfig, saveConfig, getCuratedModels, catalogEntries, hasPrices, ENV_PATH } from '../lib/common.js'
 import providers from '../lib/providers.js'
 import { providerApi } from '../lib/curate.js'
 import { addFromMohdex, mohdexCounts, mohdexOffer } from '../lib/mohdex.js'
 import PROVIDER_INFO from '../lib/provider-info.js'
+import { signIn, keyPage } from './openrouter-signin.js'
 
 export { PROVIDER_INFO, appendToEnvFile, verifyKey, askValidatedKey }
 
@@ -256,7 +258,7 @@ async function setUpProvider (provider, caller) {
       const verdict = await verifyKey(provider, stored)
       check.stop(verdict === 'valid' ? 'Saved key accepted' : verdict === 'invalid' ? 'Saved key refused' : 'Could not check the saved key')
       if (verdict === 'invalid') {
-        note(`The saved ${def.apiKeyEnv} was refused by ${provider} — paste a fresh one.`, 'Invalid key')
+        note(`The saved ${def.apiKeyEnv} was refused by ${provider} — set up a fresh one.`, 'Invalid key')
         credential = false
       }
     }
@@ -265,7 +267,7 @@ async function setUpProvider (provider, caller) {
     if (def.catalogClient === 'chatgpt') {
       const { runChatGPT } = await import('./chatgpt.js')
       await runChatGPT(['login'])
-    } else if (def.apiKeyEnv && !await askKey(provider)) {
+    } else if (def.apiKeyEnv && !await askKey(provider, caller)) {
       cancel('Setup cancelled')
       return 1
     }
@@ -399,11 +401,56 @@ async function askValidatedKey (provider) {
   }
 }
 
+/** A key for OpenRouter, from a sign-in or pasted; null when the user cancels the choice or the paste. */
+async function askOpenRouterKey (caller) {
+  for (;;) {
+    const how = await select({
+      message: 'How should mohdel get your OpenRouter key?',
+      options: [
+        { value: 'signin', label: 'Sign in with OpenRouter', hint: 'a link to open; OpenRouter makes the key' },
+        { value: 'paste', label: 'Paste an API key' }
+      ]
+    })
+    if (isCancel(how)) return null
+    if (how === 'paste') return askValidatedKey('openrouter')
+    const key = await signedInKey(caller)
+    if (key) return key
+  }
+}
+
+async function signedInKey (caller) {
+  const label = `${caller ? `${caller} via ` : ''}Mohdel (${hostname()})`
+  let key
+  try {
+    key = await signIn({ label })
+  } catch (err) {
+    note(err.message, 'Sign-in failed')
+    return null
+  }
+  if (!key) return null
+
+  const check = spinner()
+  check.start('Checking the key…')
+  const verdict = await verifyKey('openrouter', key)
+  check.stop(verdict === 'valid' ? 'Key accepted' : verdict === 'invalid' ? 'Key refused' : 'Could not check the key')
+  if (verdict === 'invalid') {
+    note('OpenRouter refused the key it just made. Sign in again.', 'Invalid key')
+    return null
+  }
+  if (verdict === 'unknown') {
+    const save = await confirm({ message: 'The key could not be verified (offline?). Save it anyway?' })
+    if (isCancel(save) || !save) return null
+  }
+  log.info('Set a spending limit for this key at:')
+  console.log(keyPage(key))
+  return key
+}
+
 /** The provider's key, asked for and written to the environment file; false when the user cancelled. */
-async function askKey (selected) {
+async function askKey (selected, caller) {
   const envVar = providers[selected].apiKeyEnv
 
-  const key = await askValidatedKey(selected)
+  const key = selected === 'openrouter' ? await askOpenRouterKey(caller) : await askValidatedKey(selected)
   if (!key) return false
 
   await appendToEnvFile(envVar, key)

@@ -85,11 +85,33 @@ function unwrapJsonMessage (str) {
  */
 function extractDetail (err) {
   if (!err) return undefined
+  const str = upstreamDetail(err.error?.metadata) ?? sdkDetail(err)
+  if (!str) return undefined
+  return str.length > DETAIL_CAP ? str.slice(0, DETAIL_CAP) + '…' : str
+}
+
+/**
+ * OpenRouter's top-level message for an upstream failure is only
+ * "Provider returned error"; what the upstream said is in
+ * `error.metadata.raw`, and which upstream in `provider_name`.
+ * @param {any} metadata
+ * @returns {string | undefined}
+ */
+function upstreamDetail (metadata) {
+  if (typeof metadata?.raw !== 'string' || !metadata.raw) return undefined
+  const said = unwrapJsonMessage(metadata.raw)
+  return metadata.provider_name ? `${metadata.provider_name}: ${said}` : said
+}
+
+/**
+ * @param {any} err
+ * @returns {string | undefined}
+ */
+function sdkDetail (err) {
   const nested = err.error?.message || err.response?.data?.error?.message
   const raw = nested || err.message
   if (!raw) return undefined
-  const str = unwrapJsonMessage(typeof raw === 'string' ? raw : JSON.stringify(raw))
-  return str.length > DETAIL_CAP ? str.slice(0, DETAIL_CAP) + '…' : str
+  return unwrapJsonMessage(typeof raw === 'string' ? raw : JSON.stringify(raw))
 }
 
 /**
@@ -274,13 +296,14 @@ const providerOverrides = {
     if (code === 'rate_limit_exceeded') return tierResult(detail)
     return undefined
   },
-  openrouter (_err, code, detail) {
+  openrouter (err, code, detail) {
     // OpenRouter forwards upstream 429s. Their own aggregator tier hits
-    // expose `code === 'rate_limit_exceeded'`; upstream-provider load
-    // is reflected via the body's `error.metadata.provider_name`
-    // alongside a "overloaded" / "busy" phrasing — fall back to LOAD
-    // when we don't have a definite tier signal.
+    // expose `code === 'rate_limit_exceeded'`; an upstream's free pool
+    // shared by every OpenRouter caller says so in
+    // `error.metadata.limit_source`; other upstream-provider load shows
+    // as an "overloaded" / "busy" phrasing.
     if (code === 'rate_limit_exceeded') return tierResult(detail)
+    if (err?.error?.metadata?.limit_source === 'upstream_provider_shared_pool') return loadResult(detail)
     if (/overloaded|busy|capacity/i.test(detail || '')) return loadResult(detail)
     return undefined
   },

@@ -23,11 +23,13 @@ describe('openrouter attribution env does not leak into the factory config', () 
   afterEach(() => {
     delete process.env.OPENROUTER_REFERER
     delete process.env.OPENROUTER_TITLE
+    delete process.env.OPENROUTER_CATEGORIES
   })
 
   test('config is accepted with the attribution vars set', () => {
     process.env.OPENROUTER_REFERER = 'https://example.test'
     process.env.OPENROUTER_TITLE = 'Example'
+    process.env.OPENROUTER_CATEGORIES = 'cli-agent'
     const cfg = providers.openrouter.createConfiguration('sk-test')
     expect(cfg).toEqual({ apiKey: 'sk-test' })
     expect(configToAuth(cfg).key).toBe('sk-test')

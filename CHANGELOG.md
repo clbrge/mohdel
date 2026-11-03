@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.8.0] — Feature: OpenRouter attribution sends X-OpenRouter-Title, and OPENROUTER_CATEGORIES sets X-OpenRouter-Categories
+
+### Added
+
+- `OPENROUTER_CATEGORIES` is sent to OpenRouter as `X-OpenRouter-Categories`, which places the
+  app under those categories in OpenRouter's rankings. The value goes as given: OpenRouter owns
+  the category list and drops what it does not know. Like `OPENROUTER_REFERER` and
+  `OPENROUTER_TITLE`, it is sent only when set, and the gate forwards it to its sessions.
+
+### Changed
+
+- `OPENROUTER_TITLE` is sent as `X-OpenRouter-Title` instead of `X-Title`. OpenRouter treats the
+  two as the same header, so an app's existing page is unaffected.
+
 ## [4.7.0] — Fixed: an Anthropic refusal no longer comes back as a finished reply
 
 ### Fixed

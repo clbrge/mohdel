@@ -478,6 +478,8 @@ MOHDEL_LOCAL_API_SK=...
 
 Only set keys for providers you use. Run `mo` with no arguments for interactive setup.
 
+An app embedding mohdel can name itself to OpenRouter with `OPENROUTER_REFERER` (sent as `HTTP-Referer`), `OPENROUTER_TITLE` (`X-OpenRouter-Title`) and `OPENROUTER_CATEGORIES` (`X-OpenRouter-Categories`, comma-separated). Nothing is sent unless they are set. Behind the gate they are read from the gate's own environment, so every caller of one gate is attributed to the same app. See OpenRouter's [app attribution](https://openrouter.ai/docs/app-attribution).
+
 `local/` routes each model to the `baseURL` of its catalog entry — any OpenAI-compatible chat-completions server (Ollama, vLLM, llama.cpp server, LM Studio). There is no default endpoint and no per-call override: an entry without `baseURL` fails `mo model check`, a call to it fails with `CONFIGURATION_MISSING`, so a call never falls through to a cloud provider. `MOHDEL_LOCAL_API_SK` is an optional bearer token. Entry format in [docs/CATALOG.md](docs/CATALOG.md#self-hosted-local-entries).
 
 ### File locations

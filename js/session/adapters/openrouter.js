@@ -19,8 +19,8 @@ const BASE_URL = 'https://openrouter.ai/api/v1'
 /**
  * Strip `\r` and `\n` from a header value. Node already rejects CRLF
  * in header values at send time (throws), so this is defense-in-depth
- * against a misconfigured `OPENROUTER_REFERER` / `OPENROUTER_TITLE`
- * env var crashing the adapter instead of producing a valid header.
+ * against a misconfigured `OPENROUTER_REFERER`, `OPENROUTER_TITLE` or
+ * `OPENROUTER_CATEGORIES` env var crashing the adapter instead of producing a valid header.
  *
  * @param {string} v
  */
@@ -34,16 +34,20 @@ export function sanitizeHeader (v) {
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
 export async function * openrouter (envelope, deps = {}) {
-  // OpenRouter accepts optional `HTTP-Referer` + `X-Title` headers for
-  // attribution in their dashboard. Only send when the embedder sets
-  // the env vars — no defaults, so mohdel never identifies any
-  // upstream consumer unprompted.
+  // OpenRouter attributes a request to an app from `HTTP-Referer`,
+  // `X-OpenRouter-Title` and `X-OpenRouter-Categories`. Only sent when
+  // the embedder sets the env vars — no defaults, so mohdel never
+  // identifies any upstream consumer unprompted. Categories pass as
+  // given: OpenRouter owns the list and drops what it does not know.
   const defaultHeaders = {}
   if (process.env.OPENROUTER_REFERER) {
     defaultHeaders['HTTP-Referer'] = sanitizeHeader(process.env.OPENROUTER_REFERER)
   }
   if (process.env.OPENROUTER_TITLE) {
-    defaultHeaders['X-Title'] = sanitizeHeader(process.env.OPENROUTER_TITLE)
+    defaultHeaders['X-OpenRouter-Title'] = sanitizeHeader(process.env.OPENROUTER_TITLE)
+  }
+  if (process.env.OPENROUTER_CATEGORIES) {
+    defaultHeaders['X-OpenRouter-Categories'] = sanitizeHeader(process.env.OPENROUTER_CATEGORIES)
   }
   const client = deps.client ?? new OpenAI({
     apiKey: envelope.auth.key,

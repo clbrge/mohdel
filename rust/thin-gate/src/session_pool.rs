@@ -115,6 +115,7 @@ const FORWARDED_ENV: &[&str] = &[
     // provider-specific attribution headers, not credentials
     "OPENROUTER_REFERER",
     "OPENROUTER_TITLE",
+    "OPENROUTER_CATEGORIES",
 ];
 
 /// Whether a variable survives `env_clear()`.
@@ -951,6 +952,8 @@ mod env_forwarding_tests {
             "MOHDEL_LOG_LEVEL",
             "MOHDEL_MEDIA_ROOTS",
             "OPENROUTER_REFERER",
+            "OPENROUTER_TITLE",
+            "OPENROUTER_CATEGORIES",
             "NODE_EXTRA_CA_CERTS",
             "HTTPS_PROXY",
             "XDG_CONFIG_HOME",

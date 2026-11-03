@@ -24,6 +24,8 @@ All notable changes to this project are documented here. Format follows
 - The session's cooldowns and rate-limit buckets are counted per `authId`, as the gate's already
   were. Two callers sharing a session, as behind the gate, no longer refuse or delay each other.
   The in-process default `authId` is `local`, so a single-user host sees no change.
+- `@anthropic-ai/sdk` `^1.3.0` → `^1.4.0`. The release adds Admin API methods and types
+  (analytics, spend limits, RBAC); the Messages API the adapter calls is unchanged.
 
 ### Both runtimes
 

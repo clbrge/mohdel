@@ -58,7 +58,7 @@ const DSML_PARAM_RE = /<\uFF5CDSML\uFF5Cparameter\s+name="([^"]+)"(?:\s+string="
  *   Registry key. Also used as tool-choice flavor unless
  *   `toolChoiceFlavor` is set.
  * @property {'openai'|'mistral'|'cerebras'} [toolChoiceFlavor]
- * @property {'user'|'safety_identifier'} [identifierField]
+ * @property {'user'|'safety_identifier'|'prompt_cache_key'|'user_id'} [identifierField]
  *   Defaults to 'user'.
  * @property {'reasoning_effort'|'cerebras_zai'|'qwen'} [reasoningField]
  *   How to wire outputEffort into the request. `reasoning_effort`

@@ -4,6 +4,30 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.8.1] — Fixed: Mistral refused every call that carried an identifier
+
+### Fixed
+
+- Mistral refused every call that carried an `identifier` with a 422 (`extra_forbidden` on
+  `user`): its chat-completions request has no `user` field and refuses fields it does not know.
+  The identifier now goes as `prompt_cache_key`, the field Mistral routes its prompt cache by
+  (`ChatCompletionRequest` in https://docs.mistral.ai/openapi.yaml).
+- DeepSeek has no `user` field either. The identifier now goes as `user_id`, which DeepSeek uses
+  for KV-cache and scheduling isolation
+  (https://api-docs.deepseek.com/api/create-chat-completion).
+- Cerebras took the identifier as `user`, which it uses only for abuse monitoring. It now goes as
+  `prompt_cache_key`, which groups requests onto one prompt cache
+  (https://inference-docs.cerebras.ai/api-reference/chat-completions).
+
+- The catalog had no `type` for an embedding model, so one was a `model` — "chat/completion" —
+  and the provider smoke suite called `answer()` on `cohere/embed-v4.0`. `type` now takes
+  `embedding`, and the integration suites leave `embedding` and `evaluation` entries out of the
+  chat smoke. An existing embedding entry needs `"type": "embedding"` set; the runtime does not
+  read `type`, so calls are unchanged either way.
+
+The identifier change is inside the adapters, which the gate's pooled sessions run as well; the
+envelope's `identifier` is unchanged on the wire, so the gate needs nothing.
+
 ## [4.8.0] — Feature: OpenRouter attribution sends X-OpenRouter-Title, and OPENROUTER_CATEGORIES sets X-OpenRouter-Categories
 
 ### Added

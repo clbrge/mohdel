@@ -20,6 +20,7 @@ export async function * cerebras (envelope, deps = {}) {
     stream: true,
     provider: 'cerebras',
     toolChoiceFlavor: 'cerebras',
+    identifierField: 'prompt_cache_key',
     reasoningField: 'cerebras_zai',
     reasoningReplay: 'reasoning',
     inlineImagesOnly: true

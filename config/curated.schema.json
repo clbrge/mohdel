@@ -88,10 +88,11 @@
             "model",
             "image",
             "transcription",
-            "evaluation"
+            "evaluation",
+            "embedding"
           ],
           "default": "model",
-          "description": "'model' for chat/completion, 'image' for image generation, 'transcription' for speech-to-text, 'evaluation' for typed-question answering (evaluate())."
+          "description": "'model' for chat/completion, 'image' for image generation, 'transcription' for speech-to-text, 'evaluation' for typed-question answering (evaluate()), 'embedding' for vectors from embed()."
         },
         "label": {
           "type": "string",

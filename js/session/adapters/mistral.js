@@ -30,6 +30,7 @@ export async function * mistral (envelope, deps = {}) {
     stream: true,
     provider: 'mistral',
     toolChoiceFlavor: 'mistral',
+    identifierField: 'prompt_cache_key',
     reasoningReplay: 'chunks'
   }, {
     signal: deps.signal,

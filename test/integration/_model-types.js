@@ -1,9 +1,9 @@
 /**
  * Catalog `type` taxonomy for the integration suites.
  *
- * `type` is open-ended — entries are untyped, `model`, `image` or
- * `transcription` — and the suites default to treating anything they
- * do not recognise as a chat model. A non-chat type missing from this
+ * `type` is open-ended — entries are untyped, `model`, `image`,
+ * `transcription`, `evaluation` or `embedding` — and the suites
+ * default to treating anything they do not recognise as a chat model. A non-chat type missing from this
  * list therefore gets driven through `answer()` and rejected by the
  * provider, so the rule lives in one place rather than once per suite.
  *
@@ -16,7 +16,7 @@
 
 export const IMAGE_TYPES = new Set(['image'])
 
-export const NON_TEXT_TYPES = new Set(['image', 'transcription'])
+export const NON_TEXT_TYPES = new Set(['image', 'transcription', 'evaluation', 'embedding'])
 
 /** @param {{type?: string}} meta */
 export const isTextModel = (meta) => !NON_TEXT_TYPES.has(meta?.type)

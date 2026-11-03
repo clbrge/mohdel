@@ -29,6 +29,7 @@ export async function * deepseek (envelope, deps = {}) {
   })
   yield * runChatCompletions(envelope, client, {
     provider: 'deepseek',
+    identifierField: 'user_id',
     parseDsml: true
   }, {
     signal: deps.signal,

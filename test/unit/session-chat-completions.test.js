@@ -212,6 +212,17 @@ describe('groq adapter', () => {
     await collect(groq(envelope('groq', 'llama-3', { identifier: 'u-1' }), { client }))
     expect(captured.args.user).toBe('u-1')
   })
+
+  test.each([
+    ['mistral', mistral, 'mistral-medium-3-5', 'prompt_cache_key'],
+    ['cerebras', cerebras, 'qwen-3.8-27b', 'prompt_cache_key'],
+    ['deepseek', deepseek, 'deepseek-v4.1-flash', 'user_id']
+  ])('%s sends the identifier as %s, and no user', async (provider, adapter, model, field) => {
+    const { client, captured } = mockChat(basicResponse())
+    await collect(adapter(envelope(provider, model, { identifier: 'u-1' }), { client }))
+    expect(captured.args[field]).toBe('u-1')
+    expect(captured.args).not.toHaveProperty('user')
+  })
 })
 
 // ---------- Cerebras ----------

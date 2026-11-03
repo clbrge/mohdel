@@ -393,6 +393,7 @@ use once applied, and reads nothing but config.
   \`imageDefaultSize\`.
 - **Transcription** — \`"type": "transcription"\` plus \`transcriptionPrice\` (USD
   per audio minute).
+- **Embedding** — \`"type": "embedding"\` plus \`embeddingPrice\` and \`dimensions\`.
 - **Self-hosted** — a \`local/\` key. \`baseURL\` is required and rejected on every
   other provider. A server tag like \`llama3.1:8b\` goes in \`model\`; the key
   uses a dash.

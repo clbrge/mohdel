@@ -84,6 +84,23 @@ describe('session/adapters/openai', () => {
     expect(done.result.warning).toBe('insufficientOutputBudget')
   })
 
+  test('response.incomplete + content_filter → incomplete + contentBlocked', async () => {
+    const { client } = makeClient({
+      events: [
+        {
+          type: 'response.incomplete',
+          response: {
+            incomplete_details: { reason: 'content_filter' },
+            usage: { input_tokens: 5, output_tokens: 0 }
+          }
+        }
+      ]
+    })
+    const done = (await collect(openai(envelope(), { client }))).at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('contentBlocked')
+  })
+
   test('string prompt wraps as user input; system messages go to instructions', async () => {
     const { client, captured } = makeClient({
       events: [{ type: 'response.completed', response: { usage: {} } }]

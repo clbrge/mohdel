@@ -22,6 +22,7 @@ import {
   STATUS_COMPLETED,
   STATUS_INCOMPLETE,
   STATUS_TOOL_USE,
+  WARNING_CONTENT_BLOCKED,
   WARNING_INSUFFICIENT_OUTPUT_BUDGET
 } from '#core/status.js'
 
@@ -209,6 +210,8 @@ export async function * openai (envelope, deps = {}) {
           status = STATUS_INCOMPLETE
           if (event.response?.incomplete_details?.reason === 'max_output_tokens') {
             warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
+          } else if (event.response?.incomplete_details?.reason === 'content_filter') {
+            warning = WARNING_CONTENT_BLOCKED
           }
           if (event.response?.usage) {
             inputTokens = event.response.usage.input_tokens ?? 0

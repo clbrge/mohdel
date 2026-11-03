@@ -394,6 +394,10 @@ pub struct AnswerResult {
     pub timestamps: Timestamps,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// The provider's own reason behind `warning`, when it gives one: an
+    /// Anthropic refusal's category, a Gemini finish reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning_detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

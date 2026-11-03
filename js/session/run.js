@@ -577,6 +577,7 @@ function finalizeSpanOk (span, result, sawDelta = false, maxInterFrameMs = 0) {
   if (result?.servedSpeed !== undefined) attrs['mohdel.served_speed'] = result.servedSpeed ?? 'standard'
   if (result?.cost != null) attrs['mohdel.cost'] = result.cost
   if (result?.warning) attrs['mohdel.warning'] = result.warning
+  if (result?.warningDetail) attrs['mohdel.warning_detail'] = result.warningDetail
   if (result?.timestamps?.start && result?.timestamps?.first) {
     try {
       const start = BigInt(result.timestamps.start)
@@ -604,6 +605,7 @@ function summarizeDone (result, startedAt) {
   if (result?.cacheReadInputTokens) summary.cacheR = result.cacheReadInputTokens
   summary.cost = result?.cost
   if (result?.warning) summary.warning = result.warning
+  if (result?.warningDetail) summary.warningDetail = result.warningDetail
   summary.totalMs = Date.now() - startedAt
   if (result?.maxInterFrameMs != null) summary.maxInterFrameMs = result.maxInterFrameMs
   return summary

@@ -108,6 +108,74 @@ describe('session/adapters/anthropic', () => {
     expect(done.result.warning).toBe('insufficientOutputBudget')
   })
 
+  test('a refusal before any output is incomplete, blocked, with its category', async () => {
+    const { client } = makeClient({
+      events: [
+        { type: 'message_start', message: { usage: { input_tokens: 412 } } },
+        {
+          type: 'message_delta',
+          delta: { stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'frontier_llm', explanation: 'declined' } },
+          usage: { output_tokens: 0 }
+        }
+      ]
+    })
+    const done = (await collect(anthropic(envelope(), { client }))).at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('contentBlocked')
+    expect(done.result.warningDetail).toBe('frontier_llm')
+    expect(done.result.output).toBeNull()
+  })
+
+  test('a refusal after a streamed tool call is incomplete, not a call to run', async () => {
+    const { client } = makeClient({
+      events: [
+        { type: 'message_start', message: { usage: { input_tokens: 5 } } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_1', name: 'exec', input: {} } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"cmd":"ls"}' } },
+        { type: 'content_block_stop', index: 0 },
+        {
+          type: 'message_delta',
+          delta: { stop_reason: 'refusal', stop_details: { type: 'refusal', category: null, explanation: null } },
+          usage: { output_tokens: 72 }
+        }
+      ]
+    })
+    const done = (await collect(anthropic(envelope(), { client }))).at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('contentBlocked')
+    expect(done.result.warningDetail).toBeUndefined()
+  })
+
+  test('model_context_window_exceeded is incomplete with contextOverflow', async () => {
+    const { client } = makeClient({
+      events: [{ type: 'message_delta', delta: { stop_reason: 'model_context_window_exceeded', stop_details: null } }]
+    })
+    const done = (await collect(anthropic(envelope(), { client }))).at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('contextOverflow')
+  })
+
+  test('a stop reason mohdel does not know is incomplete under its own name', async () => {
+    const { client } = makeClient({
+      events: [{ type: 'message_delta', delta: { stop_reason: 'some_future_reason' } }]
+    })
+    const done = (await collect(anthropic(envelope(), { client }))).at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('some_future_reason')
+  })
+
+  test('a message_delta without a stop reason changes nothing', async () => {
+    const { client } = makeClient({
+      events: [
+        { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } },
+        { type: 'message_delta', delta: { stop_reason: null }, usage: { output_tokens: 1 } }
+      ]
+    })
+    const done = (await collect(anthropic(envelope(), { client }))).at(-1)
+    expect(done.result.status).toBe(STATUS_COMPLETED)
+    expect(done.result.warning).toBeUndefined()
+  })
+
   test('string prompt becomes user message; system-only messages go to top-level', async () => {
     const { client, captured } = makeClient({
       events: [{ type: 'message_delta', delta: { stop_reason: 'end_turn' } }]

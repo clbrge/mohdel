@@ -21,6 +21,8 @@ import {
   STATUS_COMPLETED,
   STATUS_INCOMPLETE,
   STATUS_TOOL_USE,
+  WARNING_CONTENT_BLOCKED,
+  WARNING_CONTEXT_OVERFLOW,
   WARNING_INSUFFICIENT_OUTPUT_BUDGET
 } from '#core/status.js'
 
@@ -69,6 +71,12 @@ import { streamingDispatcher } from './_dispatcher.js'
 const ANTHROPIC_THINKING_CHARS_PER_TOKEN = 4
 
 const REPLAYED_BLOCKS = new Set(['text', 'thinking', 'redacted_thinking', 'tool_use'])
+
+/** The warning for a stop reason mohdel names; any other carries the stop reason as it came. */
+const STOP_WARNINGS = {
+  refusal: WARNING_CONTENT_BLOCKED,
+  model_context_window_exceeded: WARNING_CONTEXT_OVERFLOW
+}
 
 /**
  * Fallback `max_tokens` when the caller supplied no `outputBudget`
@@ -132,6 +140,8 @@ export async function * anthropic (envelope, deps = {}) {
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
+  /** @type {string | undefined} */
+  let warningDetail
 
   // Tool-use accumulation state
   /** @type {Map<number, {id: string, name: string, inputJson: string}>} */
@@ -213,6 +223,10 @@ export async function * anthropic (envelope, deps = {}) {
             warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
           } else if (event.delta?.stop_reason === 'tool_use') {
             status = STATUS_TOOL_USE
+          } else if (event.delta?.stop_reason && event.delta.stop_reason !== 'end_turn') {
+            status = STATUS_INCOMPLETE
+            warning = STOP_WARNINGS[event.delta.stop_reason] ?? event.delta.stop_reason
+            if (event.delta.stop_details?.category) warningDetail = event.delta.stop_details.category
           }
           if (event.usage?.output_tokens) {
             outputTokens = event.usage.output_tokens
@@ -293,6 +307,7 @@ export async function * anthropic (envelope, deps = {}) {
     }
   }
   if (warning) done.result.warning = warning
+  if (warningDetail) done.result.warningDetail = warningDetail
   if (toolBlocks.size > 0) {
     done.result.toolCalls = finalizeToolCalls(toolBlocks)
   }

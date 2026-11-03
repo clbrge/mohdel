@@ -20,11 +20,15 @@
  *   - `insufficientOutputBudget` — the model hit `max_tokens`.
  *   - `aborted` — the call was aborted via an abort control
  *     message or `AbortSignal`.
+ *   - `contentBlocked` — the provider's safety filter stopped the
+ *     reply; `warningDetail` carries the provider's reason when it
+ *     names one.
+ *   - `contextOverflow` — the reply ran into the context window.
  *
  * Additive: future releases may add new warning strings; consumers
  * should treat unknown warnings as pass-through metadata.
  *
- * @typedef {('insufficientOutputBudget'|'aborted'|string)} Warning
+ * @typedef {('insufficientOutputBudget'|'aborted'|'contentBlocked'|'contextOverflow'|string)} Warning
  */
 
 export const STATUS_COMPLETED = 'completed'
@@ -38,3 +42,5 @@ export const STATUSES = Object.freeze([
 
 export const WARNING_INSUFFICIENT_OUTPUT_BUDGET = 'insufficientOutputBudget'
 export const WARNING_ABORTED = 'aborted'
+export const WARNING_CONTENT_BLOCKED = 'contentBlocked'
+export const WARNING_CONTEXT_OVERFLOW = 'contextOverflow'

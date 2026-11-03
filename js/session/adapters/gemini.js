@@ -22,6 +22,7 @@ import {
   STATUS_COMPLETED,
   STATUS_INCOMPLETE,
   STATUS_TOOL_USE,
+  WARNING_CONTENT_BLOCKED,
   WARNING_INSUFFICIENT_OUTPUT_BUDGET
 } from '#core/status.js'
 
@@ -114,6 +115,8 @@ export async function * gemini (envelope, deps = {}) {
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
+  /** @type {string | undefined} */
+  let warningDetail
   /** @type {Array<{name: string, args: any}>} */
   const collectedFunctionCalls = []
 
@@ -166,7 +169,12 @@ export async function * gemini (envelope, deps = {}) {
       const finish = chunk?.candidates?.[0]?.finishReason
       if (finish && isIncompleteFinish(finish)) {
         status = STATUS_INCOMPLETE
-        if (finish === 'MAX_TOKENS') warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
+        if (finish === 'MAX_TOKENS') {
+          warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
+        } else {
+          warning = WARNING_CONTENT_BLOCKED
+          warningDetail = finish
+        }
       }
 
       if (chunk?.usageMetadata) {
@@ -226,6 +234,7 @@ export async function * gemini (envelope, deps = {}) {
     }
   }
   if (warning) done.result.warning = warning
+  if (warningDetail) done.result.warningDetail = warningDetail
   if (collectedFunctionCalls.length > 0) {
     done.result.toolCalls = fromGeminiToolCalls(collectedFunctionCalls)
   }

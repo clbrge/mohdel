@@ -87,6 +87,24 @@
       "warning": "insufficientOutputBudget"
     }
   },
+  "done-incomplete-content-blocked": {
+    "type": "done",
+    "result": {
+      "status": "incomplete",
+      "output": null,
+      "inputTokens": 412,
+      "outputTokens": 0,
+      "thinkingTokens": 0,
+      "cost": 0.0,
+      "timestamps": {
+        "start": "1000",
+        "first": "1100",
+        "end": "1100"
+      },
+      "warning": "contentBlocked",
+      "warningDetail": "frontier_llm"
+    }
+  },
   "done-incomplete-aborted": {
     "type": "done",
     "result": {

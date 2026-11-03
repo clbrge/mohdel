@@ -247,7 +247,7 @@ let test_conformance_events () =
     Yojson.Safe.from_string (conformance "events.json")
     |> Yojson.Safe.Util.to_assoc
   in
-  Alcotest.(check int) "count" 28 (List.length fixtures);
+  Alcotest.(check int) "count" 29 (List.length fixtures);
   let decoded =
     List.map
       (fun (name, json) ->

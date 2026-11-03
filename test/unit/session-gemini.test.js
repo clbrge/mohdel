@@ -127,13 +127,14 @@ describe('session/adapters/gemini', () => {
     expect(done.result.warning).toBe('insufficientOutputBudget')
   })
 
-  test('SAFETY → incomplete without warning', async () => {
+  test('SAFETY → incomplete + contentBlocked, the finish reason as detail', async () => {
     const { client } = makeClient({
       chunks: [{ candidates: [{ content: { parts: [] }, finishReason: 'SAFETY' }] }]
     })
     const done = (await collect(gemini(envelope(), { client }))).at(-1)
     expect(done.result.status).toBe(STATUS_INCOMPLETE)
-    expect(done.result.warning).toBeUndefined()
+    expect(done.result.warning).toBe('contentBlocked')
+    expect(done.result.warningDetail).toBe('SAFETY')
   })
 
   test('role assistant maps to model; text parts wrap as {text}', async () => {

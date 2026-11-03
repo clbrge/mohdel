@@ -4,6 +4,32 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.7.0] — Fixed: an Anthropic refusal no longer comes back as a finished reply
+
+### Fixed
+
+- The Anthropic adapter knew two stop reasons, `max_tokens` and `tool_use`, and left every other
+  one `completed`. A refusal from Anthropic's safety classifiers, which arrives as a normal
+  response, reached the caller as a finished reply: empty, or with the tool call streamed before
+  the refusal, as a call to run. Any stop reason other than `end_turn`, `tool_use` and
+  `max_tokens` now ends the call `incomplete`. A refusal gets the warning `contentBlocked`, and
+  `model_context_window_exceeded` gets `contextOverflow`. Any other stop reason, including one
+  Anthropic adds later, is carried as the warning under its own name.
+
+### Added
+
+- Two warnings, `contentBlocked` and `contextOverflow`, and an optional `warningDetail` on the
+  result: the provider's own reason behind the warning, when it gives one. An Anthropic refusal
+  carries its `stop_details.category` (`cyber`, `bio`, `frontier_llm`, …), and is left without a
+  detail when Anthropic names none.
+- Gemini's safety finishes (`SAFETY`, `PROHIBITED_CONTENT`, `BLOCKLIST`, `SPII`, `RECITATION`),
+  which already ended the call `incomplete` with no warning, now carry `contentBlocked` with the
+  finish reason as `warningDetail`. An OpenAI response cut short by its content filter carries
+  `contentBlocked`.
+- Both runtimes: the adapters run in-process and inside the gate's pooled sessions, so one change
+  covers both. `warningDetail` is in the Rust `AnswerResult` and in the conformance fixtures, and
+  the client tests count the new fixture.
+
 ## [4.6.0] — Added: `mohdel/mohdex` reads how models did at tasks in a tool
 
 ### Added

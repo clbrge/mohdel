@@ -109,7 +109,11 @@
  *   USD, computed from curated pricing. Single number (not a breakdown).
  * @property {Timestamps} timestamps
  * @property {string} [warning]
- *   `'insufficientOutputBudget' | 'aborted' | ...` additive union.
+ *   `'insufficientOutputBudget' | 'aborted' | 'contentBlocked' |
+ *   'contextOverflow' | ...` additive union.
+ * @property {string} [warningDetail]
+ *   The provider's own reason behind `warning`, when it gives one: an
+ *   Anthropic refusal's category, a Gemini finish reason.
  * @property {ToolCall[]} [toolCalls]
  *   Present when `status === 'tool_use'`.
  * @property {import('./envelope.js').MessagePart[]} [reasoningParts]

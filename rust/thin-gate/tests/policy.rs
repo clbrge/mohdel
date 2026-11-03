@@ -378,6 +378,50 @@ async fn primed_cooldown_fast_fails_before_dispatch() {
 }
 
 #[tokio::test]
+async fn primed_tier_cooldown_refuses_only_that_model_for_that_user() {
+    let path = temp_sock("tier-cooldown");
+    let _g = SocketGuard(path.clone());
+
+    let enforcer = Arc::new(Enforcer::new());
+    enforcer.record_tier_refusal("u1", "openai/gpt-5", Some(30_000), 60_000);
+
+    let state = GateState {
+        pool: None,
+        route: Arc::new(PermissiveRoute),
+        quota: Arc::new(FixedQuota(permissive_quota())),
+        auth: Arc::new(RequireInlineAuth),
+        enforcer: enforcer.clone(),
+    };
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = serve_data_with_state(&serve_path, state).await;
+    });
+    wait_for(&path).await;
+
+    let res = post(&path, envelope_bytes("u1", "openai", "gpt-5")).await;
+    match first_event(res).await {
+        Event::Error { error } => {
+            assert_eq!(error.kind.as_deref(), Some("PROVIDER_COOLDOWN"));
+            assert_eq!(error.retry_after_ms, Some(30_000));
+        }
+        other => panic!("expected PROVIDER_COOLDOWN, got {other:?}"),
+    }
+
+    let res = post(&path, envelope_bytes("u1", "openai", "gpt-4")).await;
+    match last_event(res).await {
+        Event::Done { .. } => {}
+        other => panic!("another model of the provider should be callable, got {other:?}"),
+    }
+
+    let res = post(&path, envelope_bytes("u2", "openai", "gpt-5")).await;
+    match last_event(res).await {
+        Event::Done { .. } => {}
+        other => panic!("another user should be unaffected, got {other:?}"),
+    }
+    server.abort();
+}
+
+#[tokio::test]
 async fn successful_call_resets_cooldown_counter() {
     let path = temp_sock("cd-reset");
     let _g = SocketGuard(path.clone());

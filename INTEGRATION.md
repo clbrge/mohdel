@@ -1121,7 +1121,9 @@ mo rl set gemini/gemini-2.0-flash 15
 
 In-process, mohdel throttles before calls (waits until the next minute bucket) rather than rejecting. Behind the gate the same overrun is refused instead: the enforcer answers `QUOTA_EXCEEDED` (retryable, carrying how long to wait) and dispatches nothing, because a wait held at the gate spends its connections on one caller's overrun. The policy is the same on both paths; who holds the wait is not. Note that gate quotas are per `auth_id` and come from its `QuotaPolicy` — `rpm`, `tpm` and `inpm` (inputs per minute, for embedding endpoints metered in inputs) — while the catalog limits above are per provider or model and apply on both paths. Every data-plane route is enforced, not just `/v1/call`.
 
-On 429 / 5xx / network failure mohdel backs off — three consecutive failures activate `PROVIDER_COOLDOWN` for 60 seconds (tunable via factory options). Auth failures (401/403) trigger cooldown immediately.
+Cooldowns and rate-limit buckets are counted per `authId`. On 429 / 5xx / network failure mohdel backs off — three consecutive failures activate `PROVIDER_COOLDOWN` for that provider for 60 seconds (tunable via factory options). Auth failures (401/403) trigger it immediately. A 429 that is the caller's own quota (`RATE_LIMIT_TIER`) cools down only that model, from the first refusal, for the wait the provider named (`Retry-After`, or OpenRouter's `X-RateLimit-Reset`), or else the cooldown duration. The refusal itself carries that wait as `retryAfterMs`, so a caller with no further call to make still knows how long to hold off.
+
+Behind the gate, the session and the gate each keep this cooldown. The gate's window lasts the wait the session's refusal carries. When a window was already open for that model, the gate rewrites the refusal to carry what is left of it.
 
 When cooling down, `.answer()` throws `MohdelError('PROVIDER_COOLDOWN', { retryable: true })` without a provider round-trip.
 

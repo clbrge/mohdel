@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, vi, afterEach } from 'vitest'
 import { classifyProviderError } from '../../js/session/adapters/_errors.js'
 
 describe('classifyProviderError — code-driven', () => {
@@ -272,6 +272,74 @@ describe('classifyProviderError — 429 split (TIER vs LOAD)', () => {
     const err = { status: 429, code: 'rate_limit_exceeded', message: 'Rate limit reached for TPM: limit 30000, used 30000' }
     const out = classifyProviderError(err, undefined, { provider: 'openai' })
     expect(out.detail).toContain('30000')
+  })
+})
+
+describe('classifyProviderError — 429 wait', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  const openrouterFreeTier = () => ({
+    status: 429,
+    message: '429 Rate limit exceeded: free-models-per-min. ',
+    error: {
+      message: 'Rate limit exceeded: free-models-per-min. ',
+      code: 429,
+      metadata: {
+        headers: { 'X-RateLimit-Limit': '20', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1793682900000' },
+        limit_source: 'openrouter_free_tier_per_minute',
+        remedy_hint: 'Slow down requests to free models, or retry after the per-minute window resets.',
+        provider_name: null
+      }
+    },
+    headers: new Headers({ 'x-ratelimit-limit': '20', 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1793682900000' })
+  })
+
+  test('openrouter free-tier 429 → RATE_LIMIT_TIER, waiting until the reset', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1793682894660)
+    const out = classifyProviderError(openrouterFreeTier(), undefined, { provider: 'openrouter' })
+    expect(out.type).toBe('RATE_LIMIT_TIER')
+    expect(out.retryAfterMs).toBe(5340)
+    expect(out.detail).toBe('Rate limit exceeded: free-models-per-min. ')
+  })
+
+  test('a reset already past leaves the wait unset', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1793682900001)
+    expect(classifyProviderError(openrouterFreeTier(), undefined, { provider: 'openrouter' }).retryAfterMs).toBeUndefined()
+  })
+
+  test('x-ratelimit-reset is read for openrouter only', () => {
+    const err = { status: 429, message: 'rl', headers: { 'x-ratelimit-reset': String(Date.now() + 60_000) } }
+    expect(classifyProviderError(err, undefined, { provider: 'novel-provider' }).retryAfterMs).toBeUndefined()
+  })
+
+  test('Retry-After in seconds', () => {
+    const err = { status: 429, message: 'rl', headers: { 'retry-after': '7' } }
+    expect(classifyProviderError(err, undefined, { provider: 'anthropic' }).retryAfterMs).toBe(7000)
+  })
+
+  test('Retry-After as an HTTP-date', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.parse('Tue, 03 Nov 2026 05:14:54 GMT'))
+    const err = { status: 429, message: 'rl', headers: new Headers({ 'retry-after': 'Tue, 03 Nov 2026 05:15:24 GMT' }) }
+    expect(classifyProviderError(err, undefined, { provider: 'openai' }).retryAfterMs).toBe(30_000)
+  })
+
+  test('Retry-After of 0 leaves the wait unset', () => {
+    const err = { status: 429, message: 'rl', headers: { 'retry-after': '0' } }
+    expect(classifyProviderError(err).retryAfterMs).toBeUndefined()
+  })
+
+  test('no header leaves the wait unset', () => {
+    expect(classifyProviderError({ status: 429, message: 'rl' }, undefined, { provider: 'openrouter' }).retryAfterMs).toBeUndefined()
+  })
+
+  test('an unparseable header leaves the wait unset', () => {
+    const retryAfter = { status: 429, message: 'rl', headers: { 'retry-after': 'soon' } }
+    expect(classifyProviderError(retryAfter).retryAfterMs).toBeUndefined()
+    const reset = { status: 429, message: 'rl', headers: { 'x-ratelimit-reset': '1s' } }
+    expect(classifyProviderError(reset, undefined, { provider: 'openrouter' }).retryAfterMs).toBeUndefined()
   })
 })
 

@@ -216,11 +216,23 @@
   "error-cooldown": {
     "type": "error",
     "error": {
-      "message": "rate limit exceeded",
+      "message": "provider in cooldown",
+      "detail": "openrouter is in cooldown for 56s after 3 consecutive failures (consecutive_failures)",
       "severity": "warn",
       "retryable": true,
       "type": "PROVIDER_COOLDOWN",
       "retryAfterMs": 56000
+    }
+  },
+  "error-rate-limit-tier": {
+    "type": "error",
+    "error": {
+      "message": "rate limit exceeded (caller quota)",
+      "detail": "Rate limit exceeded: free-models-per-min. ",
+      "severity": "warn",
+      "retryable": true,
+      "type": "RATE_LIMIT_TIER",
+      "retryAfterMs": 5340
     }
   },
   "error-auth": {

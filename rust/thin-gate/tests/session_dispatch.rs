@@ -684,3 +684,58 @@ async fn pool_abort_takes_call_id_then_auth_id() {
 
     server.abort();
 }
+
+#[tokio::test]
+async fn tier_refusal_carries_its_wait_and_cools_only_that_model_for_that_user() {
+    let path = temp_sock_path("tier-refusal");
+    let _guard = SocketGuard(path.clone());
+
+    let cfg = node_session_cfg_with_catalog(r#"{"fake/m":{},"fake/other":{}}"#);
+    let pool = SessionPool::new(cfg, 1).await.expect("pool");
+    let serve_path = path.clone();
+    let server = tokio::spawn(async move {
+        let _ = mohdel_thin_gate::serve_data(&serve_path, Some(pool)).await;
+    });
+    wait_for_socket(&path).await;
+
+    let call = |call_id: &str, auth_id: &str, model: &str, prompt: &str| {
+        Bytes::from(
+            serde_json::to_vec(&json!({
+                "callId": call_id,
+                "authId": auth_id,
+                "auth": { "key": "k" },
+                "model": model,
+                "prompt": prompt
+            }))
+            .unwrap(),
+        )
+    };
+    let tier = r#"{"mode":"error","type":"RATE_LIMIT_TIER","retryable":true,"severity":"warn"}"#;
+
+    let res = send(&path, "POST", "/v1/call", call("tier-1", "a1", "fake/m", tier)).await;
+    let (_, events) = read_event_stream(res).await;
+    let Some(Event::Error { error }) = events.last() else {
+        panic!("expected the refusal, got {events:?}");
+    };
+    assert_eq!(error.kind.as_deref(), Some("RATE_LIMIT_TIER"));
+    assert_eq!(error.retry_after_ms, Some(60_000));
+
+    let res = send(&path, "POST", "/v1/call", call("tier-2", "a1", "fake/m", "hi")).await;
+    let (_, events) = read_event_stream(res).await;
+    let Some(Event::Error { error }) = events.last() else {
+        panic!("expected a cooldown refusal, got {events:?}");
+    };
+    assert_eq!(error.kind.as_deref(), Some("PROVIDER_COOLDOWN"));
+    assert!(error.retry_after_ms.is_some_and(|ms| ms > 0 && ms <= 60_000));
+
+    for (call_id, auth_id, model) in [("tier-3", "a1", "fake/other"), ("tier-4", "a2", "fake/m")] {
+        let res = send(&path, "POST", "/v1/call", call(call_id, auth_id, model, "hi")).await;
+        let (_, events) = read_event_stream(res).await;
+        match events.last() {
+            Some(Event::Done { result }) => assert_eq!(result.status, Status::Completed),
+            other => panic!("{auth_id} {model} should be callable, got {other:?}"),
+        }
+    }
+
+    server.abort();
+}

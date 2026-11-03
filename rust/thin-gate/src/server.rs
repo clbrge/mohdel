@@ -12,7 +12,10 @@
 //!     never reach the session.
 //!   - Post-dispatch: `done` resets cooldown and records token usage;
 //!     adapter error events feed `recordFailure` (immediate for
-//!     `AUTH_INVALID`).
+//!     `AUTH_INVALID`). A `RATE_LIMIT_TIER` refusal opens a cooldown for
+//!     that `(auth_id, model)` and leaves carrying its wait; a session's
+//!     own `PROVIDER_COOLDOWN` never reached the provider and is not
+//!     counted.
 //!   - `POST /v1/abort` — aborts an in-flight `/v1/call`, whose own
 //!     stream then ends with the session's aborted `done`.
 //!   - anything else → 404 + `TypedError`.
@@ -46,7 +49,7 @@ use tokio::net::UnixListener;
 use zeroize::Zeroize;
 
 use crate::defaults::{FileQuotaPolicy, FileRoutePolicy};
-use crate::enforcer::{cooldown_key, Enforcer, Limits};
+use crate::enforcer::{cooldown_key, tier_cooldown_key, CooldownInfo, Enforcer, Limits};
 use crate::hooks::{AuthPolicy, QuotaPolicy, QuotaSpec, RequireInlineAuth, RoutePolicy};
 use crate::metrics;
 use crate::protocol::{
@@ -636,17 +639,12 @@ async fn enforce_policy(
     let cd_key = cooldown_key(auth_id, provider);
     if let Some(info) = state.enforcer.cooldown.cooling_down(&cd_key) {
         metrics::cooldown_rejected(provider);
-        return Err(Denied {
-            message: "provider in cooldown",
-            severity: Severity::Warn,
-            kind: "PROVIDER_COOLDOWN",
-            retryable: true,
-            detail: Some(format!(
-                "{} is in cooldown for {}s after {} consecutive failures ({})",
-                provider, info.seconds_left, info.fail_count, info.reason
-            )),
-            retry_after_ms: Some(info.seconds_left * 1_000),
-        });
+        return Err(cooldown_denied(provider, info));
+    }
+    let tier_key = tier_cooldown_key(auth_id, model);
+    if let Some(info) = state.enforcer.cooldown.cooling_down(&tier_key) {
+        metrics::cooldown_rejected(provider);
+        return Err(cooldown_denied(crate::protocol::catalog_key(model), info));
     }
 
     let limits = Limits { rpm: spec.rpm, tpm: spec.tpm, inpm: spec.inpm };
@@ -668,6 +666,20 @@ async fn enforce_policy(
         state.enforcer.rate.record_inputs(auth_id, pending_inputs);
     }
     Ok(spec)
+}
+
+fn cooldown_denied(subject: &str, info: CooldownInfo) -> Denied {
+    Denied {
+        message: "provider in cooldown",
+        severity: Severity::Warn,
+        kind: "PROVIDER_COOLDOWN",
+        retryable: true,
+        detail: Some(format!(
+            "{} is in cooldown for {}s after {} consecutive failures ({})",
+            subject, info.seconds_left, info.fail_count, info.reason
+        )),
+        retry_after_ms: Some(info.seconds_left * 1_000),
+    }
 }
 
 // ---------- Pool dispatch ----------
@@ -748,6 +760,7 @@ async fn dispatch_via_pool(
         call_id: envelope.call_id.clone(),
         auth_id: envelope.auth_id.clone(),
         provider: crate::protocol::provider_of(&envelope.model).to_string(),
+        model: envelope.model.clone(),
         spec,
         enforcer,
         stopped: false,
@@ -773,6 +786,7 @@ struct PoolStreamState {
     call_id: String,
     auth_id: String,
     provider: String,
+    model: String,
     spec: QuotaSpec,
     enforcer: Arc<Enforcer>,
     stopped: bool,
@@ -940,8 +954,10 @@ async fn pool_stream_next(
             }
 
             match serde_json::from_str::<Event>(&buf) {
-                Ok(event) => {
-                    apply_enforcer_feedback(&mut state, &event);
+                Ok(mut event) => {
+                    if apply_enforcer_feedback(&mut state, &mut event) {
+                        buf = serde_json::to_string(&event).expect("serialize event");
+                    }
                     let is_terminal = matches!(event, Event::Done { .. } | Event::Error { .. });
                     if is_terminal {
                         // Release the session in the SAME poll that emits the
@@ -993,12 +1009,17 @@ pub(crate) fn done_signals_provider_recovery(result: &AnswerResult) -> bool {
     result.warning.as_deref() != Some("aborted")
 }
 
-fn apply_enforcer_feedback(state: &mut PoolStreamState, event: &Event) {
+/// Feeds a session event into the enforcer. Returns `true` when the
+/// event was changed and must be re-serialized: a caller-quota refusal
+/// leaves carrying the wait the gate now enforces.
+fn apply_enforcer_feedback(state: &mut PoolStreamState, event: &mut Event) -> bool {
     let cd_key = cooldown_key(&state.auth_id, &state.provider);
+    let mut rewritten = false;
     match event {
         Event::Done { result } => {
             if done_signals_provider_recovery(result) {
                 state.enforcer.cooldown.reset(&cd_key);
+                state.enforcer.cooldown.reset(&tier_cooldown_key(&state.auth_id, &state.model));
             }
             let total = result.input_tokens as u64
                 + result.output_tokens as u64
@@ -1007,19 +1028,36 @@ fn apply_enforcer_feedback(state: &mut PoolStreamState, event: &Event) {
             record_call_metric(state, status_label(&result.status));
         }
         Event::Error { error } => {
-            let immediate = matches!(error.kind.as_deref(), Some("AUTH_INVALID"));
-            if immediate || error.retryable {
-                state.enforcer.cooldown.record_failure(
-                    &cd_key,
-                    state.spec.cooldown_threshold,
-                    Duration::from_millis(state.spec.cooldown_duration_ms),
-                    immediate,
-                );
+            match error.kind.as_deref() {
+                Some("PROVIDER_COOLDOWN") => {}
+                Some("RATE_LIMIT_TIER") => {
+                    if let Some(wait_ms) = state.enforcer.record_tier_refusal(
+                        &state.auth_id,
+                        &state.model,
+                        error.retry_after_ms,
+                        state.spec.cooldown_duration_ms,
+                    ) {
+                        error.retry_after_ms = Some(wait_ms);
+                        rewritten = true;
+                    }
+                }
+                kind => {
+                    let immediate = kind == Some("AUTH_INVALID");
+                    if immediate || error.retryable {
+                        state.enforcer.cooldown.record_failure(
+                            &cd_key,
+                            state.spec.cooldown_threshold,
+                            Duration::from_millis(state.spec.cooldown_duration_ms),
+                            immediate,
+                        );
+                    }
+                }
             }
             record_call_metric(state, "error");
         }
         Event::Delta { .. } | Event::Idle { .. } => {}
     }
+    rewritten
 }
 
 fn status_label(status: &Status) -> &'static str {
@@ -1799,6 +1837,7 @@ fn synthetic_response(
     let provider = crate::protocol::provider_of(&envelope.model);
     let cd_key = cooldown_key(&envelope.auth_id, provider);
     enforcer.cooldown.reset(&cd_key);
+    enforcer.cooldown.reset(&tier_cooldown_key(&envelope.auth_id, &envelope.model));
     enforcer.rate.record_tokens(&envelope.auth_id, 8);
 
     let events = synthetic_events();

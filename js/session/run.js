@@ -8,11 +8,13 @@
  *     `spanId` for SigNoz/Jaeger correlation even when no exporter
  *     is wired.
  *   - Pre-dispatch: cooldown fast-fail, then rpm/tpm throttle
- *     (await + record).
+ *     (await + record). Cooldown and rate buckets are keyed by the
+ *     envelope's `authId`.
  *   - Post-dispatch: on `done`, reset cooldown and record tokens
- *     (TPM); on `error`, recordFailure (immediate for AUTH_INVALID,
- *     skipped for non-retryable provider errors). Span ends with
- *     `gen_ai.*` + `mohdel.*` attributes.
+ *     (TPM); on `error`, recordFailure (immediate for AUTH_INVALID
+ *     and, per model, for RATE_LIMIT_TIER; skipped for non-retryable
+ *     provider errors). Span ends with `gen_ai.*` + `mohdel.*`
+ *     attributes.
  *
  * Terminal events are `done` (success / incomplete / aborted /
  * tool_use) and `error`. The adapter is expected to emit exactly
@@ -170,7 +172,8 @@ export async function * run (envelope, {
   }
   const effective = mergeSpeed(spec, envelope.speed)
 
-  const coolErr = cooldown.coolingDownError(provider)
+  const cooldownKeys = { provider: `${envelope.authId}|${provider}`, model: `${envelope.authId}|${key}` }
+  const coolErr = cooldown.coolingDownError(cooldownKeys.provider) ?? cooldown.coolingDownError(cooldownKeys.model)
   if (coolErr) {
     log.debug({ provider, detail: coolErr.detail }, '[mohdel:cooldown] fast-fail')
     span.setAttribute('mohdel.cooldown', true)
@@ -183,9 +186,7 @@ export async function * run (envelope, {
   const rpmLimit = effective?.rpmLimit ?? providerCfg.rpmLimit
   const tpmLimit = effective?.tpmLimit ?? providerCfg.tpmLimit
   const baseBucket = (spec?.rateLimitScope === 'model') ? key : provider
-  const bucketKey = speedHasOwnQuota(spec, envelope.speed)
-    ? `${key}@${envelope.speed}`
-    : baseBucket
+  const bucketKey = `${envelope.authId}|${speedHasOwnQuota(spec, envelope.speed) ? `${key}@${envelope.speed}` : baseBucket}`
 
   // `0` is a killswitch ("deny all"), not "unset"; `undefined`/`null`
   // means no limit configured for that dimension. Gate on nullability
@@ -255,7 +256,8 @@ export async function * run (envelope, {
         // incomplete-budget / tool_use) IS a genuine provider-side
         // success and resets the streak.
         if (ev.result?.warning !== WARNING_ABORTED) {
-          cooldown.reset(provider)
+          cooldown.reset(cooldownKeys.provider)
+          cooldown.reset(cooldownKeys.model)
         }
         if (tpmLimit != null && ev.result) {
           const total =
@@ -276,7 +278,7 @@ export async function * run (envelope, {
         log.debug(summarizeDone(ev.result, startedAt), '[mohdel:answer] done')
       } else if (ev.type === 'error') {
         sawTerminal = true
-        recordFailureFromError(cooldown, provider, ev.error)
+        recordFailureFromError(cooldown, cooldownKeys, ev.error)
         log.warn({
           err: ev.error,
           provider,
@@ -609,22 +611,35 @@ function summarizeDone (result, startedAt) {
 
 /**
  * Cooldown accounting rules:
- *   - 401/403 (AUTH_INVALID) → immediate cooldown, 1 failure.
+ *   - 401/403 (AUTH_INVALID) → immediate cooldown for the provider,
+ *     1 failure.
+ *   - RATE_LIMIT_TIER → immediate cooldown for the model, for the
+ *     provider's wait when it named one. The refusal leaves carrying
+ *     the wait that now applies, so a caller with no further call to
+ *     make still knows how long to hold off.
  *   - Non-retryable client errors (400/404) → skip cooldown entirely.
- *   - 429/5xx/network errors → normal consecutive-failure tracking.
+ *   - Other 429/5xx/network errors → normal consecutive-failure
+ *     tracking for the provider.
  *
- * @param {{recordFailure: (k: string, o?: {immediate?: boolean}) => boolean}} cooldown
- * @param {string} provider
+ * @param {any} cooldown
+ * @param {{provider: string, model: string}} keys
  * @param {import('#core/errors.js').TypedError | undefined} err
  */
-function recordFailureFromError (cooldown, provider, err) {
+function recordFailureFromError (cooldown, keys, err) {
   if (!err) return
   if (err.type === 'AUTH_INVALID') {
-    cooldown.recordFailure(provider, { immediate: true })
+    cooldown.recordFailure(keys.provider, { immediate: true })
+    return
+  }
+  if (err.type === 'RATE_LIMIT_TIER') {
+    const fresh = cooldown.recordFailure(keys.model, { immediate: true, windowMs: err.retryAfterMs, reason: 'tier' })
+    if (fresh && err.retryAfterMs !== undefined) return
+    const open = cooldown.coolingDownError(keys.model)
+    if (open) err.retryAfterMs = open.retryAfterMs
     return
   }
   if (err.retryable === false) return
-  cooldown.recordFailure(provider)
+  cooldown.recordFailure(keys.provider)
 }
 
 /** @returns {import('#core/events.js').DoneEvent} */

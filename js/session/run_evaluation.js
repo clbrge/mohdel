@@ -55,7 +55,7 @@ export async function runEvaluation (envelope, {
   const providerCfg = resolveProviderLimits(provider) || {}
   const rpmLimit = spec?.rpmLimit ?? providerCfg.rpmLimit
   const tpmLimit = spec?.tpmLimit ?? providerCfg.tpmLimit
-  const bucketKey = spec?.rateLimitScope === 'model' ? modelKey : provider
+  const bucketKey = `${envelope.authId}|${spec?.rateLimitScope === 'model' ? modelKey : provider}`
 
   if (rpmLimit != null || tpmLimit != null) {
     const delay = limiter.check(bucketKey, { rpmLimit, tpmLimit })

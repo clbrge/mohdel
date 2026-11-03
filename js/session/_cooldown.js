@@ -2,6 +2,8 @@
  * Consecutive-failure cooldown tracker.
  *
  *   - Auth failures (401/403) trigger immediate cooldown (1 failure).
+ *   - A caller-quota refusal (`RATE_LIMIT_TIER`) triggers immediate
+ *     cooldown for the wait the provider named, when it named one.
  *   - Other retryable failures require `threshold` consecutive
  *     failures before cooldown triggers.
  *   - Success resets the failure counter.
@@ -12,7 +14,9 @@
  *   - MOHDEL_COOLDOWN_THRESHOLD (default 3)
  *   - MOHDEL_COOLDOWN_DURATION_MS (default 60_000)
  *
- * State is session-process-local.
+ * State is session-process-local. Keys are the caller's: `run()` uses
+ * `<authId>|<provider>` and, for a caller-quota refusal,
+ * `<authId>|<catalog key>`.
  *
  * @module session/cooldown
  */
@@ -56,18 +60,20 @@ export function createCooldownTracker (
    * would effectively never recover.
    *
    * @param {string} key
-   * @param {{immediate?: boolean}} [options]
+   * @param {{immediate?: boolean, windowMs?: number, reason?: string}} [options]
+   *   `windowMs` replaces the configured duration for this activation;
+   *   `reason` labels it (default `auth` when immediate).
    * @returns {boolean} true if this call freshly activated the cooldown
    */
-  const recordFailure = (key, { immediate = false } = {}) => {
+  const recordFailure = (key, { immediate = false, windowMs = durationMs, reason = immediate ? 'auth' : 'consecutive_failures' } = {}) => {
     const entry = entries.get(key) || { failCount: 0, until: null, reason: null }
     entry.failCount++
     const shouldCooldown = immediate || entry.failCount >= threshold
     if (shouldCooldown) {
       const now = Date.now()
       if (entry.until == null || now >= entry.until) {
-        entry.until = now + durationMs
-        entry.reason = immediate ? 'auth' : 'consecutive_failures'
+        entry.until = now + windowMs
+        entry.reason = reason
         entries.set(key, entry)
         return true
       }

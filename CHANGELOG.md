@@ -4,6 +4,39 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.5.0] — Feature: the first caller-quota refusal says how long to wait
+
+### Changed
+
+- A 429 that is the caller's own quota (`RATE_LIMIT_TIER`) now opens a cooldown at once, for
+  that model only, where it took three consecutive failures and cooled the whole provider. The
+  window lasts the wait the provider named: `Retry-After` (seconds or a date) from any provider,
+  or OpenRouter's `X-RateLimit-Reset`, which is epoch milliseconds. Without one, it lasts the
+  configured cooldown. The refusal itself carries that wait as `retryAfterMs`. A caller whose
+  last attempt was refused then knows how long to hold off, and its retry is not sent into a
+  window that would refuse it. Other models of the provider stay callable. A caller-quota refusal
+  no longer counts toward the provider's failure streak.
+- OpenRouter's own 429 (free models: `Rate limit exceeded: free-models-per-min.`, with
+  `X-RateLimit-Remaining: 0`) is `RATE_LIMIT_TIER`, where it was the ambiguous `RATE_LIMIT`. A
+  plain `X-RateLimit-Remaining` header now counts as a rate-limit signal for every provider. Code
+  that branches on `type === 'RATE_LIMIT'` for these must also match `RATE_LIMIT_TIER`; `retryable`
+  is unchanged.
+- The session's cooldowns and rate-limit buckets are counted per `authId`, as the gate's already
+  were. Two callers sharing a session, as behind the gate, no longer refuse or delay each other.
+  The in-process default `authId` is `local`, so a single-user host sees no change.
+
+### Both runtimes
+
+- In-process: the session records the refusal under `<authId>|<catalog key>` and fills
+  `retryAfterMs` when the provider named none.
+- Gate: `<auth_id>|<catalog key>` is checked before dispatch, after the provider key, and a
+  session's refusal opens it for the wait the refusal carries (`cooldown_duration_ms` when it
+  carries none). When a window was already open, the gate rewrites the refusal to carry what is
+  left of it. The gate no longer counts a session's own `PROVIDER_COOLDOWN` as a failure, since
+  that call never reached the provider.
+- Pooled sessions keep their own cooldown. Keyed by `authId`, it can no longer refuse another
+  account's call routed to the same subprocess.
+
 ## [4.4.0] — Feature: mo onboard openrouter can sign in with OpenRouter instead of a pasted key
 
 ### Added

@@ -59,7 +59,7 @@ function fixtures ({ spec = {}, providerLimits } = {}) {
 describe('session/run — cooldown enforcement', () => {
   test('active cooldown yields PROVIDER_COOLDOWN error and skips adapter', async () => {
     const fx = fixtures()
-    fx.cooldown.recordFailure('acme', { immediate: true })
+    fx.cooldown.recordFailure('a1|acme', { immediate: true })
     let called = false
     const adapter = async function * () { called = true; yield { type: 'done', result: defaultResult() } }
 
@@ -78,17 +78,17 @@ describe('session/run — cooldown enforcement', () => {
 
   test('successful done resets cooldown failCount', async () => {
     const fx = fixtures()
-    fx.cooldown.recordFailure('acme')
-    fx.cooldown.recordFailure('acme')
+    fx.cooldown.recordFailure('a1|acme')
+    fx.cooldown.recordFailure('a1|acme')
 
     await collect(run(envelope(), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => doneAdapter()
     }))
 
-    expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
-    fx.cooldown.recordFailure('acme')
-    fx.cooldown.recordFailure('acme')
-    expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
+    expect(fx.cooldown.coolingDownError('a1|acme')).toBeUndefined()
+    fx.cooldown.recordFailure('a1|acme')
+    fx.cooldown.recordFailure('a1|acme')
+    expect(fx.cooldown.coolingDownError('a1|acme')).toBeUndefined()
   })
 
   test('error event with retryable type records a normal failure', async () => {
@@ -101,12 +101,12 @@ describe('session/run — cooldown enforcement', () => {
     await collect(run(envelope(), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(err)
     }))
-    expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
+    expect(fx.cooldown.coolingDownError('a1|acme')).toBeUndefined()
 
     await collect(run(envelope(), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(err)
     }))
-    const coolErr = fx.cooldown.coolingDownError('acme')
+    const coolErr = fx.cooldown.coolingDownError('a1|acme')
     expect(coolErr?.type).toBe('PROVIDER_COOLDOWN')
   })
 
@@ -117,7 +117,7 @@ describe('session/run — cooldown enforcement', () => {
     await collect(run(envelope(), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(err)
     }))
-    expect(fx.cooldown.coolingDownError('acme')?.type).toBe('PROVIDER_COOLDOWN')
+    expect(fx.cooldown.coolingDownError('a1|acme')?.type).toBe('PROVIDER_COOLDOWN')
   })
 
   test('non-retryable non-auth error skips cooldown recording', async () => {
@@ -129,7 +129,7 @@ describe('session/run — cooldown enforcement', () => {
         ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(err)
       }))
     }
-    expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
+    expect(fx.cooldown.coolingDownError('a1|acme')).toBeUndefined()
   })
 
   // Regression: an aborted `done` terminal must NOT wipe an
@@ -161,7 +161,7 @@ describe('session/run — cooldown enforcement', () => {
     await collect(run(envelope(), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(retryableErr)
     }))
-    expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
+    expect(fx.cooldown.coolingDownError('a1|acme')).toBeUndefined()
 
     // Caller-side abort arrives.
     await collect(run(envelope(), {
@@ -171,7 +171,7 @@ describe('session/run — cooldown enforcement', () => {
     await collect(run(envelope(), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(retryableErr)
     }))
-    expect(fx.cooldown.coolingDownError('acme')?.type).toBe('PROVIDER_COOLDOWN')
+    expect(fx.cooldown.coolingDownError('a1|acme')?.type).toBe('PROVIDER_COOLDOWN')
   })
 
   test('completed done DOES reset cooldown failure count', async () => {
@@ -198,7 +198,87 @@ describe('session/run — cooldown enforcement', () => {
     await collect(run(envelope(), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(retryableErr)
     }))
-    expect(fx.cooldown.coolingDownError('acme')).toBeUndefined()
+    expect(fx.cooldown.coolingDownError('a1|acme')).toBeUndefined()
+  })
+})
+
+const tierErr = (extra = {}) => ({
+  message: 'rate limit exceeded (caller quota)', severity: 'warn', retryable: true, type: 'RATE_LIMIT_TIER', ...extra
+})
+
+describe('session/run — caller-quota refusal', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  test('the first refusal opens a cooldown for that model, and the refusal carries the provider wait', async () => {
+    const fx = fixtures()
+    const events = await collect(run(envelope(), {
+      ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(tierErr({ retryAfterMs: 5000 }))
+    }))
+    expect(events.at(-1).error.retryAfterMs).toBe(5000)
+
+    let called = false
+    const adapter = async function * () { called = true; yield { type: 'done', result: defaultResult() } }
+    const refused = await collect(run(envelope(), { ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => adapter }))
+    expect(called).toBe(false)
+    expect(refused[0].error.type).toBe('PROVIDER_COOLDOWN')
+    expect(refused[0].error.retryAfterMs).toBe(5000)
+
+    const other = await collect(run(envelope({ model: 'acme/slow' }), { ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => adapter }))
+    expect(called).toBe(true)
+    expect(other.at(-1).type).toBe('done')
+  })
+
+  test('the window lasts the provider wait', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(1_000_000_000_000))
+    const fx = fixtures()
+    await collect(run(envelope(), {
+      ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(tierErr({ retryAfterMs: 5000 }))
+    }))
+    vi.setSystemTime(new Date(1_000_000_004_999))
+    expect(fx.cooldown.coolingDownError('a1|acme/fast')).toBeDefined()
+    vi.setSystemTime(new Date(1_000_000_005_000))
+    expect(fx.cooldown.coolingDownError('a1|acme/fast')).toBeUndefined()
+  })
+
+  test('a refusal that names no wait carries the cooldown length', async () => {
+    const fx = fixtures()
+    const events = await collect(run(envelope(), {
+      ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(tierErr())
+    }))
+    expect(events.at(-1).error.retryAfterMs).toBe(60_000)
+    expect(fx.cooldown.coolingDownError('a1|acme/fast').detail).toContain('(tier)')
+  })
+
+  test('a refusal landing in a window already open carries what is left of it', async () => {
+    const fx = fixtures()
+    const adapter = async function * () {
+      fx.cooldown.recordFailure('a1|acme/fast', { immediate: true, windowMs: 30_000, reason: 'tier' })
+      yield { type: 'error', error: tierErr({ retryAfterMs: 5000 }) }
+    }
+    const events = await collect(run(envelope(), { ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => adapter }))
+    expect(events.at(-1).error.retryAfterMs).toBe(30_000)
+  })
+
+  test('a refusal does not count toward the provider streak', async () => {
+    const fx = fixtures()
+    const loadErr = { message: 'rate limit', severity: 'warn', retryable: true, type: 'RATE_LIMIT' }
+    await collect(run(envelope(), { ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(loadErr) }))
+    await collect(run(envelope(), { ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(loadErr) }))
+    await collect(run(envelope({ model: 'acme/slow' }), { ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(tierErr()) }))
+    expect(fx.cooldown.coolingDownError('a1|acme')).toBeUndefined()
+  })
+
+  test('a refusal under one authId leaves another authId undelayed and not refused', async () => {
+    const fx = fixtures({ spec: { rpmLimit: 1 } })
+    await collect(run(envelope(), {
+      ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => errorAdapter(tierErr({ retryAfterMs: 5000 }))
+    }))
+    const events = await collect(run(envelope({ authId: 'a2' }), {
+      ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => doneAdapter()
+    }))
+    expect(events.at(-1).type).toBe('done')
+    expect(fx.sleeps).toEqual([])
   })
 })
 
@@ -290,7 +370,7 @@ describe('session/run — rate-limit enforcement', () => {
     await collect(run(envelope(), {
       ...fx, sleep: fx.sleep.bind(fx), resolveAdapter: () => doneAdapter()
     }))
-    expect(fx.limiter.check('acme', { tpmLimit: 1 })).toBe(0)
+    expect(fx.limiter.check('a1|acme', { tpmLimit: 1 })).toBe(0)
   })
 
   // `0` is a killswitch (deny all), not "unset".

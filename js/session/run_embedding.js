@@ -61,7 +61,7 @@ export async function runEmbedding (envelope, {
   const inpmLimit = spec?.inpmLimit ?? providerCfg.inpmLimit
   // `modelKey` is the catalog key, which the envelope carries over the wire but
   // not on the in-process path, where it holds the upstream id instead.
-  const bucketKey = spec?.rateLimitScope === 'model' ? modelKey : provider
+  const bucketKey = `${envelope.authId}|${spec?.rateLimitScope === 'model' ? modelKey : provider}`
   // A malformed envelope is metered as nothing: `checkBatch` rejects it inside
   // the adapter, and a call that never reaches the provider must not spend quota.
   const inputs = Array.isArray(envelope.input) ? envelope.input.length : 0

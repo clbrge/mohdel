@@ -48,7 +48,7 @@ describe('embedding rate limits', () => {
     const { call, sleeps, limiter } = harness({ spec: { inpmLimit: 100 } })
     await call(Array(96).fill('x'))
     expect(sleeps).toEqual([])
-    expect(limiter.check('openai', { inpmLimit: 100 }, { inputs: 96 })).toBeGreaterThan(0)
+    expect(limiter.check('a1|openai', { inpmLimit: 100 }, { inputs: 96 })).toBeGreaterThan(0)
     await call(Array(96).fill('x'))
     expect(sleeps).toHaveLength(1)
   })
@@ -70,7 +70,7 @@ describe('embedding rate limits', () => {
     const { call, sleeps, limiter } = harness({})
     await call(['a'])
     expect(sleeps).toEqual([])
-    expect(limiter.check('openai', { rpmLimit: 1 })).toBe(0)
+    expect(limiter.check('a1|openai', { rpmLimit: 1 })).toBe(0)
   })
 
   test('the provider level applies when the entry carries none, and the entry wins when it does', async () => {
@@ -106,6 +106,6 @@ describe('embedding rate limits', () => {
   test('a malformed envelope spends no quota', async () => {
     const { call, limiter } = harness({ spec: { rpmLimit: 1 } })
     await call('not-an-array')
-    expect(limiter.check('openai', { rpmLimit: 1 })).toBe(0)
+    expect(limiter.check('a1|openai', { rpmLimit: 1 })).toBe(0)
   })
 })

@@ -330,7 +330,7 @@ describe('R6 — a lane buckets separately only when it has its own quota', () =
     const d = { resolveSpec: specs(table), limiter: recordingLimiter(seen), resolveAdapter: () => adapter }
     await collect(run(envelope(), d))
     await collect(run(envelope({ model: 'openai/gpt-x@fast' }), d))
-    expect(seen.map(s => s.key)).toEqual(['openai/gpt-x', 'openai/gpt-x'])
+    expect(seen.map(s => s.key)).toEqual(['a1|openai/gpt-x', 'a1|openai/gpt-x'])
   })
 
   test('a lane that declares a quota gets its own bucket and limit', async () => {
@@ -339,7 +339,7 @@ describe('R6 — a lane buckets separately only when it has its own quota', () =
     const table = { 'openai/gpt-x': { ...LANED, rpmLimit: 10, rateLimitScope: 'model' } }
     const d = { resolveSpec: specs(table), limiter: recordingLimiter(seen), resolveAdapter: () => adapter }
     await collect(run(envelope({ model: 'openai/gpt-x@flex' }), d))
-    expect(seen[0].key).toBe('openai/gpt-x@flex')
+    expect(seen[0].key).toBe('a1|openai/gpt-x@flex')
     expect(seen[0].limits.rpmLimit).toBe(5)
   })
 

@@ -20,7 +20,9 @@
  * not tied to the caller's quota — the next attempt may succeed
  * immediately. `RATE_LIMIT` (no suffix) is the fallback when the
  * signal is ambiguous. Pass `opts.provider` from the adapter to enable
- * provider-specific disambiguation.
+ * provider-specific disambiguation. A 429 whose headers name a wait
+ * (`Retry-After`, or OpenRouter's epoch-ms `X-RateLimit-Reset`) carries
+ * it as `retryAfterMs`.
  *
  * Type tags: `AUTH_INVALID`, `RATE_LIMIT`, `RATE_LIMIT_TIER`,
  * `RATE_LIMIT_LOAD`, `QUOTA_EXHAUSTED`, `CONTEXT_OVERFLOW`,
@@ -29,6 +31,8 @@
  *
  * @module session/adapters/_errors
  */
+
+import { logger } from '../_logger.js'
 
 const DETAIL_CAP = 500
 
@@ -188,6 +192,7 @@ function headerVal (headers, name) {
  * one is present and reads 0, it's definitive.
  */
 const RATE_LIMIT_HEADER_NAMES = Object.freeze([
+  'x-ratelimit-remaining',
   'x-ratelimit-remaining-requests',
   'x-ratelimit-remaining-tokens',
   'anthropic-ratelimit-requests-remaining',
@@ -335,6 +340,20 @@ const providerOverrides = {
  * @returns {import('#core/errors.js').TypedError}
  */
 function classify429 (err, code, detail, provider) {
+  const result = kindOf429(err, code, detail, provider)
+  const waitMs = providerWaitMs(err?.headers || err?.response?.headers, provider)
+  if (waitMs !== undefined) result.retryAfterMs = waitMs
+  return result
+}
+
+/**
+ * @param {any} err
+ * @param {string} code
+ * @param {string | undefined} detail
+ * @param {string} [provider]
+ * @returns {import('#core/errors.js').TypedError}
+ */
+function kindOf429 (err, code, detail, provider) {
   const override = provider && providerOverrides[provider]?.(err, code, detail)
   if (override) return override
 
@@ -347,6 +366,70 @@ function classify429 (err, code, detail, provider) {
   }
 
   return ambiguousResult(detail)
+}
+
+/**
+ * Providers whose `X-RateLimit-Reset` is the epoch millisecond the
+ * window reopens. Others use the name for other units (OpenAI's
+ * `x-ratelimit-reset-requests` is a duration such as `1s`).
+ */
+const RESET_EPOCH_MS_PROVIDERS = Object.freeze(['openrouter'])
+
+/**
+ * How long the provider says to wait, from `Retry-After` (delta-seconds
+ * or an HTTP-date, RFC 9110 §10.2.3) or, where the unit is known, from
+ * `X-RateLimit-Reset`. Undefined when no header names a wait still
+ * ahead. A header present but unparseable is logged, not guessed.
+ * @param {any} headers
+ * @param {string} [provider]
+ * @returns {number | undefined}
+ */
+function providerWaitMs (headers, provider) {
+  const retryAfter = headerVal(headers, 'retry-after')
+  if (retryAfter !== undefined) return retryAfterWaitMs(retryAfter, provider)
+  if (provider && RESET_EPOCH_MS_PROVIDERS.includes(provider)) {
+    const reset = headerVal(headers, 'x-ratelimit-reset')
+    if (reset !== undefined) return resetWaitMs(reset, provider)
+  }
+  return undefined
+}
+
+/**
+ * @param {string} raw
+ * @param {string | undefined} provider
+ * @returns {number | undefined}
+ */
+function retryAfterWaitMs (raw, provider) {
+  const value = raw.trim()
+  if (/^\d+$/.test(value)) return aheadMs(Number(value) * 1000)
+  const at = Date.parse(value)
+  if (Number.isNaN(at)) return unparseableWait(provider, 'retry-after', raw)
+  return aheadMs(at - Date.now())
+}
+
+/**
+ * @param {string} raw
+ * @param {string} provider
+ * @returns {number | undefined}
+ */
+function resetWaitMs (raw, provider) {
+  const value = raw.trim()
+  if (!/^\d+$/.test(value)) return unparseableWait(provider, 'x-ratelimit-reset', raw)
+  return aheadMs(Number(value) - Date.now())
+}
+
+/** @param {number} ms */
+const aheadMs = (ms) => ms > 0 ? ms : undefined
+
+/**
+ * @param {string | undefined} provider
+ * @param {string} header
+ * @param {string} raw
+ * @returns {undefined}
+ */
+function unparseableWait (provider, header, raw) {
+  logger.warn({ provider, header, value: raw }, '[mohdel:errors] unparseable rate-limit wait')
+  return undefined
 }
 
 /**

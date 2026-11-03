@@ -4,6 +4,8 @@
 //!   - `record_failure(.., immediate: true)` activates cooldown on the
 //!     first failure (401/403 — auth broken, every subsequent call
 //!     will fail).
+//!   - `record_tier_refusal` activates it on the first caller-quota
+//!     refusal, for the wait the refusal named.
 //!   - Normal failures activate after `threshold` consecutive
 //!     failures.
 //!   - A success (`reset`) clears the counter.
@@ -100,6 +102,25 @@ impl CooldownTracker {
         duration: Duration,
         immediate: bool,
     ) -> bool {
+        let reason = if immediate { "auth" } else { "consecutive_failures" };
+        self.record(key, threshold, duration, immediate, reason)
+    }
+
+    /// Records a caller-quota refusal (`RATE_LIMIT_TIER`): activates on
+    /// this first refusal, for `duration`, under the same set-once rule
+    /// as `record_failure`.
+    pub fn record_tier_refusal(&self, key: &str, duration: Duration) -> bool {
+        self.record(key, 1, duration, true, "tier")
+    }
+
+    fn record(
+        &self,
+        key: &str,
+        threshold: u32,
+        duration: Duration,
+        immediate: bool,
+        reason: &'static str,
+    ) -> bool {
         let mut entries = self.entries.lock().expect("cooldown mutex poisoned");
         let now = now_ms();
         if !admit(&mut entries, key, now) {
@@ -112,7 +133,7 @@ impl CooldownTracker {
         if should_trigger {
             if entry.until_ms == 0 || now >= entry.until_ms {
                 entry.until_ms = now + duration.as_millis() as u64;
-                entry.reason = if immediate { "auth" } else { "consecutive_failures" };
+                entry.reason = reason;
                 return true;
             }
         }
@@ -166,6 +187,24 @@ mod tests {
         let cd = CooldownTracker::new();
         assert!(cd.record_failure("u|p", 3, Duration::from_secs(60), true));
         assert_eq!(cd.cooling_down("u|p").unwrap().reason, "auth");
+    }
+
+    #[test]
+    fn tier_refusal_fires_on_first_refusal_for_its_duration() {
+        let cd = CooldownTracker::new();
+        assert!(cd.record_tier_refusal("u|p/m", Duration::from_millis(5_340)));
+        let info = cd.cooling_down("u|p/m").expect("should be cooling");
+        assert_eq!(info.reason, "tier");
+        assert_eq!(info.fail_count, 1);
+        assert_eq!(info.seconds_left, 6);
+    }
+
+    #[test]
+    fn tier_refusal_in_an_open_window_does_not_extend_it() {
+        let cd = CooldownTracker::new();
+        assert!(cd.record_tier_refusal("u|p/m", Duration::from_secs(5)));
+        assert!(!cd.record_tier_refusal("u|p/m", Duration::from_secs(60)));
+        assert!(cd.cooling_down("u|p/m").unwrap().seconds_left <= 5);
     }
 
     #[test]

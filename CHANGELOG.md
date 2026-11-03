@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.5.1] — Fix: the client conformance tests count the caller-quota refusal fixture
+
+### Fixed
+
+- The Rust, OCaml and Gleam clients' conformance tests expect 28 events in
+  `test/conformance/events.json`, the count since 4.5.0 added `error-rate-limit-tier`. They
+  still expected 27, so CI failed on 4.5.0. Only tests changed; the runtime and the clients are
+  as in 4.5.0.
+
 ## [4.5.0] — Feature: the first caller-quota refusal says how long to wait
 
 ### Changed

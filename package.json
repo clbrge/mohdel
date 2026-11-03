@@ -74,6 +74,10 @@
       "types": "./src/lib/curate.d.ts",
       "default": "./src/lib/curate.js"
     },
+    "./mohdex": {
+      "types": "./src/lib/mohdex.d.ts",
+      "default": "./src/lib/mohdex.js"
+    },
     "./utils": {
       "types": "./src/lib/utils.d.ts",
       "default": "./src/lib/utils.js"

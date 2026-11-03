@@ -39,6 +39,25 @@ export async function mohdexEntries (provider) {
   return entries
 }
 
+/**
+ * How models did at tasks in `tool`, as mohdex counts them: `{ [catalogKey]: { [taskId]: { digest,
+ * latestVersion, runs, passed, failed, reasons } } }`, counting only each task's newest version.
+ * Counts, never a verdict: what passes is the caller's to decide. `tag` is one tag or several, all
+ * of which a task must carry; `since` is the oldest tool version counted.
+ */
+export async function mohdexResults ({ tool, task, tag, key, provider, since, grading }) {
+  const params = new URLSearchParams({ tool })
+  for (const [name, value] of Object.entries({ task, key, provider, since, grading })) {
+    if (value !== undefined) params.set(name, value)
+  }
+  for (const one of [tag ?? []].flat()) params.append('tag', one)
+  const res = await fetch(`${MOHDEX_URL}/v1/results?${params}`, { signal: AbortSignal.timeout(15000) })
+  if (!res.ok) throw new Error(`mohdex answered ${res.status}`)
+  const body = await res.json()
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('mohdex returned results mohdel cannot read')
+  return body
+}
+
 /** How many entries mohdex serves for each provider mohdel knows, `pricesFrom` routes included. */
 export async function mohdexCounts () {
   const perSource = {}

@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.6.0] — Added: `mohdel/mohdex` reads how models did at tasks in a tool
+
+### Added
+
+- `mohdexResults({ tool, task, tag, key, provider, since, grading })`, exported as `mohdel/mohdex`,
+  reads mohdex.dev's `/v1/results`: per catalog key and task, how many runs passed and failed,
+  with the failures' reasons, counting only each task's newest version. It returns counts, never a
+  verdict, so a tool sets its own bar, such as spore recommending the models that passed its
+  conformance suite. An unreachable mohdex throws.
+
 ## [4.5.1] — Fix: the client conformance tests count the caller-quota refusal fixture
 
 ### Fixed

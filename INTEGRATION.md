@@ -54,6 +54,19 @@ provider does not describe the model well enough for the catalog — most provid
 inputs a model takes, and only OpenRouter and Novita list prices; `mo curate` asks the user for what
 is missing.
 
+`mohdel/mohdex` reads what mohdex.dev records of how models did at tasks in a tool:
+
+```js
+import { mohdexResults } from 'mohdel/mohdex'
+
+const results = await mohdexResults({ tool: 'spore', provider: 'openrouter', tag: ['suite:conformance'] })
+// { 'openrouter/<model>': { 'spore/conformance/core/read': { digest, latestVersion, runs, passed, failed, reasons } } }
+```
+
+It returns counts, never a verdict: which models pass is the caller's bar. Each task counts only its
+newest version's runs; `since` sets the oldest tool version counted, `task` takes an id or a prefix
+ending in `*`, and `tag` one or several tags a task must all carry. An unreachable mohdex throws.
+
 ## ChatGPT plan access
 
 Sign in with `mo chatgpt login`, then discover models with `mo chatgpt models`

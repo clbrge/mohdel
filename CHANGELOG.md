@@ -15,6 +15,16 @@ All notable changes to this project are documented here. Format follows
   `max_tokens` now ends the call `incomplete`. A refusal gets the warning `contentBlocked`, and
   `model_context_window_exceeded` gets `contextOverflow`. Any other stop reason, including one
   Anthropic adds later, is carried as the warning under its own name.
+- The chat-completions adapter, which serves OpenRouter and every other provider on that API,
+  ended a reply its provider's content filter stopped (`finish_reason: 'content_filter'`) as
+  `completed`. It now ends `incomplete` with `contentBlocked`. A reply cut short with tool calls in
+  it, by `length` or `content_filter`, was `tool_use`, and so a call to run with its arguments
+  cut off; it is now `incomplete`, as on the Anthropic adapter. Other finish reasons are unchanged:
+  providers on this API send finish reasons of their own for a normal end.
+- A failure OpenRouter reports after the stream has started, a chunk carrying `error` and
+  `finish_reason: 'error'`, ended the call `completed` with whatever had streamed. It is now an
+  error, classified like one before the stream: a numeric code as its HTTP status, so a 502 is
+  `PROVIDER_UNAVAILABLE`, and a code such as `server_error` as `NET_ERROR`. Both are retryable.
 
 ### Added
 

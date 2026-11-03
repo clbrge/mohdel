@@ -28,6 +28,7 @@ import {
   STATUS_COMPLETED,
   STATUS_INCOMPLETE,
   STATUS_TOOL_USE,
+  WARNING_CONTENT_BLOCKED,
   WARNING_INSUFFICIENT_OUTPUT_BUDGET
 } from '#core/status.js'
 import {
@@ -208,6 +209,15 @@ async function * runStreaming (envelope, client, args, config, start, deps) {
         return
       }
       const choice = chunk.choices?.[0]
+      // OpenRouter reports a failure after the 200 as a chunk carrying `error`, ending in `finish_reason: 'error'`.
+      if (chunk.error || choice?.finish_reason === 'error') {
+        const failed = chunk.error
+          ? { status: typeof chunk.error.code === 'number' ? chunk.error.code : undefined, error: chunk.error, message: chunk.error.message }
+          : new Error(`${config.provider} stream ended in error`)
+        deps.log?.warn({ err: failed }, `[mohdel:${config.provider}] stream ended in error`)
+        yield { type: 'error', error: classifyProviderError(failed, envelope.auth?.key, { provider: config.provider }) }
+        return
+      }
       const delta = choice?.delta ?? {}
       // Raw reasoning, captured so a multi-turn caller can send it back (DeepSeek V4 refuses an
       // assistant turn without it) and streamed only to a caller that asked (`run.js`).
@@ -376,6 +386,15 @@ function boundPart (envelope, blocks) {
 }
 
 /**
+ * The finish reasons that cut a reply short. Only these: providers on this API send finish
+ * reasons of their own for a normal end, so an unlisted one is not a sign of a cut.
+ */
+const FINISH_WARNINGS = {
+  length: WARNING_INSUFFICIENT_OUTPUT_BUDGET,
+  content_filter: WARNING_CONTENT_BLOCKED
+}
+
+/**
  * @param {{
  *   envelope: any,
  *   content: string,
@@ -401,9 +420,9 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
   // computeCost prices the cached portion at cacheReadPrice.
   const inputTokens = Math.max(0, totalInputTokens - cachedInputTokens)
 
-  const truncated = finishReason === 'length'
-  let status = truncated ? STATUS_INCOMPLETE : STATUS_COMPLETED
-  if (toolCalls && toolCalls.length > 0) status = STATUS_TOOL_USE
+  const warning = finishReason && FINISH_WARNINGS[finishReason]
+  let status = toolCalls && toolCalls.length > 0 ? STATUS_TOOL_USE : STATUS_COMPLETED
+  if (warning) status = STATUS_INCOMPLETE
 
   /** @type {import('#core/events.js').DoneEvent} */
   const done = {
@@ -427,7 +446,7 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
       timestamps: { start, first: first ?? end, end }
     }
   }
-  if (truncated) done.result.warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
+  if (warning) done.result.warning = warning
   if (toolCalls && toolCalls.length > 0) {
     done.result.toolCalls = fromCerebrasToolCalls(toolCalls)
   }

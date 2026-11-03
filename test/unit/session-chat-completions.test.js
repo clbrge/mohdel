@@ -132,6 +132,53 @@ describe('groq adapter', () => {
     expect(events.at(-1).result.warning).toBe('insufficientOutputBudget')
   })
 
+  test.each([
+    ['a numeric code', { code: 502, message: 'Provider returned error' }, 'PROVIDER_UNAVAILABLE', true],
+    ['a string code', { code: 'server_error', message: 'Provider disconnected unexpectedly' }, 'NET_ERROR', true]
+  ])('an error chunk after the 200 (%s) is an error, never a done', async (_, error, type, retryable) => {
+    const { client } = mockChatStream([
+      { choices: [{ delta: { content: 'par' } }] },
+      { error, choices: [{ index: 0, delta: { content: '' }, finish_reason: 'error' }] }
+    ])
+    const events = await collect(groq(envelope('groq', 'llama-3'), { client }))
+    expect(events.some(e => e.type === 'done')).toBe(false)
+    expect(events.at(-1).error.type).toBe(type)
+    expect(events.at(-1).error.retryable).toBe(retryable)
+  })
+
+  test('finish_reason=error with no error field is still an error', async () => {
+    const { client } = mockChatStream([{ choices: [{ delta: {}, finish_reason: 'error' }] }])
+    const events = await collect(groq(envelope('groq', 'llama-3'), { client }))
+    expect(events.some(e => e.type === 'done')).toBe(false)
+    expect(events.at(-1).type).toBe('error')
+  })
+
+  test('finish_reason=content_filter → incomplete + contentBlocked', async () => {
+    const { client } = mockChatStream([
+      { choices: [{ delta: {}, finish_reason: 'content_filter' }] },
+      { choices: [], usage: { prompt_tokens: 10, completion_tokens: 0 } }
+    ])
+    const events = await collect(groq(envelope('groq', 'llama-3'), { client }))
+    expect(events.at(-1).result.status).toBe('incomplete')
+    expect(events.at(-1).result.warning).toBe('contentBlocked')
+  })
+
+  test.each([
+    ['length', 'insufficientOutputBudget'],
+    ['content_filter', 'contentBlocked']
+  ])('tool calls cut short by %s are incomplete, not calls to run', async (finish, warning) => {
+    const { client } = mockChatStream([
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'do' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"a":' } }] }, finish_reason: finish }] },
+      { choices: [], usage: { prompt_tokens: 5, completion_tokens: 3 } }
+    ])
+    const events = await collect(groq(envelope('groq', 'llama-3', {
+      tools: [{ name: 'do', parameters: { type: 'object' } }]
+    }), { client }))
+    expect(events.at(-1).result.status).toBe('incomplete')
+    expect(events.at(-1).result.warning).toBe(warning)
+  })
+
   test('tool_calls switch status to tool_use', async () => {
     const { client } = mockChatStream([
       { choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'do' } }] } }] },

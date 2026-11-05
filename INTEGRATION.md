@@ -67,6 +67,23 @@ It returns counts, never a verdict: which models pass is the caller's bar. Each 
 newest version's runs; `since` sets the oldest tool version counted, `task` takes an id or a prefix
 ending in `*`, and `tag` one or several tags a task must all carry. An unreachable mohdex throws.
 
+`mohdexRecommended` is the verdict, for a bar the caller names:
+
+```js
+import { mohdexRecommended } from 'mohdel/mohdex'
+
+const models = await mohdexRecommended({ tool: 'spore', bar: ['tier:core', 'tier:identity'] })
+// [{ key: 'openrouter/<model>', version: '1.56.0' }]
+```
+
+A model passes when it passed every task carrying one of those tags, in the newest tool version it
+ran; `version` is that version. An unreachable mohdex throws.
+
+A program that fills the catalog itself runs `mo onboard <provider> --caller <name>
+--credential-only`: it stops after the key or sign-in, and exit 0 means the credential is there,
+whatever the catalog holds. `mohdel/provider-info` is the table of what setup shows about a
+provider, `label`, `description`, `url`, `hint` and `free`, as its default export.
+
 ## ChatGPT plan access
 
 Sign in with `mo chatgpt login`, then discover models with `mo chatgpt models`

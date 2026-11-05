@@ -153,13 +153,16 @@ Usage:
   --caller <name>           Run for another program: end by handing back to it
                             instead of suggesting mo commands. With no provider,
                             pick one not yet set up, among those mohdex prices
+  --credential-only         With a provider: stop after its key or sign-in, for a
+                            caller that fills the catalog itself
 
 Exit code (mo onboard <provider>, or --caller with no provider):
   0  the provider has its credential and at least one model in the catalog,
      or (no provider) every provider that could be offered is set up already
   1  it does not yet — the last line names the command that closes it —
      or (no provider) the picker was cancelled
-  2  no such provider, or --caller without a name`)
+  2  no such provider, --caller without a name, or --credential-only without a provider
+With --credential-only, 0 needs the credential alone, whatever the catalog holds.`)
     return 0
   }
   const callerAt = args.indexOf('--caller')
@@ -168,8 +171,13 @@ Exit code (mo onboard <provider>, or --caller with no provider):
     console.error('mo onboard: --caller needs a name, e.g. --caller spore')
     return 2
   }
+  const credentialOnly = args.includes('--credential-only')
   const provider = args.find(a => !a.startsWith('-'))
-  if (provider) return runOnboardProvider(provider, caller)
+  if (credentialOnly && !provider) {
+    console.error('mo onboard: --credential-only needs a provider, e.g. mo onboard openai --credential-only')
+    return 2
+  }
+  if (provider) return runOnboardProvider(provider, caller, credentialOnly)
   if (caller) return runOnboardPicker(caller)
   await runOnboard()
   return 0
@@ -232,7 +240,7 @@ async function runOnboardPicker (caller) {
  * ran it for its user: 0 when the provider is ready, 1 when it is not, 2 for a provider mohdel does
  * not know.
  */
-export async function runOnboardProvider (provider, caller) {
+export async function runOnboardProvider (provider, caller, credentialOnly) {
   loadDefaultEnv()
   const def = providers[provider]
   if (!def) {
@@ -240,10 +248,10 @@ export async function runOnboardProvider (provider, caller) {
     return 2
   }
   intro(`${caller ? `mohdel (via ${caller})` : 'mohdel'} — ${PROVIDER_INFO[provider]?.label ?? provider}`)
-  return setUpProvider(provider, caller)
+  return setUpProvider(provider, caller, credentialOnly)
 }
 
-async function setUpProvider (provider, caller) {
+async function setUpProvider (provider, caller, credentialOnly) {
   const def = providers[provider]
   const { credentialOf, providerReadiness } = await import('../lib/readiness.js')
   // A stored key the provider refuses counts as unset, so onboarding repairs
@@ -273,7 +281,12 @@ async function setUpProvider (provider, caller) {
     }
     loadDefaultEnv()
   }
-  if (await credentialOf(provider) && !(await providerReadiness(provider)).models) {
+  const hasCredential = await credentialOf(provider)
+  if (hasCredential && credentialOnly) {
+    outro(`${provider} has its credential.${caller ? ` Back to ${caller}.` : ''}`)
+    return 0
+  }
+  if (hasCredential && !(await providerReadiness(provider)).models) {
     if (def.catalogClient === 'chatgpt') {
       const { processModels } = await import('../lib/select.js')
       await processModels(provider, await providerApi(provider))

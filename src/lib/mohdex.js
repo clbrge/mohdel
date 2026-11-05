@@ -58,6 +58,21 @@ export async function mohdexResults ({ tool, task, tag, key, provider, since, gr
   return body
 }
 
+/**
+ * The models that meet a bar at a tool: `[{ key, version }]`, `version` the tool version a model was
+ * last judged on. The caller names the bar, one or several tags; mohdex applies it. An unreachable
+ * mohdex throws.
+ */
+export async function mohdexRecommended ({ tool, bar }) {
+  const params = new URLSearchParams({ tool })
+  for (const one of [bar].flat()) params.append('bar', one)
+  const res = await fetch(`${MOHDEX_URL}/v1/recommended?${params}`, { signal: AbortSignal.timeout(15000) })
+  if (!res.ok) throw new Error(`mohdex answered ${res.status}`)
+  const body = await res.json()
+  if (!Array.isArray(body?.models)) throw new Error('mohdex returned recommendations mohdel cannot read')
+  return body.models
+}
+
 /** How many entries mohdex serves for each provider mohdel knows, `pricesFrom` routes included. */
 export async function mohdexCounts () {
   const perSource = {}

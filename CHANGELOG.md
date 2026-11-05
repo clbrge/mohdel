@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.9.0] — Added: what mohdex recommends, and onboarding that stops at the credential
+
+### Added
+
+- `mohdexRecommended({ tool, bar })` in `mohdel/mohdex`: the models that meet a bar the caller
+  names, from mohdex's `/v1/recommended`, as `[{ key, version }]`. An unreachable mohdex throws.
+- `mo onboard <provider> --credential-only` stops after the key or sign-in, for a program that
+  fills the catalog itself. Exit 0 means the credential is there, whatever the catalog holds.
+  Without the flag, onboarding is unchanged.
+- `mohdel/provider-info` exports the table of what setup shows about a provider.
+
+### Changed
+
+- `@anthropic-ai/sdk` `^1.4.0` → `^1.5.0`. The release adds an error class per HTTP status and
+  `apiMessage`, `errorCode` and `details` on `APIError`; `status`, `error`, `message` and `headers`,
+  which mohdel classifies errors from, are unchanged.
+- `openai` `^7.47.0` → `^7.51.0`. The releases add API surface mohdel does not call yet.
+
+This is CLI and catalog code, so the gate needs nothing.
+
 ## [4.8.1] — Fixed: Mistral refused every call that carried an identifier
 
 ### Fixed

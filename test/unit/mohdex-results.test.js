@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { mohdexResults } from '../../src/lib/mohdex.js'
+import { mohdexRecommended, mohdexResults } from '../../src/lib/mohdex.js'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
@@ -43,5 +43,34 @@ describe('mohdexResults', () => {
   it('throws on a body that is not counts', async () => {
     answering(200, [])
     await expect(mohdexResults({ tool: 'spore' })).rejects.toThrow('mohdex returned results mohdel cannot read')
+  })
+})
+
+describe('mohdexRecommended', () => {
+  const models = [{ key: 'openai/gpt-test', version: '1.56.0' }]
+
+  it('asks /v1/recommended for the tool and every tag of the bar', async () => {
+    const fetch = answering(200, { models })
+    expect(await mohdexRecommended({ tool: 'spore', bar: ['tier:core', 'tier:identity'] })).toEqual(models)
+    const url = new URL(fetch.mock.calls[0][0])
+    expect(url.origin + url.pathname).toBe('https://mohdex.dev/v1/recommended')
+    expect(url.searchParams.get('tool')).toBe('spore')
+    expect(url.searchParams.getAll('bar')).toEqual(['tier:core', 'tier:identity'])
+  })
+
+  it('takes a bar of one tag as a string', async () => {
+    const fetch = answering(200, { models: [] })
+    expect(await mohdexRecommended({ tool: 'spore', bar: 'tier:core' })).toEqual([])
+    expect(new URL(fetch.mock.calls[0][0]).searchParams.getAll('bar')).toEqual(['tier:core'])
+  })
+
+  it('throws on a refusal', async () => {
+    answering(400, { error: 'bar is required' })
+    await expect(mohdexRecommended({ tool: 'spore', bar: 'tier:core' })).rejects.toThrow('mohdex answered 400')
+  })
+
+  it.each([[null], [[]], [{}], [{ models: 'none' }]])('throws on a body without a list of models: %j', async (body) => {
+    answering(200, body)
+    await expect(mohdexRecommended({ tool: 'spore', bar: 'tier:core' })).rejects.toThrow('cannot read')
   })
 })

@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.9.1] — Fixed: `addFromMohdex` refuses an entry the catalog would reject
+
+### Fixed
+
+- `addFromMohdex` validates what it is given and throws, naming the entry and the field, when the
+  catalog would reject one. Nothing is written then. It trusted the caller, so an incomplete entry
+  taken straight from `mohdexEntries` reached the catalog unchecked.
+  `mohdexOffer`'s `complete` list is unaffected: it holds only entries that pass.
+
+This is catalog code, so the gate needs nothing.
+
 ## [4.9.0] — Added: what mohdex recommends, and onboarding that stops at the credential
 
 ### Added

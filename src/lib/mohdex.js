@@ -125,7 +125,15 @@ export async function mohdexOffer (provider) {
   return { complete, incomplete, unserved }
 }
 
+/**
+ * Writes each `{ key, entry }` to the catalog, all of them or none: an entry the catalog would reject
+ * throws, naming the field, and nothing is written.
+ */
 export async function addFromMohdex (picked) {
+  const rejected = picked.flatMap(({ key, entry }) => validate(entry, key)
+    .filter(issue => issue.severity === 'error')
+    .map(issue => `${key}: ${issue.field} — ${issue.message}`))
+  if (rejected.length) throw new Error(`the catalog would reject ${rejected.join('; ')}`)
   const curated = await getCuratedModels()
   for (const { key, entry } of picked) curated[key] = stripUnknown(entry)
   await saveCuratedModels(curated)

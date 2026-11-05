@@ -71,14 +71,22 @@ describe('a provider', () => {
   test('lists its models in the catalog to choose from, with how each bills', async () => {
     catalog({ [OPENAI]: entry(), 'openai/gpt-priced': entry({ inputPrice: 1, outputPrice: 4 }), 'openai/gpt-gone': { ...entry(), deprecated: OPENAI } })
     expect(await modelsOf('openai')).toEqual([
-      { model: OPENAI, billing: 'metered', priced: false },
-      { model: 'openai/gpt-priced', billing: 'metered', priced: true }
+      { model: OPENAI, type: 'model', tags: [], billing: 'metered', priced: false },
+      { model: 'openai/gpt-priced', type: 'model', tags: [], billing: 'metered', priced: true }
     ])
     expect(await modelsOf('anthropic')).toEqual([])
     catalog({ [OPENAI]: entry(), 'chatgpt/gpt-test': { ...entry(), provider: 'chatgpt' } })
     expect(await modelsOf()).toEqual([
-      { model: OPENAI, billing: 'metered', priced: false },
-      { model: 'chatgpt/gpt-test', billing: 'plan', priced: null }
+      { model: OPENAI, type: 'model', tags: [], billing: 'metered', priced: false },
+      { model: 'chatgpt/gpt-test', type: 'model', tags: [], billing: 'plan', priced: null }
+    ])
+  })
+
+  test('says what kind of model each is, and the tags it carries', async () => {
+    catalog({ [OPENAI]: entry({ tags: ['spore'] }), 'openai/embed-test': { ...entry(), type: 'embedding' } })
+    expect(await modelsOf('openai')).toMatchObject([
+      { model: OPENAI, type: 'model', tags: ['spore'] },
+      { model: 'openai/embed-test', type: 'embedding', tags: [] }
     ])
   })
 })

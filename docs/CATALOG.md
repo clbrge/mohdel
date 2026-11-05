@@ -329,7 +329,7 @@ narrower than the number the provider publishes.
 | `thinkingEffortLevels` | Object mapping `"low" \| "medium" \| "high" \| "xhigh" \| "max" \| "none"` → provider-native budget. Mohdel translates the caller's `outputEffort: 'medium'` to whatever the provider accepts (Anthropic budget tokens, OpenAI reasoning_effort, Gemini thinkingBudget, …). Only declared levels are accepted, `none` included: omit `none` on a model that cannot turn thinking off. Set to `null` to disable thinking on this model. |
 | `defaultThinkingEffort` | The level used when the envelope omits `outputEffort`. |
 | `speeds` | Object mapping lane name → overlay. Service speed lanes this model sells. See *Service speeds* below. |
-| `tags` | Free-form strings. `[a-zA-Z][a-zA-Z0-9._-]{0,31}`. Used by `mo bench --tag X`, `mo rank --tag X`, and your application's own model selection. |
+| `tags` | Free-form strings. `[a-zA-Z][a-zA-Z0-9._-]{0,31}`. Used by `mo bench --tag X`, `mo rank --tag X`, and your application's own model selection. `spore` is reserved: spore sets it on a model someone chose for it. |
 | `leaderboard` | `[intelligence, speed, latency]` triple (numbers). Drives `mo rank`. Source it however you want — published benchmarks, your own evals, vibes. |
 | `aliases` | Alternative ids that should resolve to this entry. |
 | `supportsTools` | Boolean. Set `false` to mark a model as tool-less (used by `mo` for capability summaries and by callers selecting models). |

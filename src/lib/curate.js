@@ -9,7 +9,7 @@ import providers, { billingOf } from './providers.js'
 import { creatorFromModelId } from './creators.js'
 import { getAPIKey, getCuratedModels, getExcludedModels, hasPrices, saveCuratedModels } from './common.js'
 import { getMohdelModel } from './curated-cache.js'
-import { stripUnknown, validate } from './schema.js'
+import { isValidTag, stripUnknown, validate } from './schema.js'
 import { entryKey } from '#core/model-id.js'
 import { silent } from './logger.js'
 
@@ -124,6 +124,20 @@ export async function upstream (provider) {
   if (!listed) return null
   return filterUncurated(listed, provider, await getCuratedModels(), await getExcludedModels())
     .map(m => ({ id: m.id, label: m.label || m.id, inputPrice: m.inputPrice ?? null, outputPrice: m.outputPrice ?? null }))
+}
+
+/**
+ * Adds `tag` to the catalog entry `model` names, which keeps a tag it already carries. An invalid
+ * tag or a model the catalog does not hold throws.
+ */
+export async function tagModel (model, tag) {
+  if (!isValidTag(tag)) throw new Error(`invalid tag "${tag}"`)
+  const curated = await getCuratedModels()
+  const entry = curated[model]
+  if (!entry) throw new Error(`${model} is not in the catalog`)
+  if (entry.tags?.includes(tag)) return
+  entry.tags = [...(entry.tags ?? []), tag]
+  await saveCuratedModels(curated)
 }
 
 /**

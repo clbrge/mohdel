@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.9.2] — Added: `modelsOf` says what kind of model each is, and `tagModel`
+
+### Added
+
+- `modelsOf` returns each model's `type` and `tags`, so a program can leave out what it cannot run,
+  such as an embedding model. `type` is `model` unless the entry names another.
+- `tagModel(model, tag)` in `mohdel/curate` adds a tag to a catalog entry without `mo`.
+- `spore` is a reserved tag: spore sets it on a model someone chose for it.
+
+This is catalog code, so the gate needs nothing.
+
 ## [4.9.1] — Fixed: `addFromMohdex` refuses an entry the catalog would reject
 
 ### Fixed

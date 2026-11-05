@@ -49,15 +49,16 @@ export async function modelReadiness (model) {
 
 /**
  * A provider's models in the catalog, or every provider's without one, deprecated ones left out,
- * each `{ model, billing, priced }` as `modelReadiness` reads them: what a program offers its user
- * to choose from.
+ * each `{ model, type, tags, billing, priced }`, `billing` and `priced` as `modelReadiness` reads
+ * them: what a program offers its user to choose from. `type` is `model` unless the entry names
+ * another, such as `embedding` or `image`.
  */
 export async function modelsOf (provider = null) {
   return catalogEntries(await getCuratedModels())
     .filter(([key, spec]) => (provider === null || providerOf(key) === provider) && !spec.deprecated)
     .map(([key, spec]) => {
       const billing = billingOf(key).kind
-      return { model: key, billing, priced: billing === 'metered' ? hasPrices(spec) : null }
+      return { model: key, type: spec.type ?? 'model', tags: spec.tags ?? [], billing, priced: billing === 'metered' ? hasPrices(spec) : null }
     })
 }
 

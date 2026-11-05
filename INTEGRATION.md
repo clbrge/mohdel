@@ -43,8 +43,9 @@ coding agent, ends the run with no models, and the agent writes them after `mo` 
 its prices is ready — it runs, and its calls report no cost — so a program that bounds spend on
 `cost` should offer `fix` (`mo model instructions <provider>`) when `priced` is `false`. ChatGPT
 (a plan: nothing metered) and OpenRouter (prices from its own API) need no prices filled by hand.
-`modelsOf([provider])` lists the catalog's models, or one provider's, each `{ model, billing,
-priced }`, for the user to choose one from.
+`modelsOf([provider])` lists the catalog's models, or one provider's, each `{ model, type, tags,
+billing, priced }`, for the user to choose one from. `type` is `model` unless the entry names
+another, such as `embedding` or `image`.
 
 `mohdel/curate` fills the catalog without `mo`'s prompts: `upstream(provider)` lists what the
 provider offers beyond the catalog, each `{ id, label, inputPrice, outputPrice }` (null when mohdel
@@ -52,7 +53,7 @@ cannot list it), and `curate(provider, ids)` adds the chosen ones, each `{ model
 writes nothing when an id is not listed, already in the catalog or excluded from it, or when the
 provider does not describe the model well enough for the catalog — most providers do not say which
 inputs a model takes, and only OpenRouter and Novita list prices; `mo curate` asks the user for what
-is missing.
+is missing. `tagModel(model, tag)` adds a tag to a catalog entry.
 
 `mohdel/mohdex` reads what mohdex.dev records of how models did at tasks in a tool:
 

@@ -27,7 +27,7 @@ vi.mock('../../src/lib/catalog/openrouter.js', () => ({
   })
 }))
 
-const { curate, upstream } = await import('../../src/lib/curate.js')
+const { curate, tagModel, upstream } = await import('../../src/lib/curate.js')
 const { CURATED_PATH, EXCLUDED_PATH, getCuratedModels } = await import('../../src/lib/common.js')
 
 afterAll(() => { fs.rmSync(dirs.config, { recursive: true, force: true }) })
@@ -54,6 +54,27 @@ describe('what a provider lists beyond the catalog', () => {
 
   test('names a provider mohdel does not know', async () => {
     await expect(upstream('nowhere')).rejects.toThrow(/not a provider mohdel knows/)
+  })
+})
+
+describe('tagging a model', () => {
+  const HELD = 'openrouter/vendor/held'
+
+  test('adds the tag to the entry, once', async () => {
+    await tagModel(HELD, 'spore')
+    await tagModel(HELD, 'spore')
+    expect((await getCuratedModels())[HELD].tags).toEqual(['spore'])
+  })
+
+  test('keeps the tags the entry carries', async () => {
+    await tagModel(HELD, 'first')
+    await tagModel(HELD, 'second')
+    expect((await getCuratedModels())[HELD].tags).toEqual(['first', 'second'])
+  })
+
+  test('refuses a model the catalog does not hold, and an invalid tag', async () => {
+    await expect(tagModel('openrouter/vendor/none', 'spore')).rejects.toThrow(/openrouter\/vendor\/none is not in the catalog/)
+    await expect(tagModel(HELD, 'not a tag')).rejects.toThrow(/invalid tag "not a tag"/)
   })
 })
 

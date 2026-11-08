@@ -227,7 +227,7 @@ The full option mapping is documented in the `runAnswer` docstring so a future a
 
 ## The `fake` provider — scenario-driven testing
 
-`js/session/adapters/fake.js` is a first-class test adapter: register `provider: "fake"` in an envelope with a JSON scenario in `prompt` and the adapter drives behavior deterministically. Eight modes:
+`js/session/adapters/fake.js` is a first-class test adapter: an envelope with `model: "fake/<name>"` and a JSON scenario in `prompt` drives behavior deterministically. The key needs a catalog entry like any other model. Nine modes:
 
 | mode | behavior |
 |------|----------|

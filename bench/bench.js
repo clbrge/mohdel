@@ -45,6 +45,7 @@ import { spawn } from 'node:child_process'
 import http from 'node:http'
 import { setTimeout as sleep } from 'node:timers/promises'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 import { run } from '../js/session/run.js'
@@ -76,8 +77,7 @@ function envelope (n) {
     // has its own tests; this bench isolates gate transport cost.
     authId: `bench-${n}`,
     auth: { key: 'x' },
-    provider: 'fake',
-    model: 'm',
+    model: 'fake/m',
     prompt: JSON.stringify({ mode: 'volume', tokens: TOKENS })
   }
 }
@@ -85,7 +85,7 @@ function envelope (n) {
 async function consumeInProcess (env) {
   let deltas = 0
   let result = null
-  for await (const ev of run(env)) {
+  for await (const ev of run(env, { resolveSpec: () => ({}) })) {
     if (ev.type === 'delta') deltas++
     else if (ev.type === 'done') result = ev.result
     else if (ev.type === 'error') throw new Error(`adapter error: ${ev.error.message}`)
@@ -219,9 +219,12 @@ async function withGate (fn) {
     try { fs.unlinkSync(p) } catch {}
   }
 
-  const gate = spawn(binary, [dataSock, adminSock, sessionBin], {
+  const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'mohdel-bench-'))
+  fs.mkdirSync(path.join(configHome, 'mohdel'))
+  fs.writeFileSync(path.join(configHome, 'mohdel/curated.json'), JSON.stringify({ 'fake/m': {} }))
+  const gate = spawn(binary, ['--data', dataSock, '--admin', adminSock, '--session', sessionBin], {
     stdio: ['ignore', 'ignore', 'inherit'],
-    env: { ...process.env, MOHDEL_LOG_LEVEL: 'warn' }
+    env: { ...process.env, MOHDEL_LOG_LEVEL: 'warn', XDG_CONFIG_HOME: configHome }
   })
 
   // Wait for the data socket to appear.
@@ -245,6 +248,7 @@ async function withGate (fn) {
     for (const p of [dataSock, adminSock]) {
       try { fs.unlinkSync(p) } catch {}
     }
+    fs.rmSync(configHome, { recursive: true, force: true })
   }
 }
 

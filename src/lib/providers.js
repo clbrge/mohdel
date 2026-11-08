@@ -234,6 +234,20 @@ const providers = {
     contextSemantics: 'shared',
     outputCapStrategy: 'accept'
   },
+  tinker: {
+    billing: { kind: 'metered' },
+    sdk: 'openai',
+    api: 'chatCompletions',
+    apiKeyEnv: 'TINKER_API_SK',
+    baseURL: 'https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1',
+    createConfiguration: apiKey => ({ apiKey }),
+    references: {
+      pricing: 'https://thinkingmachines.ai/tinker/pricing/',
+      models: 'https://tinker-docs.thinkingmachines.ai/tinker/models/'
+    },
+    contextSemantics: 'shared',
+    outputCapStrategy: 'accept'
+  },
   xai: {
     billing: { kind: 'metered' },
     sdk: 'openai',

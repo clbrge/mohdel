@@ -43,6 +43,7 @@ import { spawn } from 'node:child_process'
 import http from 'node:http'
 import { setTimeout as sleep } from 'node:timers/promises'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
@@ -55,8 +56,7 @@ function envelope (n, prompt) {
     callId: `iso-${n}`,
     authId: `iso-${n}`, // unique per call to bypass default quota
     auth: { key: 'x' },
-    provider: 'fake',
-    model: 'm',
+    model: 'fake/m',
     prompt
   }
 }
@@ -76,13 +76,13 @@ async function inProcessCrash () {
 import { run } from '${path.join(ROOT, 'js/session/run.js')}';
 const env = {
   callId: 'iso-inp-1', authId: 'iso-inp-1', auth: { key: 'x' },
-  provider: 'fake', model: 'm',
+  model: 'fake/m',
   prompt: ${JSON.stringify(CRASH_PROMPT)}
 };
 // First, prove we're alive.
 console.log('[caller] starting, about to consume crash envelope');
 try {
-  for await (const ev of run(env)) {
+  for await (const ev of run(env, { resolveSpec: () => ({}) })) {
     console.log('[caller] got event:', ev.type);
   }
   console.log('[caller] run() returned cleanly — this line should NEVER print');
@@ -143,9 +143,12 @@ async function viaGateCrash () {
   try { fs.unlinkSync(dataSock) } catch {}
   try { fs.unlinkSync(adminSock) } catch {}
 
-  const gate = spawn(binary, [dataSock, adminSock, sessionBin], {
+  const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'mohdel-iso-'))
+  fs.mkdirSync(path.join(configHome, 'mohdel'))
+  fs.writeFileSync(path.join(configHome, 'mohdel/curated.json'), JSON.stringify({ 'fake/m': {} }))
+  const gate = spawn(binary, ['--data', dataSock, '--admin', adminSock, '--session', sessionBin], {
     stdio: ['ignore', 'ignore', 'pipe'],
-    env: { ...process.env, MOHDEL_LOG_LEVEL: 'warn', MOHDEL_SESSION_POOL_SIZE: '2' }
+    env: { ...process.env, MOHDEL_LOG_LEVEL: 'warn', MOHDEL_SESSION_POOL_SIZE: '2', XDG_CONFIG_HOME: configHome }
   })
   let gateStderr = ''
   gate.stderr.on('data', (c) => { gateStderr += c.toString() })
@@ -238,6 +241,7 @@ async function viaGateCrash () {
     await sleep(100)
     try { fs.unlinkSync(dataSock) } catch {}
     try { fs.unlinkSync(adminSock) } catch {}
+    fs.rmSync(configHome, { recursive: true, force: true })
   }
 }
 

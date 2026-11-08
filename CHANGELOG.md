@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [4.10.0] — Added: the `tinker` provider, for Thinking Machines' Inkling models
+
+### Added
+
+- `tinker`: Thinking Machines' Tinker serverless inference, for the Inkling models, with the key in
+  `TINKER_API_SK`. It runs on the shared chat-completions path, in process and through the gate.
+  Tinker's model list is empty, so its catalog entries are added from a file with `mo model apply`.
+- `thinkingmachines` as a creator, so an `Inkling` model id is credited to Thinking Machines.
+
+### Fixed
+
+- The docs launched `mohdel-thin-gate` with positional arguments, which the binary refuses. They
+  now use `--data`, `--admin` and `--session`.
+- `bench/bench.js` and `bench/isolation.js` failed: they started the gate the same way, and sent
+  `provider: 'fake', model: 'm'`, which no longer names a provider. They now send `fake/m` and give
+  it a catalog entry, in process and in a config directory of their own for the gate.
+- The docs for the `fake` provider said `provider: "fake"`, and that it worked through the factory.
+  It takes `model: 'fake/<name>'` and a catalog entry, and runs through `mohdel/session` or the
+  gate. The factory refuses it.
+- The docs showed `name` on a `tool` message. The field is `toolName`: with `name`, the gate refuses
+  the envelope with a 400, and in process Gemini gets an empty function name.
+
 ## [4.9.2] — Added: `modelsOf` says what kind of model each is, and `tagModel`
 
 ### Added

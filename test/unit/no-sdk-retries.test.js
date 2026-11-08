@@ -20,6 +20,7 @@ const RETRY_CLIENTS = [
   'js/session/adapters/fireworks.js',
   'js/session/adapters/xai.js',
   'js/session/adapters/xiaomi.js',
+  'js/session/adapters/tinker.js',
   'js/session/adapters/novita.js',
   'js/session/adapters/meta.js',
   'js/session/adapters/local.js',

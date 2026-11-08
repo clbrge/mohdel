@@ -148,7 +148,7 @@ while (result.status === 'tool_use') {
     messages.push({
       role: 'tool',
       toolCallId: call.id,
-      name: call.name,
+      toolName: call.name,
       content: JSON.stringify(fake)
     })
   }

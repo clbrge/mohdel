@@ -27,6 +27,7 @@ export const ADAPTER_NAMES = Object.freeze([
   'openai',
   'openrouter',
   'qwen',
+  'tinker',
   'xai',
   'xiaomi'
 ])

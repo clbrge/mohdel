@@ -164,7 +164,7 @@ per-platform binary ships as an optional dependency, so there is nothing to
 compile:
 
 ```bash
-mohdel-thin-gate /tmp/mohdel-data.sock /tmp/mohdel-admin.sock ./js/session/bin.js
+mohdel-thin-gate --data /tmp/mohdel-data.sock --admin /tmp/mohdel-admin.sock --session ./js/session/bin.js
 ```
 
 To spawn it from your own code, `resolveGateBinary()` from `mohdel/client`
@@ -179,9 +179,9 @@ binary yet:
 # From a checkout
 cargo build --release
 ./target/release/mohdel-thin-gate \
-  /tmp/mohdel-data.sock \
-  /tmp/mohdel-admin.sock \
-  ./js/session/bin.js
+  --data /tmp/mohdel-data.sock \
+  --admin /tmp/mohdel-admin.sock \
+  --session ./js/session/bin.js
 
 # Or configure via TOML at ~/.config/mohdel/thin-gate.toml:
 #   [sockets]
@@ -359,7 +359,7 @@ const prompt = [
     content: 'Let me check.',
     toolCalls: [{ id: 'c1', name: 'get_hostname', arguments: {} }]
   },
-  { role: 'tool', toolCallId: 'c1', name: 'get_hostname', content: 'dev-box' }
+  { role: 'tool', toolCallId: 'c1', toolName: 'get_hostname', content: 'dev-box' }
 ]
 ```
 
@@ -369,7 +369,7 @@ Message shape:
 - A `reasoning` part carries a model's prior reasoning text. Chat-completions adapters send it back as `reasoning_content` on assistant turns; Anthropic, OpenAI, xAI and Gemini leave it out, since they accept prior reasoning only in their own signed form.
 - A `reasoning` part with `encrypted` (and `id`, `model`) is that signed form, returned by the Responses-API providers (OpenAI, ChatGPT, Meta, xAI) so a model keeps its reasoning between tool rounds. Copy `result.reasoningParts` to the head of the assistant message you record for that result; the adapter replays them ahead of that turn when the next call is to the same `model`, and drops them for any other model or provider, so a conversation can change model.
 - `toolCallId`: present on `tool` role — identifies which assistant tool call this responds to
-- `name`: optional tool name on `tool` role
+- `toolName`: tool name on `tool` role; Gemini needs it, since its function response is matched by name
 - `toolCalls`: present on `assistant` role when the model invoked tools in that turn
 
 ## Events
@@ -1185,20 +1185,46 @@ Paths follow XDG via `env-paths`. Configure through `mo onboard <provider>` and 
 
 # Testing with the `fake` provider
 
-For deterministic stress tests, benchmarks, and bug reproductions, register `provider: "fake"` with a JSON scenario in `prompt`:
+For deterministic stress tests, benchmarks, and bug reproductions, send an envelope whose `model` is `fake/<name>`, with a JSON scenario in `prompt`:
 
 ```js
-await model.answer(JSON.stringify({ mode: 'volume', tokens: 100 }))
-await model.answer(JSON.stringify({ mode: 'slow',   tokens: 20, delayMs: 50 }))
-await model.answer(JSON.stringify({ mode: 'error',  type: 'AUTH_INVALID' }))
-await model.answer(JSON.stringify({ mode: 'incomplete' }))
-await model.answer(JSON.stringify({ mode: 'tool', name: 'f', args: { x: 1 } }))
-await model.answer(JSON.stringify({ mode: 'hang' }))          // aborts via AbortSignal
-await model.answer(JSON.stringify({ mode: 'crash' }))         // process.exit — isolation demo
-await model.answer(JSON.stringify({ mode: 'abort_after', tokens: 3 }))
+import { run } from 'mohdel/session'
+
+const envelope = {
+  callId: 'c1',
+  authId: 'a1',
+  auth: { key: 'x' },
+  model: 'fake/m',
+  prompt: JSON.stringify({ mode: 'volume', tokens: 100 })
+}
+
+for await (const event of run(envelope, { resolveSpec: () => ({}) })) {
+  console.log(event.type)
+}
 ```
 
-All modes honor `AbortSignal`. No network, no API key required. Works identically through either integration path.
+The scenarios:
+
+```js
+{ mode: 'volume',      tokens: 100 }
+{ mode: 'slow',        tokens: 20, delayMs: 50 }
+{ mode: 'error',       type: 'AUTH_INVALID' }
+{ mode: 'incomplete' }
+{ mode: 'tool',        name: 'f', args: { x: 1 } }
+{ mode: 'hang' }                                    // aborts via AbortSignal
+{ mode: 'crash' }                                   // process.exit — isolation demo
+{ mode: 'abort_after', tokens: 3 }
+```
+
+All modes honor `AbortSignal`. No network, no API key required.
+
+`fake/m` needs a catalog entry like any other model, or the call ends with `SESSION_UNKNOWN_MODEL`. `resolveSpec` supplies one in process. Through the gate, the session reads it from `curated.json`, so point the gate at a config directory of its own, whose `mohdel/curated.json` holds `{ "fake/m": {} }`:
+
+```bash
+XDG_CONFIG_HOME=/tmp/mohdel-fake mohdel-thin-gate --session ./js/session/bin.js
+```
+
+The factory does not run it: `mohdel().use('fake/m')` throws `Provider configuration for 'fake' not found`, because `fake` is an adapter and not a configured provider.
 
 See `bench/bench.js` (throughput) and `bench/isolation.js` (fault isolation demo) for reference usage.
 

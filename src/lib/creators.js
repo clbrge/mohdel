@@ -83,6 +83,11 @@ const creators = {
     logo: 'openai.svg',
     description: 'OpenAI’s GPT and o-series models focus on broad tool-use, reasoning quality, and multimodal support across developer platforms.'
   },
+  thinkingmachines: {
+    prefixes: ['thinkingmachines', 'inkling'],
+    label: 'Thinking Machines',
+    description: 'Thinking Machines Lab releases the Inkling family of open-weight multimodal models and the Tinker post-training platform.'
+  },
   xai: {
     prefixes: ['grok'],
     label: 'xAI',

@@ -1,6 +1,6 @@
 # Mohdel
 
-Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 15 providers or local inference; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
+Self-hosted LLM gateway and SDK for Node — think LiteLLM, for the JS world. One `answer()` call for 16 providers or local inference; swap models by changing one string; get real per-call USD cost back on every result, with OpenTelemetry built in and process isolation when you need it. Your keys, your infra, no SaaS proxy in the path.
 
 ```bash
 npm install -g mohdel
@@ -20,7 +20,7 @@ curate novita` writes complete, priced entries on its own, and setup counts the
 models that cost nothing and offers to add all of them in one keystroke. A
 working catalog without a pricing page or a brief.
 
-Providers: Anthropic, OpenAI, ChatGPT, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, Meta Model API, OpenRouter, Novita. Node 22+, ES modules.
+Providers: Anthropic, OpenAI, ChatGPT, Gemini, Mistral, Groq, xAI, Cerebras, Fireworks, DeepSeek, Qwen Cloud, Xiaomi, Meta Model API, OpenRouter, Novita, Thinking Machines Tinker. Node 22+, ES modules.
 
 ### Using a ChatGPT subscription
 
@@ -388,13 +388,13 @@ Mohdel splits into three planes that can be deployed independently:
 ### Running thin-gate
 
 ```bash
-cargo run --bin mohdel-thin-gate /tmp/mohdel-data.sock /tmp/mohdel-admin.sock /path/to/js/session/bin.js
+cargo run --bin mohdel-thin-gate -- --data /tmp/mohdel-data.sock --admin /tmp/mohdel-admin.sock --session /path/to/js/session/bin.js
 
 # or with a pre-built release binary:
-./target/release/mohdel-thin-gate /tmp/mohdel-data.sock /tmp/mohdel-admin.sock ./js/session/bin.js
+./target/release/mohdel-thin-gate --data /tmp/mohdel-data.sock --admin /tmp/mohdel-admin.sock --session ./js/session/bin.js
 ```
 
-Positional args are optional (data socket, admin socket, session bin). Env overrides:
+The flags `--data`, `--admin`, `--session` and `--pool-size` are all optional. Env overrides:
 - `MOHDEL_SESSION_BIN` — path to session entrypoint (defaults to none; if unset, data plane returns synthetic events)
 - `MOHDEL_SESSION_POOL_SIZE` — pre-warmed sessions (default 2)
 - `MOHDEL_POOL_ACQUIRE_TIMEOUT_MS` — wait for a free session before `503 SESSION_POOL_BUSY` (default 30000)
@@ -471,6 +471,7 @@ OPENROUTER_API_SK=sk-or-...
 NOVITA_API_SK=...
 QWEN_API_SK=sk-...
 XIAOMI_API_SK=...
+TINKER_API_SK=...
 META_API_SK=...
 COHERE_API_SK=...
 TYPESAFE_API_SK=...
@@ -521,6 +522,7 @@ What each provider supports through mohdel's unified interface:
 | Cohere | n/a | n/a | n/a | n/a | n/a | Embeddings only: no chat models reach mohdel through it |
 | TypeSafe | n/a | n/a | n/a | n/a | n/a | Evaluation only (`evaluate()`): typed questions answered with probabilities |
 | Novita | Yes | Yes | Yes | No | Yes (`reasoning_content`) | Prices in the model list; text via the shared chat-completions path, separate image adapter |
+| Tinker | Yes | Yes | Yes | No | Yes (`reasoning_effort`) | Thinking Machines' serverless inference (beta) for Inkling; shared chat-completions path; its model list is empty, so entries are added by hand; a named `tool_choice` the model does not follow is refused with a 422 |
 
 Adapter capability ≠ model capability — whether a given model accepts images, tools, or thinking effort depends on the model spec in `curated.json`. The adapter passes through what the envelope supplies; the provider rejects unsupported combos.
 
@@ -579,7 +581,7 @@ OPENAI_API_SK=sk-... npm run test:live
 
 ### Scenario-driven testing (the `fake` provider)
 
-For deterministic stress, benchmark, and bug-repro work, register `provider: "fake"` in the envelope with a JSON `prompt` that drives the scenario:
+For deterministic stress, benchmark, and bug-repro work, send an envelope whose `model` is `fake/<name>`, with a JSON `prompt` that drives the scenario. It needs a catalog entry for that key, and runs through `mohdel/session` or the gate, not the factory ([details](INTEGRATION.md#testing-with-the-fake-provider)):
 
 ```js
 { mode: 'volume',       tokens: 1000 }              // throughput stress

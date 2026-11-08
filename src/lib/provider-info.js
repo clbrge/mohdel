@@ -120,6 +120,13 @@ const PROVIDER_INFO = {
     url: 'https://home.qwencloud.com/api-keys',
     hint: 'Create an API key at home.qwencloud.com → API Keys',
     free: false
+  },
+  tinker: {
+    label: 'Thinking Machines Tinker',
+    description: 'Inkling — open-weight reasoning models with vision and tool use. Serverless inference in beta.',
+    url: 'https://tinker.thinkingmachines.ai/keys?new_key=true',
+    hint: 'Create an API key in the Tinker Console under Keys',
+    free: false
   }
 }
 

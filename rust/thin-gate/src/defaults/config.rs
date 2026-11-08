@@ -53,8 +53,8 @@ impl ConfigSource for TomlConfigSource {
             Ok(t) => t,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // Absent file is not an error — deployers can run the
-                // gate with zero configuration and rely on positional
-                // args / env overrides.
+                // gate with zero configuration and rely on flags /
+                // env overrides.
                 return Ok(PlatformConfig::default());
             }
             Err(e) => return Err(ConfigError::Io(e)),

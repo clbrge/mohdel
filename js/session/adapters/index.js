@@ -27,6 +27,7 @@ import { novita } from './novita.js'
 import { openai } from './openai.js'
 import { openrouter } from './openrouter.js'
 import { qwen } from './qwen.js'
+import { tinker } from './tinker.js'
 import { xai } from './xai.js'
 import { xiaomi } from './xiaomi.js'
 
@@ -47,6 +48,7 @@ export const adapters = Object.freeze({
   openai,
   openrouter,
   qwen,
+  tinker,
   xai,
   xiaomi
 })

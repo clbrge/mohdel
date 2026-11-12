@@ -2,6 +2,8 @@ import mohdel, { silent } from '../lib/index.js'
 import providerDefs from '../lib/providers.js'
 import { loadDefaultEnv, getAPIKey, getCuratedModels, saveCuratedModels } from '../lib/common.js'
 import { fieldDefs } from '../lib/schema.js'
+import { saveKey } from '../lib/credentials.js'
+import { appendToEnvFile } from '../lib/env-file.js'
 import { providerOf } from '#core/model-id.js'
 import { parseJsonFlag, printAvailableFields, jsonOutput, jsonOutputOne } from './json-output.js'
 import { id, label, tag, price, meta, err, warn, ok } from './colors.js'
@@ -610,7 +612,7 @@ see "mo creator --help".`)
       console.error(err(`Unknown provider or no API key supported: ${arg1}`))
       process.exit(1)
     }
-    const { appendToEnvFile, askValidatedKey } = await import('./onboard.js')
+    const { askValidatedKey } = await import('./onboard.js')
     const { isCancel } = await import('@clack/prompts')
 
     loadDefaultEnv()
@@ -625,7 +627,7 @@ see "mo creator --help".`)
     const key = await askValidatedKey(arg1)
     if (!key) return
 
-    await appendToEnvFile(providerConfig.apiKeyEnv, key)
+    await saveKey(arg1, key)
     console.log(`${ok('✓')} Saved ${providerConfig.apiKeyEnv}`)
     return
   }
@@ -637,7 +639,6 @@ see "mo creator --help".`)
       console.error(err(`Unknown provider: ${arg1}`))
       process.exit(1)
     }
-    const { appendToEnvFile } = await import('./onboard.js')
     await appendToEnvFile(providerConfig.apiKeyEnv, '')
     console.log(`${ok('✓')} Removed ${providerConfig.apiKeyEnv}`)
     return

@@ -166,3 +166,80 @@ describe('ChatGPT OAuth', () => {
     expect((await createChatGPT({ directory }).accounts())[0].name).toBe('Mohdel')
   })
 })
+
+describe('ChatGPT sign-in as a start and a finish', () => {
+  const REDIRECT = 'http://127.0.0.1:8080/auth/callback'
+  const setUp = () => {
+    const fetcher = vi.fn(async () => Response.json(tokens()))
+    const verifyIdentity = vi.fn(async () => ({ sub: 'subject', email: 'user@example.test' }))
+    return { fetcher, verifyIdentity, auth: createChatGPT({ directory, fetch: fetcher, verifyIdentity }) }
+  }
+  const callbackOf = (url, extra = {}) => new URLSearchParams({ state: new URL(url).searchParams.get('state'), code: 'code', client_id: 'oaiapp_test', ...extra })
+
+  test('the callback lands where the caller says, and the exchange names the same address', async () => {
+    const { auth, fetcher, verifyIdentity } = setUp()
+    const { url, pending } = await auth.startLogin({ redirectUri: REDIRECT })
+    const link = new URL(url)
+    expect(link.searchParams.get('redirect_uri')).toBe(REDIRECT)
+    expect(link.searchParams.get('client_id')).toBe('dynamic_agent_client')
+    const account = await auth.finishLogin(pending, callbackOf(url))
+    expect(account).toMatchObject({ id: 'oaiapp_test', active: true, planUsage: true })
+    const exchange = fetcher.mock.calls[0][1].body
+    expect(exchange.get('redirect_uri')).toBe(REDIRECT)
+    expect(createHash('sha256').update(exchange.get('code_verifier')).digest('base64url')).toBe(link.searchParams.get('code_challenge'))
+    expect(verifyIdentity).toHaveBeenCalledWith('identity-secret', 'oaiapp_test', link.searchParams.get('nonce'))
+  })
+
+  test('a wrong state is refused and leaves the sign-in usable', async () => {
+    const { auth, fetcher } = setUp()
+    const { url, pending } = await auth.startLogin({ redirectUri: REDIRECT })
+    await expect(auth.finishLogin(pending, callbackOf(url, { state: 'wrong' }))).rejects.toThrow('Invalid sign-in state')
+    expect(pending.used).toBe(false)
+    expect(fetcher).not.toHaveBeenCalled()
+    expect((await auth.finishLogin(pending, callbackOf(url))).id).toBe('oaiapp_test')
+  })
+
+  test('a sign-in is finished once', async () => {
+    const { auth, fetcher } = setUp()
+    const { url, pending } = await auth.startLogin({ redirectUri: REDIRECT })
+    await auth.finishLogin(pending, callbackOf(url))
+    expect(pending.used).toBe(true)
+    await expect(auth.finishLogin(pending, callbackOf(url))).rejects.toThrow('already completed')
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  test('a denial consumes the sign-in without an exchange', async () => {
+    const { auth, fetcher } = setUp()
+    const { url, pending } = await auth.startLogin({ redirectUri: REDIRECT })
+    const denied = new URLSearchParams({ state: new URL(url).searchParams.get('state'), error: 'access_denied' })
+    await expect(auth.finishLogin(pending, denied)).rejects.toThrow('not granted')
+    expect(pending.used).toBe(true)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test('an expired sign-in is refused', async () => {
+    const { auth, fetcher } = setUp()
+    const { url, pending } = await auth.startLogin({ redirectUri: REDIRECT, timeoutMs: 0 })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    await expect(auth.finishLogin(pending, callbackOf(url))).rejects.toThrow('timed out')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test('reauthorizing an account carries its client id through the pending', async () => {
+    await connect()
+    const { auth } = setUp()
+    const { url, pending } = await auth.startLogin({ redirectUri: REDIRECT, accountId: 'oaiapp_test' })
+    expect(new URL(url).searchParams.get('client_id')).toBe('oaiapp_test')
+    expect(pending.clientId).toBe('oaiapp_test')
+    const params = callbackOf(url)
+    params.delete('client_id')
+    expect((await auth.finishLogin(pending, params)).id).toBe('oaiapp_test')
+  })
+
+  test('a callback naming another account than the one reauthorized is refused', async () => {
+    await connect()
+    const { auth } = setUp()
+    const { url, pending } = await auth.startLogin({ redirectUri: REDIRECT, accountId: 'oaiapp_test' })
+    await expect(auth.finishLogin(pending, callbackOf(url, { client_id: 'oaiapp_other' }))).rejects.toThrow('invalid registration')
+  })
+})

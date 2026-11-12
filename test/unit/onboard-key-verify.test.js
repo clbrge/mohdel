@@ -23,7 +23,7 @@ vi.mock('../../src/lib/catalog/openai.js', () => ({
   })
 }))
 
-const { verifyKey } = await import('../../src/cli/onboard.js')
+const { verifyKey } = await import('../../src/lib/credentials.js')
 
 describe('verifyKey against a candidate key, before anything is saved', () => {
   test('openrouter checks /auth/key, not the public model list', async () => {

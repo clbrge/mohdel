@@ -1,4 +1,4 @@
-import { createChatGPT, usageURL } from '../../js/chatgpt/index.js'
+import { createChatGPT, usageURL, SIGN_IN_AGAIN } from '../../js/chatgpt/index.js'
 import { parseJsonFlag, printAvailableFields, jsonOutput } from './json-output.js'
 
 export async function runChatGPT (args) {
@@ -68,6 +68,7 @@ Usage consumes your ChatGPT allowance. Reported cost is API USD only.`)
     }
   } catch (err) {
     console.error(err.message)
+    if (err.message.includes(SIGN_IN_AGAIN)) console.error('Run: mo chatgpt login')
     process.exitCode = 1
   }
 }

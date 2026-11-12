@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, test, expect, beforeEach, afterAll, vi } from 'vitest'
+import { describe, test, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 
 const dirs = vi.hoisted(() => {
   const os = require('node:os')
@@ -13,8 +13,9 @@ const dirs = vi.hoisted(() => {
 
 vi.mock('env-paths', () => ({ default: () => dirs }))
 
-const { appendToEnvFile } = await import('../../src/cli/onboard.js')
+const { appendToEnvFile } = await import('../../src/lib/env-file.js')
 const { ENV_PATH } = await import('../../src/lib/common.js')
+const { saveKey } = await import('../../src/lib/credentials.js')
 
 afterAll(() => { fs.rmSync(dirs.config, { recursive: true, force: true }) })
 
@@ -64,6 +65,27 @@ describe('appendToEnvFile', () => {
   test('the file lives under the config dir', () => {
     expect(path.dirname(ENV_PATH).startsWith(dirs.config)).toBe(true)
     expect(os.tmpdir().length).toBeGreaterThan(0)
+  })
+})
+
+describe('saveKey', () => {
+  beforeEach(() => { fs.rmSync(ENV_PATH, { force: true }) })
+  afterEach(() => { delete process.env.OPENAI_API_SK })
+
+  test('writes the provider\'s variable and sets it in this process', async () => {
+    process.env.OPENAI_API_SK = 'sk-before'
+    await saveKey('openai', 'sk-saved')
+    expect(read()).toBe('OPENAI_API_SK=sk-saved\n')
+    expect(process.env.OPENAI_API_SK).toBe('sk-saved')
+  })
+
+  test('refuses a provider that takes no key, writing nothing', async () => {
+    await expect(saveKey('chatgpt', 'sk-x')).rejects.toThrow('takes no API key')
+    expect(fs.existsSync(ENV_PATH)).toBe(false)
+  })
+
+  test('refuses an unknown provider', async () => {
+    await expect(saveKey('no-such-provider', 'sk-x')).rejects.toThrow('Unknown provider: no-such-provider')
   })
 })
 

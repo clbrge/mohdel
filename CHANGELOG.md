@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `mohdel/credentials`: the credential step without a terminal. `verifyKey`, `saveKey`, and
+  OpenRouter's sign-in as `startOpenRouterSignIn` and `finishOpenRouterSignIn`, with `keyPage`.
+  `mo onboard` and `mo provider setup` now call these.
+- `startLogin` and `finishLogin` on `createChatGPT()`: ChatGPT's sign-in as a start and a finish
+  the caller drives, with the callback landing on the caller's `redirectUri`. A pending sign-in
+  expires, and it is used once its state matches; a wrong state leaves it usable. `login` is now
+  these two around its own loopback server, and behaves as before.
+- `SIGN_IN_AGAIN` from `mohdel/chatgpt`, the phrase ending every error that signing in again fixes.
+
+### Changed
+
+- ChatGPT errors no longer name `mo chatgpt login`; they end with "sign in to ChatGPT again", so a
+  caller with no terminal can show them. `mo chatgpt` and `mo ask` add the command. The access
+  helper behind the gate (`mohdel/chatgpt/bin`) passes the message on unchanged.
+
 ## [4.10.0] — Added: the `tinker` provider, for Thinking Machines' Inkling models
 
 ### Added

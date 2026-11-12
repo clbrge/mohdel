@@ -1,6 +1,7 @@
 import mohdel, { silent } from '../lib/index.js'
 import { getConfig, loadDefaultEnv } from '../lib/common.js'
 import providerDefs, { billingOf } from '../lib/providers.js'
+import { SIGN_IN_AGAIN } from '../../js/chatgpt/index.js'
 
 const noop = () => {}
 
@@ -43,7 +44,7 @@ export const hintsForError = (err, modelId) => {
   }
 
   const keyMissing = /API key not found/i.test(both)
-  if (keyMissing || /AUTH_INVALID/i.test(err?.type || '') || /401|unauthorized|invalid api key/i.test(both)) {
+  if (keyMissing || /AUTH_INVALID/i.test(err?.type || '') || /401|unauthorized|invalid api key/i.test(both) || both.includes(SIGN_IN_AGAIN)) {
     if (provider === 'chatgpt') hints.push('→ run:  mo chatgpt login')
     else if (provider) hints.push(keyMissing ? `→ run:  mo onboard ${provider}` : `→ run:  mo setup ${provider}`)
     else hints.push('→ run:  mo                          # interactive provider/key setup')

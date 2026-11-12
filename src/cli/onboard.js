@@ -1,17 +1,17 @@
 import { intro, outro, select, text, password, confirm, isCancel, cancel, note, spinner, log } from '@clack/prompts'
 import { id, label, meta, ok } from './colors.js'
-import { chmodSync, existsSync, readFileSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
-import { dirname, resolve } from 'path'
+import { existsSync, readFileSync } from 'fs'
+import { resolve } from 'path'
 import { hostname } from 'os'
 import { loadDefaultEnv, getAPIKey, getConfig, saveConfig, getCuratedModels, catalogEntries, hasPrices, ENV_PATH } from '../lib/common.js'
 import providers from '../lib/providers.js'
 import { providerApi } from '../lib/curate.js'
 import { addFromMohdex, mohdexCounts, mohdexOffer } from '../lib/mohdex.js'
 import PROVIDER_INFO from '../lib/provider-info.js'
-import { signIn, keyPage } from './openrouter-signin.js'
+import { verifyKey, saveKey, keyPage } from '../lib/credentials.js'
+import { signIn } from './openrouter-signin.js'
 
-export { PROVIDER_INFO, appendToEnvFile, verifyKey, askValidatedKey }
+export { askValidatedKey }
 
 function getConfiguredProviders () {
   const configured = []
@@ -23,30 +23,6 @@ function getConfiguredProviders () {
     else unconfigured.push(name)
   }
   return { configured, unconfigured }
-}
-
-const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-async function appendToEnvFile (key, value) {
-  const dir = dirname(ENV_PATH)
-  if (!existsSync(dir)) await mkdir(dir, { recursive: true })
-
-  let content = ''
-  if (existsSync(ENV_PATH)) {
-    content = await readFile(ENV_PATH, 'utf8')
-    // Function form: `$&`, `` $` ``, `$'` and `$1` are expanded inside a replacement string, which would rewrite a pasted key.
-    const re = new RegExp(`^${escapeRegExp(key)}=.*$`, 'm')
-    if (re.test(content)) {
-      content = content.replace(re, () => `${key}=${value}`)
-      await writeFile(ENV_PATH, content, { mode: 0o600 })
-      chmodSync(ENV_PATH, 0o600)
-      return
-    }
-    if (!content.endsWith('\n')) content += '\n'
-  }
-  content += `${key}=${value}\n`
-  await writeFile(ENV_PATH, content, { mode: 0o600 })
-  chmodSync(ENV_PATH, 0o600)
 }
 
 export async function runOnboard () {
@@ -335,42 +311,6 @@ const cheapestModel = async (provider) => {
   return mine.reduce((best, current) => inputPriceOf(current[1]) < inputPriceOf(best[1]) ? current : best)[0]
 }
 
-const AUTH_FAILURE_RE = /40[13]|unauthorized|forbidden|invalid[\s_-]*api[\s_-]*key|invalid key|incorrect api key|authentication/i
-
-const isAuthFailure = (err) => AUTH_FAILURE_RE.test(`${err?.message ?? err}`)
-
-/** OpenRouter's model list is public, so a listing proves nothing about the key. */
-const verifyOpenRouterKey = async (key) => {
-  let res
-  try {
-    res = await fetch('https://openrouter.ai/api/v1/auth/key', { headers: { Authorization: `Bearer ${key}` } })
-  } catch {
-    return 'unknown'
-  }
-  if (res.ok) return 'valid'
-  if (res.status === 401 || res.status === 403) return 'invalid'
-  return 'unknown'
-}
-
-/**
- * What the provider says of a candidate key, before anything is saved:
- * `valid`, `invalid` (the provider refused it), or `unknown` (offline, or no
- * listing mohdel reads — nothing to check against). Keyless providers
- * (chatgpt, local) are always `unknown`; callers skip them.
- */
-async function verifyKey (provider, key) {
-  if (!providers[provider].apiKeyEnv) return 'unknown'
-  if (provider === 'openrouter') return verifyOpenRouterKey(key)
-  const api = await providerApi(provider, key)
-  if (!api) return 'unknown'
-  try {
-    await api.listModels()
-    return 'valid'
-  } catch (err) {
-    return isAuthFailure(err) ? 'invalid' : 'unknown'
-  }
-}
-
 /**
  * The provider's key, prompted for masked, verified against the provider, and
  * returned — never saved here. Loops on a refused key, offers to save an
@@ -466,9 +406,7 @@ async function askKey (selected, caller) {
   const key = selected === 'openrouter' ? await askOpenRouterKey(caller) : await askValidatedKey(selected)
   if (!key) return false
 
-  await appendToEnvFile(envVar, key)
-  // loadEnvFile never overrides a variable already set, so a replaced key must be set here too.
-  process.env[envVar] = key
+  await saveKey(selected, key)
 
   note(`${ok('✓')} Saved ${envVar} to ${meta(ENV_PATH)}`, 'Done')
   return true

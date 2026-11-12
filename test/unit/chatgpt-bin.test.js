@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultDirectory, withStore } from '../../js/chatgpt/store.js'
+import { SIGN_IN_AGAIN } from '../../js/chatgpt/index.js'
 
 const bin = fileURLToPath(new URL('../../js/chatgpt/bin.js', import.meta.url))
 const run = (...args) => promisify(execFile)(process.execPath, [bin, ...args], { env: process.env })
@@ -45,7 +46,8 @@ describe('chatgpt/bin access', () => {
     const failure = await run('access', '--account', 'oaiapp_other').catch(err => err)
     expect(failure.code).toBe(1)
     expect(failure.stdout).toBe('')
-    expect(failure.stderr).toContain('run mo chatgpt login')
+    expect(failure.stderr).toContain(SIGN_IN_AGAIN)
+    expect(failure.stderr).not.toContain('mo chatgpt login')
     expect(failure.stderr).not.toContain('secret')
   })
 

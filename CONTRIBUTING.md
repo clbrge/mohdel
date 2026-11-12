@@ -192,7 +192,7 @@ export async function * myprovider (envelope, deps = {}) {
 - **Honor `signal`.** Pass to the SDK's streaming method. In the catch block, check `signal?.aborted` before yielding `call.error` — on abort, return silently and let `run()` yield the aborted `done`.
 - **Classify errors via `./_errors.js::classifyProviderError`.** Provider SDKs expose a `.status` property; the shared helper maps it to canonical TypedError shapes (401/403 → `auth.invalid`, 429 → `provider.rate_limit`, 5xx → `provider.unavailable`).
 - **Never echo provider response bodies** on error (they may reflect the API key back). Use the generic messages from `classifyProviderError`.
-- **Status contract** — `max_tokens`-style truncation is `status: 'incomplete'` + `warning: 'insufficientOutputBudget'` + `finish_reason: 'length'`. Per-provider mapping documented in the adapter files.
+- **Status contract** — how a cut reply is reported (which `warning`, what goes in `warningDetail`, a reason the adapter does not know, a stream with no finish) is written in `js/core/status.js`, and every adapter follows it. `test/unit/session-incomplete-parity.test.js` runs the same cuts through each API family; a new family joins its table.
 - **System messages** are adapter-specific: Anthropic takes top-level `system`, OpenAI Responses takes `instructions`, etc. Split before building the provider request.
 - **Message content** may be string or array of `MessagePart`. Map text parts; reject other types with a clear error until vision/audio is in scope.
 

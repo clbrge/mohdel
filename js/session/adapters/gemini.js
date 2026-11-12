@@ -23,7 +23,9 @@ import {
   STATUS_INCOMPLETE,
   STATUS_TOOL_USE,
   WARNING_CONTENT_BLOCKED,
-  WARNING_INSUFFICIENT_OUTPUT_BUDGET
+  WARNING_INSUFFICIENT_OUTPUT_BUDGET,
+  WARNING_MALFORMED_RESPONSE,
+  WARNING_UNMAPPED_REASON
 } from '#core/status.js'
 
 import { abortedDone } from './_aborted.js'
@@ -46,7 +48,7 @@ import {
  * @returns {AsyncGenerator<import('#core/events.js').Event>}
  */
 export async function * gemini (envelope, deps = {}) {
-  const client = deps.client ?? new GoogleGenAI({ apiKey: envelope.auth.key })
+  const client = deps.client ?? new GoogleGenAI({ apiKey: envelope.auth.key, apiVersion: 'v1beta' })
   const signal = deps.signal
   const log = deps.log
   const start = String(process.hrtime.bigint())
@@ -117,6 +119,7 @@ export async function * gemini (envelope, deps = {}) {
   let warning
   /** @type {string | undefined} */
   let warningDetail
+  let finished = false
   /** @type {Array<{name: string, args: any}>} */
   const collectedFunctionCalls = []
 
@@ -166,15 +169,20 @@ export async function * gemini (envelope, deps = {}) {
         }
       }
 
-      const finish = chunk?.candidates?.[0]?.finishReason
-      if (finish && isIncompleteFinish(finish)) {
+      const blockReason = chunk?.promptFeedback?.blockReason
+      if (blockReason) {
+        finished = true
         status = STATUS_INCOMPLETE
-        if (finish === 'MAX_TOKENS') {
-          warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
-        } else {
-          warning = WARNING_CONTENT_BLOCKED
-          warningDetail = finish
-        }
+        warning = WARNING_CONTENT_BLOCKED
+        warningDetail = blockReason
+      }
+
+      const finish = chunk?.candidates?.[0]?.finishReason
+      if (finish) finished = true
+      if (finish && finish !== 'STOP') {
+        status = STATUS_INCOMPLETE
+        warning = FINISH_WARNINGS[finish] ?? WARNING_UNMAPPED_REASON
+        warningDetail = finish
       }
 
       if (chunk?.usageMetadata) {
@@ -204,6 +212,11 @@ export async function * gemini (envelope, deps = {}) {
 
   if (signal?.aborted) {
     yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens)
+    return
+  }
+
+  if (!finished) {
+    yield { type: 'error', error: classifyProviderError(new Error('gemini stream ended before completion'), envelope.auth?.key, { provider: 'gemini' }) }
     return
   }
 
@@ -436,12 +449,16 @@ function injectParts (contents, parts) {
   contents.push({ role: 'user', parts })
 }
 
-/** @param {string} reason */
-function isIncompleteFinish (reason) {
-  return reason === 'MAX_TOKENS' ||
-    reason === 'SAFETY' ||
-    reason === 'RECITATION' ||
-    reason === 'BLOCKLIST' ||
-    reason === 'PROHIBITED_CONTENT' ||
-    reason === 'SPII'
+const FINISH_WARNINGS = {
+  MAX_TOKENS: WARNING_INSUFFICIENT_OUTPUT_BUDGET,
+  SAFETY: WARNING_CONTENT_BLOCKED,
+  RECITATION: WARNING_CONTENT_BLOCKED,
+  BLOCKLIST: WARNING_CONTENT_BLOCKED,
+  PROHIBITED_CONTENT: WARNING_CONTENT_BLOCKED,
+  SPII: WARNING_CONTENT_BLOCKED,
+  IMAGE_SAFETY: WARNING_CONTENT_BLOCKED,
+  IMAGE_PROHIBITED_CONTENT: WARNING_CONTENT_BLOCKED,
+  IMAGE_RECITATION: WARNING_CONTENT_BLOCKED,
+  MALFORMED_FUNCTION_CALL: WARNING_MALFORMED_RESPONSE,
+  MALFORMED_RESPONSE: WARNING_MALFORMED_RESPONSE
 }

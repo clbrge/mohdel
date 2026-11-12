@@ -446,7 +446,10 @@ function finalize ({ envelope, content, toolCalls, usage, finishReason, start, f
       timestamps: { start, first: first ?? end, end }
     }
   }
-  if (warning) done.result.warning = warning
+  if (warning) {
+    done.result.warning = warning
+    done.result.warningDetail = finishReason
+  }
   if (toolCalls && toolCalls.length > 0) {
     done.result.toolCalls = fromCerebrasToolCalls(toolCalls)
   }

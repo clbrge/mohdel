@@ -23,7 +23,8 @@ import {
   STATUS_INCOMPLETE,
   STATUS_TOOL_USE,
   WARNING_CONTENT_BLOCKED,
-  WARNING_INSUFFICIENT_OUTPUT_BUDGET
+  WARNING_INSUFFICIENT_OUTPUT_BUDGET,
+  WARNING_UNMAPPED_REASON
 } from '#core/status.js'
 
 import { abortedDone } from './_aborted.js'
@@ -39,6 +40,11 @@ import {
   toToolChoice
 } from './_tools.js'
 import { streamingDispatcher } from './_dispatcher.js'
+
+const INCOMPLETE_WARNINGS = {
+  max_output_tokens: WARNING_INSUFFICIENT_OUTPUT_BUDGET,
+  content_filter: WARNING_CONTENT_BLOCKED
+}
 
 /**
  * @param {import('#core/envelope.js').CallEnvelope} envelope
@@ -97,6 +103,8 @@ export async function * openai (envelope, deps = {}) {
   let status = STATUS_COMPLETED
   /** @type {string | undefined} */
   let warning
+  /** @type {string | undefined} */
+  let warningDetail
   /** @type {string | null | undefined} */
   let servedTier
 
@@ -208,11 +216,8 @@ export async function * openai (envelope, deps = {}) {
           terminalResponse = true
           servedTier = event.response?.service_tier ?? servedTier
           status = STATUS_INCOMPLETE
-          if (event.response?.incomplete_details?.reason === 'max_output_tokens') {
-            warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
-          } else if (event.response?.incomplete_details?.reason === 'content_filter') {
-            warning = WARNING_CONTENT_BLOCKED
-          }
+          warningDetail = event.response?.incomplete_details?.reason
+          warning = INCOMPLETE_WARNINGS[warningDetail] ?? WARNING_UNMAPPED_REASON
           if (event.response?.usage) {
             inputTokens = event.response.usage.input_tokens ?? 0
             outputTokens = event.response.usage.output_tokens ?? 0
@@ -295,6 +300,7 @@ export async function * openai (envelope, deps = {}) {
     }
   }
   if (warning) done.result.warning = warning
+  if (warningDetail) done.result.warningDetail = warningDetail
   if (reasoningParts.length) done.result.reasoningParts = reasoningParts
   if (commentaryParts.length) done.result.commentaryParts = commentaryParts
   if (toolItems.size > 0) {

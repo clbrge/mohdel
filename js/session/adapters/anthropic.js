@@ -23,7 +23,8 @@ import {
   STATUS_TOOL_USE,
   WARNING_CONTENT_BLOCKED,
   WARNING_CONTEXT_OVERFLOW,
-  WARNING_INSUFFICIENT_OUTPUT_BUDGET
+  WARNING_INSUFFICIENT_OUTPUT_BUDGET,
+  WARNING_UNMAPPED_REASON
 } from '#core/status.js'
 
 import { abortedDone } from './_aborted.js'
@@ -72,8 +73,8 @@ const ANTHROPIC_THINKING_CHARS_PER_TOKEN = 4
 
 const REPLAYED_BLOCKS = new Set(['text', 'thinking', 'redacted_thinking', 'tool_use'])
 
-/** The warning for a stop reason mohdel names; any other carries the stop reason as it came. */
 const STOP_WARNINGS = {
+  max_tokens: WARNING_INSUFFICIENT_OUTPUT_BUDGET,
   refusal: WARNING_CONTENT_BLOCKED,
   model_context_window_exceeded: WARNING_CONTEXT_OVERFLOW
 }
@@ -142,6 +143,7 @@ export async function * anthropic (envelope, deps = {}) {
   let warning
   /** @type {string | undefined} */
   let warningDetail
+  let stopped = false
 
   // Tool-use accumulation state
   /** @type {Map<number, {id: string, name: string, inputJson: string}>} */
@@ -218,15 +220,13 @@ export async function * anthropic (envelope, deps = {}) {
           if (typeof event.usage?.output_tokens_details?.thinking_tokens === 'number') {
             reportedThinkingTokens = event.usage.output_tokens_details.thinking_tokens
           }
-          if (event.delta?.stop_reason === 'max_tokens') {
-            status = STATUS_INCOMPLETE
-            warning = WARNING_INSUFFICIENT_OUTPUT_BUDGET
-          } else if (event.delta?.stop_reason === 'tool_use') {
+          if (event.delta?.stop_reason) stopped = true
+          if (event.delta?.stop_reason === 'tool_use') {
             status = STATUS_TOOL_USE
           } else if (event.delta?.stop_reason && event.delta.stop_reason !== 'end_turn') {
             status = STATUS_INCOMPLETE
-            warning = STOP_WARNINGS[event.delta.stop_reason] ?? event.delta.stop_reason
-            if (event.delta.stop_details?.category) warningDetail = event.delta.stop_details.category
+            warning = STOP_WARNINGS[event.delta.stop_reason] ?? WARNING_UNMAPPED_REASON
+            warningDetail = event.delta.stop_details?.category ?? event.delta.stop_reason
           }
           if (event.usage?.output_tokens) {
             outputTokens = event.usage.output_tokens
@@ -249,6 +249,11 @@ export async function * anthropic (envelope, deps = {}) {
 
   if (signal?.aborted) {
     yield abortedDone(start, first, envelope, currentOutput(), inputTokens, outputTokens, { cacheWriteInputTokens: cacheWriteTokens, cacheReadInputTokens: cacheReadTokens })
+    return
+  }
+
+  if (!stopped) {
+    yield { type: 'error', error: classifyProviderError(new Error('anthropic stream ended before completion'), envelope.auth?.key, { provider: 'anthropic' }) }
     return
   }
 

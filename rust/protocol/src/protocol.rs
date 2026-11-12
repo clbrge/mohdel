@@ -394,8 +394,8 @@ pub struct AnswerResult {
     pub timestamps: Timestamps,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
-    /// The provider's own reason behind `warning`, when it gives one: an
-    /// Anthropic refusal's category, a Gemini finish reason.
+    /// The provider's own reason behind `warning`, as it came, whenever it
+    /// gives one: its finish reason, or the finer category it sends with it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning_detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

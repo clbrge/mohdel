@@ -93,7 +93,7 @@ Short definitions for the terms that recur across mohdel's docs and CLI. Read to
 - `tool_use` — model wants to call a tool; the loop is the caller's responsibility.
 - `incomplete` — output was truncated (provider-specific finish reasons for "max tokens reached" all map here). Look at `warning` for the reason.
 
-**`warning`** — non-fatal qualifier on a successful result. Examples: `'insufficientOutputBudget'`, `'aborted'`. Additive string union — new warnings can be added without breaking the wire.
+**`warning`** — non-fatal qualifier on a successful result. Examples: `'insufficientOutputBudget'`, `'aborted'`; the full list and the rules adapters follow are in `js/core/status.js`. Additive string union — new warnings can be added without breaking the wire.
 
 **`TypedError`** — error event payload: `{ message, detail?, severity, retryable, type }`.
 - `message` — short human-readable label, stable per classification (e.g. `'provider error 400'`, `'authentication failed'`). Not the branching key.

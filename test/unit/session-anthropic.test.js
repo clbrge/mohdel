@@ -143,7 +143,7 @@ describe('session/adapters/anthropic', () => {
     const done = (await collect(anthropic(envelope(), { client }))).at(-1)
     expect(done.result.status).toBe(STATUS_INCOMPLETE)
     expect(done.result.warning).toBe('contentBlocked')
-    expect(done.result.warningDetail).toBeUndefined()
+    expect(done.result.warningDetail).toBe('refusal')
   })
 
   test('model_context_window_exceeded is incomplete with contextOverflow', async () => {
@@ -155,20 +155,22 @@ describe('session/adapters/anthropic', () => {
     expect(done.result.warning).toBe('contextOverflow')
   })
 
-  test('a stop reason mohdel does not know is incomplete under its own name', async () => {
+  test('a stop reason mohdel does not know is incomplete, unmapped, with the reason as detail', async () => {
     const { client } = makeClient({
       events: [{ type: 'message_delta', delta: { stop_reason: 'some_future_reason' } }]
     })
     const done = (await collect(anthropic(envelope(), { client }))).at(-1)
     expect(done.result.status).toBe(STATUS_INCOMPLETE)
-    expect(done.result.warning).toBe('some_future_reason')
+    expect(done.result.warning).toBe('unmappedReason')
+    expect(done.result.warningDetail).toBe('some_future_reason')
   })
 
   test('a message_delta without a stop reason changes nothing', async () => {
     const { client } = makeClient({
       events: [
         { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } },
-        { type: 'message_delta', delta: { stop_reason: null }, usage: { output_tokens: 1 } }
+        { type: 'message_delta', delta: { stop_reason: null }, usage: { output_tokens: 1 } },
+        { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 1 } }
       ]
     })
     const done = (await collect(anthropic(envelope(), { client }))).at(-1)

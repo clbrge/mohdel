@@ -137,6 +137,28 @@ describe('session/adapters/gemini', () => {
     expect(done.result.warningDetail).toBe('SAFETY')
   })
 
+  test('MALFORMED_FUNCTION_CALL → incomplete + malformedResponse, not tool_use', async () => {
+    const { client } = makeClient({
+      chunks: [{ candidates: [{ content: { parts: [] }, finishReason: 'MALFORMED_FUNCTION_CALL' }] }]
+    })
+    const done = (await collect(gemini(envelope({
+      tools: [{ name: 'lookup', description: 'Look up a word', parameters: { type: 'object', properties: {} } }]
+    }), { client }))).at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('malformedResponse')
+    expect(done.result.warningDetail).toBe('MALFORMED_FUNCTION_CALL')
+  })
+
+  test('MALFORMED_RESPONSE → incomplete + malformedResponse, the finish reason as detail', async () => {
+    const { client } = makeClient({
+      chunks: [chunk('{"half":'), { candidates: [{ content: { parts: [] }, finishReason: 'MALFORMED_RESPONSE' }] }]
+    })
+    const done = (await collect(gemini(envelope(), { client }))).at(-1)
+    expect(done.result.status).toBe(STATUS_INCOMPLETE)
+    expect(done.result.warning).toBe('malformedResponse')
+    expect(done.result.warningDetail).toBe('MALFORMED_RESPONSE')
+  })
+
   test('role assistant maps to model; text parts wrap as {text}', async () => {
     const { client, captured } = makeClient({
       chunks: [{ candidates: [{ content: { parts: [] }, finishReason: 'STOP' }] }]

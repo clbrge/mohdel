@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [4.11.0] — Added: the credential step as library functions, and one rule for a cut reply
 
 ### Added
 
@@ -16,12 +16,35 @@ All notable changes to this project are documented here. Format follows
   expires, and it is used once its state matches; a wrong state leaves it usable. `login` is now
   these two around its own loopback server, and behaves as before.
 - `SIGN_IN_AGAIN` from `mohdel/chatgpt`, the phrase ending every error that signing in again fixes.
+- Warnings `malformedResponse` (the provider ended the reply because the model's output could not
+  be parsed) and `unmappedReason` (the provider cut the reply for a reason no other warning names).
+- The rules every adapter follows for a cut reply, in `js/core/status.js`, and a test that runs the
+  same cuts through the Anthropic, Responses, Chat Completions and Gemini adapters.
 
 ### Changed
 
 - ChatGPT errors no longer name `mo chatgpt login`; they end with "sign in to ChatGPT again", so a
   caller with no terminal can show them. `mo chatgpt` and `mo ask` add the command. The access
   helper behind the gate (`mohdel/chatgpt/bin`) passes the message on unchanged.
+- `@google/genai` 3: the Gemini adapter names API version `v1beta`, which 3.0 no longer defaults
+  to, so chat stays on the version the catalog and embeddings use. OpenTelemetry 0.301: the
+  `NodeSDK` now adds `os.*` and `service.instance.id` to the trace resource. Other dependencies
+  move within their ranges.
+
+### Fixed
+
+- A cut reply is reported the same way by every provider:
+  - `warningDetail` carries the provider's own reason on every cut but an abort. It was set only
+    for Gemini blocks and Anthropic refusals with a category.
+  - Anthropic: a stop reason mohdel does not map gives `unmappedReason`, not the raw reason as the
+    warning.
+  - OpenAI Responses (openai, chatgpt, meta, xai): an incomplete reply for a reason other than the
+    output limit or a filter gives `unmappedReason`; it had no warning.
+  - Gemini: every finish but `STOP` is a cut. `MALFORMED_FUNCTION_CALL` and `MALFORMED_RESPONSE`
+    give `malformedResponse`, the image blocks give `contentBlocked`, the rest `unmappedReason`; they
+    were `completed`. A prompt Gemini blocks (`promptFeedback.blockReason`) gives `contentBlocked`.
+  - Anthropic and Gemini: a stream that ends without the provider's finish is an error, as it
+    already was for Responses and Chat Completions; it was `completed` with the partial output.
 
 ## [4.10.0] — Added: the `tinker` provider, for Thinking Machines' Inkling models
 

@@ -7,7 +7,7 @@
  *                    expected to round-trip results back.
  *   - `incomplete` — the call was cut short (budget, abort, policy).
  *
- * Rust mirror: `rust/thin-gate/src/protocol.rs::Status`.
+ * Rust mirror: `rust/protocol/src/protocol.rs::Status`.
  *
  * @module core/status
  */
@@ -17,18 +17,38 @@
 /**
  * Warning values emitted on `AnswerResult.warning` when status is
  * `incomplete`:
- *   - `insufficientOutputBudget` — the model hit `max_tokens`.
+ *   - `insufficientOutputBudget` — the model hit its output limit.
  *   - `aborted` — the call was aborted via an abort control
  *     message or `AbortSignal`.
- *   - `contentBlocked` — the provider's safety filter stopped the
- *     reply; `warningDetail` carries the provider's reason when it
- *     names one.
+ *   - `contentBlocked` — the provider's safety or policy filter
+ *     stopped the reply.
  *   - `contextOverflow` — the reply ran into the context window.
+ *   - `malformedResponse` — the provider ended the reply because the
+ *     model produced output it could not parse, such as a broken tool
+ *     call.
+ *   - `unmappedReason` — the provider cut the reply for a reason none
+ *     of the above names.
+ *
+ * Every adapter follows the same rules:
+ *   - An `incomplete` result always carries a `warning`, one of the
+ *     values above; a provider's own word never goes in `warning`.
+ *   - `warningDetail` carries the provider's own reason, as it came,
+ *     whenever the provider gives one: its finish reason, or the finer
+ *     category it sends with it. `aborted` has none.
+ *   - A reason the adapter does not know: on an API one provider
+ *     serves, any reason but its normal end is `incomplete` with
+ *     `unmappedReason`. On an API many providers serve (Chat
+ *     Completions), each provider names its normal ends its own way,
+ *     so only the reasons listed as cuts are `incomplete`.
+ *   - A stream that ends without the provider's finish is an error,
+ *     never a result.
+ *   - Tool calls on an `incomplete` result are what streamed before
+ *     the cut, never a call to run.
  *
  * Additive: future releases may add new warning strings; consumers
  * should treat unknown warnings as pass-through metadata.
  *
- * @typedef {('insufficientOutputBudget'|'aborted'|'contentBlocked'|'contextOverflow'|string)} Warning
+ * @typedef {('insufficientOutputBudget'|'aborted'|'contentBlocked'|'contextOverflow'|'malformedResponse'|'unmappedReason'|string)} Warning
  */
 
 export const STATUS_COMPLETED = 'completed'
@@ -44,3 +64,5 @@ export const WARNING_INSUFFICIENT_OUTPUT_BUDGET = 'insufficientOutputBudget'
 export const WARNING_ABORTED = 'aborted'
 export const WARNING_CONTENT_BLOCKED = 'contentBlocked'
 export const WARNING_CONTEXT_OVERFLOW = 'contextOverflow'
+export const WARNING_MALFORMED_RESPONSE = 'malformedResponse'
+export const WARNING_UNMAPPED_REASON = 'unmappedReason'
